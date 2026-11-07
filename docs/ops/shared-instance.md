@@ -207,6 +207,21 @@ is not undone by the transaction rolling back.
 8. Take another base backup so the new tenant's creation is inside a restorable window, then hand over
    credentials.
 
+### 4.1 - A server whose root already lives inside a customer
+
+If `rootadmin` belongs to a customer's organisation (a single-customer server being turned into a
+platform), use **Platform → Tenants → Create platform organisation** before enrolling anyone. One click
+creates the organisation **Platform** (alias `platform`) with the usual defaults and moves your account
+into it; the customer's data is not touched and it becomes an ordinary tenant you reach with **Enter**.
+It refuses unless the customer has an Organisation administrator of its own, no other root account sits
+in it, and you type its exact name. You are signed out; sign in again to land in Platform.
+**Change the `rootadmin` password first if anyone at the customer knows it.**
+
+The Platform organisation holds no business data: the server refuses every business write there
+(sales, stock, products, parties, GL, payroll, new companies or branches) and the menu shows platform
+administration only. It cannot be suspended, exported, deleted or entered. A customer whose name is
+"platform" or a lookalike of it (Pllatform, P1atform, Pla tform) is refused.
+
 ## 5 - Suspend and resume
 
 Both are platform-operator calls (`ORG.SUSPEND`), `uid` from the create response or `GET /api/v1/organisations`:

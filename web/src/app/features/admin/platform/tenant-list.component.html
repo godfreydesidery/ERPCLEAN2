@@ -321,6 +321,50 @@
           No tenants yet. Create the first one above.
         </div>
       } @else {
+        @if (canCreatePlatform() && !platformDialogOpen()) {
+          <div class="erp-card mb-3" data-testid="platform-offer">
+            <div class="erp-card__body d-flex flex-wrap align-items-center gap-2">
+              <span class="flex-grow-1">
+                This server has no platform organisation: your account belongs to
+                <strong>{{ homeTenant()!.name }}</strong>. Create one before you enrol other customers.
+              </span>
+              <button type="button" class="btn btn-outline-primary" (click)="openPlatformDialog()">
+                Create platform organisation
+              </button>
+            </div>
+          </div>
+        }
+        @if (platformDialogOpen()) {
+          <div class="alert alert-warning mb-3" role="alertdialog" aria-labelledby="platformDialogTitle"
+               aria-describedby="platformDialogText">
+            <p id="platformDialogTitle" class="fw-semibold mb-1">Create the platform organisation</p>
+            <div id="platformDialogText">
+              <p class="mb-1">This creates an organisation called <strong>Platform</strong> and moves your account
+                into it. <strong>{{ homeTenant()!.name }}</strong> then becomes an ordinary tenant: its data stays
+                exactly as it is, and you reach it with <em>Enter</em>.</p>
+              <ul class="mb-2">
+                <li>Your account will no longer belong to {{ homeTenant()!.name }}. Their own administrator keeps
+                  managing it.</li>
+                <li>If anyone at {{ homeTenant()!.name }} knows this account's password, change it first.</li>
+                <li>You will be signed out. Sign in again to land in Platform.</li>
+              </ul>
+            </div>
+            <label class="form-label small mb-1" for="platformConfirm">Type <strong>{{ homeTenant()!.name }}</strong> to confirm</label>
+            <input id="platformConfirm" name="platformConfirm" type="text" class="form-control mb-2" autocomplete="off"
+                   [(ngModel)]="platformConfirm" [disabled]="platformSaving()" />
+            @if (platformError(); as msg) {
+              <p class="text-danger mb-2" role="alert">{{ msg }}</p>
+            }
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-primary" [disabled]="!platformConfirmOk() || platformSaving()"
+                      (click)="createPlatform()">
+                {{ platformSaving() ? 'Creating…' : 'Create platform organisation' }}
+              </button>
+              <button type="button" class="btn btn-outline-secondary" [disabled]="platformSaving()"
+                      (click)="closePlatformDialog()">Cancel</button>
+            </div>
+          </div>
+        }
         @if (enterError(); as msg) {
           <p class="text-danger mb-2" role="alert">{{ msg }}</p>
         }
@@ -345,6 +389,7 @@
                 <tr>
                   <td>
                     {{ t.name }}
+                    @if (isPlatform(t)) { <span class="status-tag status-tag--neutral ms-1">Platform</span> }
                     @if (t.current) { <span class="status-tag status-tag--neutral ms-1">You are here</span> }
                   </td>
                   <td class="mono">{{ t.alias ?? 'None' }}</td>
@@ -360,7 +405,7 @@
                   <td>{{ t.userCount }}</td>
                   @if (canSuspend() || canEnter()) {
                     <td class="text-nowrap">
-                      @if (canEnter() && !t.current) {
+                      @if (canEnter() && !t.current && !isPlatform(t)) {
                         <button type="button" class="btn btn-sm btn-outline-primary me-1"
                                 [disabled]="entering() !== null"
                                 (click)="enter(t)"
@@ -368,7 +413,7 @@
                           {{ entering() === t.uid ? 'Opening…' : 'Enter' }}
                         </button>
                       }
-                      @if (!canSuspend() || t.current) {
+                      @if (!canSuspend() || t.current || isPlatform(t)) {
                       } @else if (t.status === 'ACTIVE') {
                         <button type="button" class="btn btn-sm btn-outline-secondary"
                                 [disabled]="confirmTarget() !== null"

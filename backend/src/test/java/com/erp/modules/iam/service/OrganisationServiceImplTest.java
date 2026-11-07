@@ -347,7 +347,9 @@ class OrganisationServiceImplTest {
     private OrganisationServiceImpl serviceWithFiscalProvider(String provider) {
         return new OrganisationServiceImpl(organisations, provisioning, audit,
                 new com.erp.platform.fiscal.FiscalisationProperties(provider), companies, users,
-                org.mockito.Mockito.mock(com.erp.modules.iam.repository.BranchRepository.class));
+                org.mockito.Mockito.mock(com.erp.modules.iam.repository.BranchRepository.class),
+                org.mockito.Mockito.mock(com.erp.modules.iam.repository.UserRoleRepository.class),
+                org.mockito.Mockito.mock(com.erp.platform.security.PlatformOrganisationRegistry.class));
     }
 
     /** An organisation with an id, which a mock repository never assigns. */

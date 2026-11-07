@@ -138,6 +138,18 @@ public class OrganisationController {
         return organisations.entryPoint(uid);
     }
 
+    /**
+     * Creates the platform organisation and moves the signed-in root operator into it (owner,
+     * 2026-11-07). Platform operator only; the confirmation is the current organisation's name.
+     */
+    @PostMapping("/platform")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@perm.has('ORG.CREATE')")
+    public OrganisationDto createPlatform(
+            @Valid @RequestBody com.erp.modules.iam.domain.dto.CreatePlatformOrganisationRequest request) {
+        return organisations.createPlatformOrganisation(request);
+    }
+
     @GetMapping("/current")
     @PreAuthorize("isAuthenticated()")
     public OrganisationDto current() {

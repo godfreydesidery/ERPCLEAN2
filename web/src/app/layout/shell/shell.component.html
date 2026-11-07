@@ -185,6 +185,12 @@
   <!-- Main content -->
   <main class="shell-main">
     <div class="shell-main-inner">
+      @if (atPlatformHome()) {
+        <div class="alert alert-info mb-3" role="status" data-testid="platform-home-banner">
+          <strong>Platform organisation.</strong> It holds no business data. To work on a customer's data,
+          open <a routerLink="/admin/platform/tenants">Platform → Tenants</a> and choose <em>Enter</em>.
+        </div>
+      }
       @if (enteredTenant(); as et) {
         <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 mb-3" role="status"
              data-testid="entered-tenant-banner">

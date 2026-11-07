@@ -85,6 +85,10 @@ public class TenantDepartureServiceImpl implements TenantDepartureService {
     @Override
     public void exportTenant(String uid, ExportSink sink) throws IOException {
         Organisation org = requireTarget(uid);
+        // The platform organisation is not a tenant (owner, 2026-11-07): nothing to hand over.
+        if (PLATFORM_ALIAS.equals(org.getAlias())) {
+            throw new ConflictException("The platform organisation is not a tenant and cannot be exported.");
+        }
         TenantRef ref = new TenantRef(org.getId(), org.getUid(), org.getName());
 
         String label = org.getAlias() != null ? org.getAlias() : "organisation";

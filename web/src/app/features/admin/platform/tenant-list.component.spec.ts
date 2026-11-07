@@ -306,6 +306,66 @@ describe('TenantListComponent', () => {
     expect(nav).toHaveBeenCalledWith('/admin/home');
   });
 
+  function asRoot(): void {
+    TestBed.inject(SessionStore).setSession('a', 'r', {
+      uid: 'U-ROOT', username: 'rootadmin', displayName: 'Root', isRoot: true,
+      activeCompanyUid: 'C', activeBranchUid: 'B', hasBranch: true,
+    });
+  }
+
+  it('offers Create platform organisation to root at home when none exists', () => {
+    setup([tenant({ uid: 'H', name: 'Home Customer', current: true })]);
+    asRoot();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="platform-offer"]')).not.toBeNull();
+  });
+
+  it('does not offer it once a platform organisation exists, and the Platform row has no actions', () => {
+    setup([tenant({ uid: 'P', name: 'Platform', alias: 'platform', current: true }), tenant()]);
+    asRoot();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="platform-offer"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Suspend Platform"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label="Enter Platform"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Platform');
+  });
+
+  it('a non-root user is never offered it', () => {
+    setup([tenant({ uid: 'H', name: 'Home Customer', current: true })]);
+    expect(fixture.nativeElement.querySelector('[data-testid="platform-offer"]')).toBeNull();
+  });
+
+  it('creates it only after the exact name is typed, then signs out', () => {
+    setup([tenant({ uid: 'H', name: 'Home Customer', current: true })]);
+    asRoot();
+    const nav = vi.spyOn(comp as unknown as { navigate: (u: string) => void }, 'navigate')
+      .mockImplementation(() => undefined);
+    comp.openPlatformDialog();
+    comp.platformConfirm.set('home customer');
+    comp.createPlatform();
+    http.expectNone(`${base}/platform`);
+    comp.platformConfirm.set('Home Customer');
+    comp.createPlatform();
+    const req = http.expectOne(`${base}/platform`);
+    expect(req.request.body).toEqual({ confirmName: 'Home Customer' });
+    req.flush({ uid: 'P', name: 'Platform', alias: 'platform', status: 'ACTIVE' });
+    http.expectOne((r) => r.url.endsWith('/auth/logout')).flush(null);
+    expect(nav).toHaveBeenCalledWith('/login');
+  });
+
+  it('shows the server refusal (e.g. no administrator of their own)', () => {
+    setup([tenant({ uid: 'H', name: 'Home Customer', current: true })]);
+    asRoot();
+    comp.openPlatformDialog();
+    comp.platformConfirm.set('Home Customer');
+    comp.createPlatform();
+    http.expectOne(`${base}/platform`).flush(
+      { errors: ["Give at least one of Home Customer's staff the Organisation administrator role first."] },
+      { status: 409, statusText: 'Conflict' });
+    expect(comp.platformError()).toContain('Organisation administrator role');
+    expect(comp.platformSaving()).toBe(false);
+  });
+
   it('has no axe violations (list, form and confirm dialog open)', async () => {
     setup();
     comp.openForm();

@@ -49,6 +49,7 @@ class OrganisationWriteMappingsAreAllowlistedTest {
         put("resume", "ORG.SUSPEND");
         put("export", "ORG.SUSPEND");   // R-7: platform operator only
         put("purge", "ORG.CREATE");     // R-8: platform operator only
+        put("createPlatform", "ORG.CREATE"); // owner 2026-11-07: platform operator only
     }};
 
     /** Codes that must never gate an organisation write — they are held by tenant administrators. */

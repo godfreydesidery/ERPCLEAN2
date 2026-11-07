@@ -19,6 +19,9 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     /** Whether an organisation is a platform operator's home (it holds an {@code is_root} user). */
     boolean existsByOrganisationIdAndRootTrue(Long organisationId);
 
+    /** How many root accounts an organisation holds (platform organisation move, 2026-11-07). */
+    long countByOrganisationIdAndRootTrue(Long organisationId);
+
     List<AppUser> findAllByOrderByUsername();
 
     /**

@@ -52,6 +52,58 @@ public final class OrganisationAlias {
      *           name that slugs to fewer than two characters returns null and the caller should
      *           derive the alias after the insert instead of guessing
      */
+    /**
+     * Whether a proposed organisation name is, or imitates, "platform" (owner, 2026-11-07).
+     *
+     * <p>Lookalike characters are folded first (0 to o, 1 | ! to l, 3 to e, 4 @ to a, 5 to s,
+     * 7 to t, "rn" to m) and anything outside a-z is dropped. Refused: a WORD within two edits of
+     * "platform" (insert, delete, substitute, swap) - "Platform", "Pllatform", "P1atform",
+     * "Plattform", "Platform Ltd" - or a name that is exactly "platform" once spaces and punctuation
+     * are removed - "Pla tform", "Plat-form". Allowed: "Plan & Form", "Platinum Foods",
+     * "Plateau Traders".
+     */
+    public static boolean resemblesPlatform(String name) {
+        if (name == null) {
+            return false;
+        }
+        String folded = name.toLowerCase(Locale.ROOT)
+                .replace("rn", "m")
+                .replace('0', 'o').replace('1', 'l').replace('|', 'l').replace('!', 'l')
+                .replace('3', 'e').replace('4', 'a').replace('@', 'a').replace('5', 's')
+                .replace('7', 't');
+        // A TYPO: any single word within two edits of "platform".
+        for (String word : folded.split("[^a-z]+")) {
+            if (word.length() >= 6 && word.length() <= 10 && editDistance(word, "platform") <= 2) {
+                return true;
+            }
+        }
+        // A SPACE or punctuation inside it: the separators removed give exactly "platform". Exact
+        // on purpose (owner, 2026-11-07) - "Plan & Form" joins to "planform" and is allowed.
+        return folded.replaceAll("[^a-z]+", "").equals("platform");
+    }
+
+    /** Optimal string alignment distance (Damerau-Levenshtein with adjacent swaps). */
+    static int editDistance(String a, String b) {
+        int[][] d = new int[a.length() + 1][b.length() + 1];
+        for (int i = 0; i <= a.length(); i++) {
+            d[i][0] = i;
+        }
+        for (int j = 0; j <= b.length(); j++) {
+            d[0][j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                d[i][j] = Math.min(Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + cost);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2)
+                        && a.charAt(i - 2) == b.charAt(j - 1)) {
+                    d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+                }
+            }
+        }
+        return d[a.length()][b.length()];
+    }
+
     public static String derive(String name, Long id) {
         String slug = name == null ? "" : name.toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9]+", "-")

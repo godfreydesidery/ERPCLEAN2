@@ -510,6 +510,12 @@ operator row needs either NULL or a sentinel organisation — and therefore the 
 > tenant's own trail. Tenant administrators are never root and stay confined. This reverses P3-1/P3-11 **for root
 > only**; the risk was stated and accepted: one root password opens every customer's books. `RootEntersTenantIT`.
 
+> **Platform organisation (owner, 2026-11-07):** a root-only **Create platform organisation** action creates
+> `Platform` (alias `platform`, usual defaults) and moves the operator into it in one transaction - no raw SQL on any
+> estate. Platform holds no business data (server write guard, swept over all 415 write endpoints in
+> `PlatformOrganisationIT`), cannot be suspended, exported, deleted or entered, and customer names that are or imitate
+> "platform" are refused. This realises D-2's sentinel platform organisation.
+
 ### D-3 · Do the shipped role bundles stay global? — **RESOLVED 2026-08-14: yes, and the ceiling rule changes**
 
 `AuthorityCeiling` permits only root to grant an `is_system` role, and all twelve shipped bundles

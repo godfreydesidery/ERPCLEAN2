@@ -74,6 +74,8 @@ public final class AuditActions {
 
     /** A tenant was provisioned by the platform operator (ADR-0062 P5-2). */
     public static final String ORG_CREATE = "ORG.CREATE";
+    /** The platform organisation was created and the operator moved into it (2026-11-07). */
+    public static final String ORG_PLATFORM_CREATE = "ORG.PLATFORM.CREATE";
 
     /** A tenant was suspended - it can no longer log in (P5-3). */
     public static final String ORG_SUSPEND = "ORG.SUSPEND";

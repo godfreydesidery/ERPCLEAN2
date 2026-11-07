@@ -25,6 +25,8 @@ public class OrganisationServiceImpl implements OrganisationService {
     private final com.erp.modules.iam.repository.CompanyRepository companies;
     private final com.erp.modules.iam.repository.AppUserRepository users;
     private final com.erp.modules.iam.repository.BranchRepository branches;
+    private final com.erp.modules.iam.repository.UserRoleRepository userRoles;
+    private final com.erp.platform.security.PlatformOrganisationRegistry platformRegistry;
 
     public OrganisationServiceImpl(OrganisationRepository organisations,
                                    com.erp.platform.bootstrap.TenantProvisioningService provisioning,
@@ -32,7 +34,9 @@ public class OrganisationServiceImpl implements OrganisationService {
                                    com.erp.platform.fiscal.FiscalisationProperties fiscal,
                                    com.erp.modules.iam.repository.CompanyRepository companies,
                                    com.erp.modules.iam.repository.AppUserRepository users,
-                                   com.erp.modules.iam.repository.BranchRepository branches) {
+                                   com.erp.modules.iam.repository.BranchRepository branches,
+                                   com.erp.modules.iam.repository.UserRoleRepository userRoles,
+                                   com.erp.platform.security.PlatformOrganisationRegistry platformRegistry) {
         this.organisations = organisations;
         this.provisioning = provisioning;
         this.audit = audit;
@@ -40,6 +44,8 @@ public class OrganisationServiceImpl implements OrganisationService {
         this.companies = companies;
         this.users = users;
         this.branches = branches;
+        this.userRoles = userRoles;
+        this.platformRegistry = platformRegistry;
     }
 
     @Override
@@ -72,6 +78,15 @@ public class OrganisationServiceImpl implements OrganisationService {
         //
         // Checked against the CONFIGURED provider, not a tenant count: a single-customer install with
         // a provider never reaches this endpoint at all, so nothing there changes.
+        // The alias `platform` belongs to the platform organisation (owner, 2026-11-07): a customer
+        // whose name is "platform" or LOOKS LIKE it (Pllatform, P1atform, Plat-form) is REFUSED, so a customer can never be mistaken for the
+        // platform - protected from deletion, excluded from sign-in alias resolution, exempt from
+        // the platform write guard's purpose. Checked before anything is created.
+        if (com.erp.platform.bootstrap.OrganisationAlias.resemblesPlatform(
+                request.organisationName())) {
+            throw new ConflictException("That name is too close to \"Platform\", which is reserved "
+                    + "for the platform organisation. Choose a different name.");
+        }
         if (!"none".equals(fiscal.effectiveProvider())) {
             throw new ConflictException("A new organisation cannot be created on this server while "
                     + "fiscal receipts are switched on. Switch fiscalisation off first.");
@@ -144,6 +159,15 @@ public class OrganisationServiceImpl implements OrganisationService {
                 .orElseThrow(() -> new NotFoundException("Organisation not found."));
 
         RequestContext.Principal caller = RequestContext.get();
+
+        // The platform organisation is never suspended (owner, 2026-11-07), from wherever the
+        // request comes - including from inside an entered tenant, where it is "another
+        // organisation" to the check below. Suspending it would lock out platform staff and, with
+        // them, the only place tenants are administered.
+        if (!active && platformRegistry.isPlatform(org.getId())
+                && isPlatformOperator(caller)) {
+            throw new ConflictException("The platform organisation cannot be suspended.");
+        }
         boolean ownOrganisation = caller != null && caller.organisationId() != null
                 && caller.organisationId().equals(org.getId());
 
@@ -257,6 +281,10 @@ public class OrganisationServiceImpl implements OrganisationService {
         }
         var org = organisations.findByUid(organisationUid)
                 .orElseThrow(() -> new NotFoundException("Organisation not found."));
+        if (platformRegistry.isPlatform(org.getId())) {
+            throw new ConflictException("This is the platform organisation. Use \"Return to my "
+                    + "organisation\" to go back to it.");
+        }
         var company = companies.findByOrganisationIdOrderByName(org.getId()).stream().findFirst()
                 .orElseThrow(() -> new NotFoundException("This organisation has no company yet."));
         var branch = branches.findByCompanyIdAndIsDefaultTrue(company.getId())
@@ -264,6 +292,66 @@ public class OrganisationServiceImpl implements OrganisationService {
                 .orElseThrow(() -> new NotFoundException("This organisation has no branch yet."));
         return new com.erp.modules.iam.domain.dto.TenantEntryDto(org.getUid(), org.getName(),
                 company.getName(), branch.getUid(), branch.getName(), branch.getCode());
+    }
+
+    @Override
+    @Transactional
+    public OrganisationDto createPlatformOrganisation(
+            com.erp.modules.iam.domain.dto.CreatePlatformOrganisationRequest request) {
+        RequestContext.Principal caller = RequestContext.get();
+        if (!isPlatformOperator(caller)) {
+            throw new NotFoundException("Organisation not found.");
+        }
+        if (organisations.findByAlias(
+                com.erp.platform.security.PlatformOrganisationRegistry.PLATFORM_ALIAS).isPresent()) {
+            throw new ConflictException("A platform organisation already exists.");
+        }
+        // Self-scope read: the caller's OWN row, by the id on its own principal.
+        var operator = users.findScopedById(caller.userId())
+                .orElseThrow(() -> new NotFoundException("Organisation not found."));
+        // Must be done from HOME, not from inside an entered tenant: the move is about the
+        // operator's own organisation, and that is the one named in the confirmation.
+        if (!java.util.Objects.equals(operator.getOrganisationId(), caller.organisationId())) {
+            throw new ConflictException("Return to your organisation first.");
+        }
+        var home = organisations.findScopedById(operator.getOrganisationId())
+                .orElseThrow(() -> new NotFoundException("Organisation not found."));
+        if (request == null || request.confirmName() == null
+                || !home.getName().equals(request.confirmName())) {
+            throw new IllegalArgumentException(
+                    "The confirmation does not match the organisation's name. Type the name exactly.");
+        }
+        if (users.countByOrganisationIdAndRootTrue(home.getId()) > 1) {
+            throw new ConflictException("Another root account still belongs to " + home.getName()
+                    + ". Only one platform operator can be moved; contact support.");
+        }
+        if (userRoles.countActiveNonRootHoldersInOrganisation("ORG_ADMIN", home.getId()) == 0) {
+            throw new ConflictException("Give at least one of " + home.getName()
+                    + "'s staff the Organisation administrator role first, so they still have "
+                    + "an administrator of their own.");
+        }
+
+        var moved = provisioning.provisionPlatform(operator.getId(), home.getDefaultTimeZone());
+
+        audit.record(AuditEvent.of(AuditActions.ORG_PLATFORM_CREATE, "organisations",
+                        moved.organisationId(), null)
+                .detail(java.util.Map.of(
+                        "platformOrganisationId", String.valueOf(moved.organisationId()),
+                        "previousOrganisationId", String.valueOf(moved.previousOrganisationId()),
+                        "operatorUserId", String.valueOf(operator.getId()))));
+
+        // The guard's cache must learn the new platform organisation once this commits.
+        org.springframework.transaction.support.TransactionSynchronizationManager
+                .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        platformRegistry.reload();
+                    }
+                });
+
+        return organisations.findScopedById(moved.organisationId())
+                .map(OrganisationDto::from)
+                .orElseThrow(() -> new NotFoundException("Organisation was not created."));
     }
 
     @Override

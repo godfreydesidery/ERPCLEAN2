@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SessionStore } from '../../../core/auth/session.store';
+import { AuthService } from '../../../core/auth/auth.service';
 import { CreateTenantRequest, TenantSummary } from './tenant.model';
 import { TenantService } from './tenant.service';
 
@@ -21,6 +22,7 @@ type ConfirmAction = 'suspend' | 'resume';
 export class TenantListComponent {
   private readonly service = inject(TenantService);
   private readonly session = inject(SessionStore);
+  private readonly auth = inject(AuthService);
 
   readonly tenants = signal<TenantSummary[]>([]);
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
@@ -28,6 +30,27 @@ export class TenantListComponent {
   /** Root only: switching into another tenant is the platform operator's, read and write. */
   readonly canEnter = computed(() => this.session.user()?.isRoot === true);
   readonly entering = signal<string | null>(null);
+
+  // ── Platform organisation (owner, 2026-11-07) ──
+  /** True for the platform organisation's row: never entered, suspended or exported. */
+  isPlatform(t: TenantSummary): boolean {
+    return t.alias === 'platform';
+  }
+  /** The organisation the operator is in, which the move would leave. */
+  readonly homeTenant = computed(() => this.tenants().find((t) => t.current) ?? null);
+  /** Offered to root, at home, while no platform organisation exists. */
+  readonly canCreatePlatform = computed(
+    () =>
+      this.canEnter() &&
+      this.state() === 'ready' &&
+      this.session.platformTenant() === null &&
+      !this.tenants().some((t) => t.alias === 'platform') &&
+      this.homeTenant() !== null,
+  );
+  readonly platformDialogOpen = signal(false);
+  readonly platformConfirm = signal('');
+  readonly platformSaving = signal(false);
+  readonly platformError = signal<string | null>(null);
   readonly enterError = signal<string | null>(null);
 
   // Suspend / reactivate confirm
@@ -131,6 +154,46 @@ export class TenantListComponent {
   /** Full reload, so every cached list and permission set is rebuilt. A seam for specs. */
   protected navigate(url: string): void {
     window.location.assign(url);
+  }
+
+  // ── Create the platform organisation (owner, 2026-11-07) ─────────────────
+
+  openPlatformDialog(): void {
+    this.platformConfirm.set('');
+    this.platformError.set(null);
+    this.platformDialogOpen.set(true);
+    setTimeout(() => document.getElementById('platformConfirm')?.focus(), 0);
+  }
+
+  closePlatformDialog(): void {
+    if (this.platformSaving()) return;
+    this.platformDialogOpen.set(false);
+  }
+
+  readonly platformConfirmOk = computed(
+    () => this.homeTenant() !== null && this.platformConfirm().trim() === this.homeTenant()!.name,
+  );
+
+  /**
+   * One click: the server creates Platform and moves this account into it, then signs it out
+   * everywhere. Sign out here too, so the next sign-in lands in Platform.
+   */
+  createPlatform(): void {
+    if (this.platformSaving() || !this.platformConfirmOk()) return;
+    this.platformSaving.set(true);
+    this.platformError.set(null);
+    this.service.createPlatform(this.platformConfirm().trim()).subscribe({
+      next: () => {
+        this.auth.logout().subscribe({
+          next: () => this.navigate('/login'),
+          error: () => this.navigate('/login'),
+        });
+      },
+      error: (err) => {
+        this.platformSaving.set(false);
+        this.platformError.set(this.messageFrom(err, 'Could not create the platform organisation.'));
+      },
+    });
   }
 
   // ── Enter a tenant (owner, 2026-11-07) ────────────────────────────────────

@@ -41,4 +41,11 @@ public interface OrganisationService {
      * first company (owner, 2026-11-07). Platform operator only; anyone else gets NOT FOUND.
      */
     com.erp.modules.iam.domain.dto.TenantEntryDto entryPoint(String organisationUid);
+
+    /**
+     * Creates the platform organisation and moves the signed-in root operator into it (owner,
+     * 2026-11-07). Refused unless every precondition holds; see the implementation.
+     */
+    OrganisationDto createPlatformOrganisation(
+            com.erp.modules.iam.domain.dto.CreatePlatformOrganisationRequest request);
 }

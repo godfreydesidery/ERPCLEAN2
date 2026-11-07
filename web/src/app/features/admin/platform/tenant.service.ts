@@ -23,6 +23,14 @@ export class TenantService {
     return this.http.post<Organisation>(`${this.base}/uid/${uid}/suspend`, {});
   }
 
+  /**
+   * Creates the platform organisation and moves the signed-in operator into it (owner,
+   * 2026-11-07). The confirmation is the exact name of the organisation being left.
+   */
+  createPlatform(confirmName: string): Observable<Organisation> {
+    return this.http.post<Organisation>(`${this.base}/platform`, { confirmName });
+  }
+
   /** The branch the platform operator enters this tenant through (its default branch). */
   entry(uid: string): Observable<TenantEntry> {
     return this.http.get<TenantEntry>(`${this.base}/uid/${uid}/entry`);
