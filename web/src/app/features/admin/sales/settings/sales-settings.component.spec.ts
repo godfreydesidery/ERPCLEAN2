@@ -432,7 +432,9 @@ describe('SalesSettingsComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('label[for="posSessionLimitMode"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('#posSessionLimitHint').textContent).toContain('36 hours');
+    const hint = fixture.nativeElement.querySelector('#posSessionLimitHint').textContent;
+    expect(hint).toContain('36 hours');
+    expect(hint).toContain('To keep selling, close and reconcile the shift');
     expect(fixture.nativeElement.querySelector('#posSessionMaxOpenHours')).toBeNull();
   });
 
@@ -475,8 +477,10 @@ describe('SalesSettingsComponent', () => {
     comp.fSessionLimitMode.set('NO_LIMIT');
     comp.fSessionHours.set('48');   // a stale box must not travel with NO_LIMIT
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('#posSessionLimitHint').textContent)
-      .toContain('cover every day it was open');
+    const noLimitHint = fixture.nativeElement.querySelector('#posSessionLimitHint').textContent;
+    expect(noLimitHint).toContain('cover every day it was open');
+    // With no limit the till never stops, so the "how to keep selling" advice must not appear.
+    expect(noLimitHint).not.toContain('To keep selling');
 
     comp.save();
     const putReq = http.expectOne(BASE);

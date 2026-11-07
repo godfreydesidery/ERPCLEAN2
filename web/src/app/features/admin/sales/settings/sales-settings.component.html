@@ -211,7 +211,10 @@
                       }
                     </select>
                     <span class="hint" id="posSessionLimitHint">
-                      {{ sessionLimitHint() }} To keep selling, close and reconcile the shift, then open a new one.
+                      {{ sessionLimitHint() }}
+                      @if (fSessionLimitMode() !== 'NO_LIMIT') {
+                        To keep selling, close and reconcile the shift, then open a new one.
+                      }
                     </span>
                   </div>
 
