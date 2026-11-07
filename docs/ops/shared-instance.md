@@ -14,9 +14,10 @@ tenancy-mode flag (plan section 0). Everything that differs is in `infra/shared/
 | Not supported | Why | What to do instead |
 |---|---|---|
 | **More than one API node** | The scheduled jobs (outbox dispatcher, midnight standing-order sweep, P8-6) take no locks. Two nodes would double-dispatch events and double-generate every tenant's standing orders. The compose file pins one replica and a fixed `container_name` so `--scale api=2` is refused. | Scale up (CPU/RAM, pool), not out. Multi-node needs scheduler locks first - an application change tracked as a plan follow-up. |
-| **Per-tenant fiscalisation (TRA/VFD)** | `erp.fiscal.provider` is one JVM-wide property and only `none`/`simulated` exist. D-8: the shared server does not fiscalise until the real TRA adapter exists. The compose file pins `ERP_FISCAL_PROVIDER=none`. | A tenant that must fiscalise today needs its own single-tenant install. **R-1 (a separate item) makes the server refuse to create a tenant while a provider is enabled**, and refuse to enable one while more than one tenant exists. Until R-1 is merged, do not rely on the server to stop you: never set a provider here. |
+| **Per-tenant fiscalisation (TRA/VFD)** | `erp.fiscal.provider` is one JVM-wide property and only `none`/`simulated` exist. D-8: the shared server does not fiscalise until the real TRA adapter exists. The compose file pins `ERP_FISCAL_PROVIDER=none`. | A tenant that must fiscalise today needs its own single-tenant install. **R-1 is enforced by the server:** `POST /organisations` is refused (409) while a provider is enabled, and once more than one organisation exists no receipt is ever sent to a provider (it is recorded NOT_CONFIGURED). Keep `ERP_FISCAL_PROVIDER=none` anyway. |
 | **Restoring one tenant by restoring the database** | A database restore is whole-instance. | The support procedure in [shared-instance-pitr.md](shared-instance-pitr.md) section 6. |
-| **Per-tenant TLS names, mail identity, rate limits** | One Caddy site, one `spring.mail.*` block per process (R-10 covers mail). | - |
+| **Per-tenant TLS names, rate limits** | One Caddy site per process. | - |
+| **Per-tenant mail address** | One `spring.mail.*` block per process. With `ERP_MAIL_FROM` set (R-10), every tenant's mail leaves from that one address with the tenant's name as display name and the company's contact email as Reply-To. | Set `ERP_MAIL_FROM` to an address on a domain whose SPF/DKIM covers the SMTP relay. |
 
 ## 1 - Install (once)
 
@@ -199,7 +200,7 @@ is not undone by the transaction rolling back.
 6. Check the server log once for the tenant's seeders and that the outbox gauge for the new organisation
    id is absent (zero failures).
 7. **Fiscalisation:** do not enable a provider for this tenant or any other. A tenant that needs TRA/VFD
-   today cannot be hosted here (R-1 enforces the refusal in the service once merged).
+   today cannot be hosted here (R-1: the server refuses tenant creation while a provider is on).
 8. Take another base backup so the new tenant's creation is inside a restorable window, then hand over
    credentials.
 
@@ -212,10 +213,10 @@ curl -sk -X POST "https://$ERP_PUBLIC_HOST/api/v1/organisations/uid/<uid>/suspen
 curl -sk -X POST "https://$ERP_PUBLIC_HOST/api/v1/organisations/uid/<uid>/resume"  -H "Authorization: Bearer $TOKEN"
 ```
 
-Suspension bites **at login**, not per request: staff cannot sign in (`401`, "This account is not
-available at the moment"), but a token already issued keeps working until it expires (access tokens last
-15 minutes per CLAUDE.md; whether a refresh token is refused is not verified here - test it on the
-first real suspension). Nothing is deleted. Use it for non-payment, an incident, or the
+Suspension bites **at sign-in and at the next token refresh**, not per request: staff cannot sign in
+(`401`, "This account is not available at the moment"), and a till or browser that is already signed in
+is refused at its next refresh. An access token already issued keeps working until it expires (at most
+15 minutes). Verified by `AuthServiceImplIT.refresh_afterTheTenantIsSuspended_isRefused`. Nothing is deleted. Use it for non-payment, an incident, or the
 grace period before departure (R-8). Resume restores sign-in immediately.
 
 ## 6 - Upgrade

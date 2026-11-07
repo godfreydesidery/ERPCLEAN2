@@ -123,6 +123,9 @@ services:
       # application-prod.yml exposes only health,info; the per-tenant metric
       # erp.outbox.failed.by.tenant needs prometheus. Management port 9090 only - see ports below.
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,prometheus
+      # Outbox retention: one domain_events table carries every tenant's history here, so the
+      # opt-in purge of old DISPATCHED events is ON (floor 30 days; 0 = off, the default elsewhere).
+      ERP_OUTBOX_RETENTION_DAYS: ${ERP_OUTBOX_RETENTION_DAYS:-90}
     ports:
       # Management/actuator port: loopback ONLY. Never publish 9090 on 0.0.0.0 and never route it
       # through Caddy - /actuator exposes health detail and per-tenant metrics. Scrape it from the host or from
