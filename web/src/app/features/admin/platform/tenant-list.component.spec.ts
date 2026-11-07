@@ -366,6 +366,49 @@ describe('TenantListComponent', () => {
     expect(comp.platformSaving()).toBe(false);
   });
 
+  describe('filter', () => {
+    const rows = () => [
+      tenant({ uid: 'A', name: 'Acme Traders', alias: 'acme' }),
+      tenant({ uid: 'B', name: 'Beta Foods', alias: 'beta', status: 'INACTIVE' }),
+      tenant({ uid: 'C', name: 'Cafe Tulia', alias: 'tulia' }),
+    ];
+    const names = () =>
+      Array.from(fixture.nativeElement.querySelectorAll('tbody tr td:first-child') as NodeListOf<HTMLElement>)
+        .map((td) => td.textContent!.trim());
+
+    it('matches name or alias, case-insensitively, and counts', () => {
+      setup(rows());
+      comp.searchText.set('TULIA');
+      fixture.detectChanges();
+      expect(names()).toEqual(['Cafe Tulia']);
+      comp.searchText.set('bet');
+      fixture.detectChanges();
+      expect(names()).toEqual(['Beta Foods']);
+      expect(fixture.nativeElement.querySelector('[data-testid="tenant-count"]').textContent)
+        .toContain('Showing 1 of 3');
+    });
+
+    it('filters by status', () => {
+      setup(rows());
+      comp.statusFilter.set('INACTIVE');
+      fixture.detectChanges();
+      expect(names()).toEqual(['Beta Foods']);
+      comp.statusFilter.set('ACTIVE');
+      fixture.detectChanges();
+      expect(names()).toEqual(['Acme Traders', 'Cafe Tulia']);
+    });
+
+    it('says so when nothing matches, and Clear restores the list', () => {
+      setup(rows());
+      comp.searchText.set('zzz');
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="tenant-no-match"]')).not.toBeNull();
+      comp.clearFilter();
+      fixture.detectChanges();
+      expect(names().length).toBe(3);
+    });
+  });
+
   it('has no axe violations (list, form and confirm dialog open)', async () => {
     setup();
     comp.openForm();

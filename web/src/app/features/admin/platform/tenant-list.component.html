@@ -368,6 +368,29 @@
         @if (enterError(); as msg) {
           <p class="text-danger mb-2" role="alert">{{ msg }}</p>
         }
+        <div class="row g-2 align-items-end mb-2" role="search" aria-label="Filter tenants">
+          <div class="col-sm-6 col-md-5">
+            <label class="form-label small mb-1" for="tenantSearch">Search</label>
+            <input id="tenantSearch" name="tenantSearch" type="search" class="form-control" autocomplete="off"
+                   placeholder="Name or alias" [(ngModel)]="searchText" />
+          </div>
+          <div class="col-sm-4 col-md-3">
+            <label class="form-label small mb-1" for="tenantStatus">Status</label>
+            <select id="tenantStatus" name="tenantStatus" class="form-select" [(ngModel)]="statusFilter">
+              <option value="ALL">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Suspended</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            @if (filterActive()) {
+              <button type="button" class="btn btn-outline-secondary" (click)="clearFilter()">Clear</button>
+            }
+          </div>
+          <div class="col text-sm-end small text-muted" aria-live="polite" data-testid="tenant-count">
+            Showing {{ filteredTenants().length }} of {{ tenants().length }}
+          </div>
+        </div>
         <div class="erp-table-wrap">
           <table class="erp-table">
             <caption class="sr-only">Tenant organisations</caption>
@@ -385,7 +408,7 @@
               </tr>
             </thead>
             <tbody>
-              @for (t of tenants(); track t.uid) {
+              @for (t of filteredTenants(); track t.uid) {
                 <tr>
                   <td>
                     {{ t.name }}
@@ -427,6 +450,13 @@
                       }
                     </td>
                   }
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7" class="text-muted" data-testid="tenant-no-match">
+                    No tenant matches this filter.
+                    <button type="button" class="btn btn-link btn-sm p-0 align-baseline" (click)="clearFilter()">Clear the filter</button>
+                  </td>
                 </tr>
               }
             </tbody>

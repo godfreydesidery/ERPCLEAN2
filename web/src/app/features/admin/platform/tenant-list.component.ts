@@ -27,6 +27,27 @@ export class TenantListComponent {
   readonly tenants = signal<TenantSummary[]>([]);
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
   readonly canSuspend = computed(() => this.session.hasPermission('ORG.SUSPEND'));
+
+  // ── Filter (client-side; the list is every tenant on the server) ──
+  readonly searchText = signal('');
+  readonly statusFilter = signal<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  readonly filteredTenants = computed(() => {
+    const q = this.searchText().trim().toLowerCase();
+    const status = this.statusFilter();
+    return this.tenants().filter(
+      (t) =>
+        (status === 'ALL' || t.status === status) &&
+        (!q || t.name.toLowerCase().includes(q) || (t.alias ?? '').toLowerCase().includes(q)),
+    );
+  });
+  readonly filterActive = computed(
+    () => this.searchText().trim() !== '' || this.statusFilter() !== 'ALL',
+  );
+
+  clearFilter(): void {
+    this.searchText.set('');
+    this.statusFilter.set('ALL');
+  }
   /** Root only: switching into another tenant is the platform operator's, read and write. */
   readonly canEnter = computed(() => this.session.user()?.isRoot === true);
   readonly entering = signal<string | null>(null);
