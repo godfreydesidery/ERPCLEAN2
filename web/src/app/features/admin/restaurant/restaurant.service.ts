@@ -75,8 +75,13 @@ export class RestaurantService {
    * (the product form). Without RESTAURANT.SETUP.MANAGE only a department with no route yet can
    * be routed; the server refuses a move with a message saying so.
    */
-  setCategoryRoute(category: string, prepStationUid: string): Observable<PrepStationCategoryDto> {
+  setCategoryRoute(
+    category: string,
+    prepStationUid: string,
+    branchUid?: string,
+  ): Observable<PrepStationCategoryDto> {
     return this.http.put<PrepStationCategoryDto>(`${this.base}/category-routes/one`, {
+      branchUid: branchUid || null,
       category,
       prepStationUid,
     });

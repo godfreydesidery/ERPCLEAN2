@@ -213,9 +213,10 @@ export class ProductMasterComponent implements OnInit {
   readonly printsAtValue = computed(
     () => this.fPrintsAt() ?? this.currentRoute()?.prepStationUid ?? '',
   );
-  readonly defaultStationName = computed(() => {
+  readonly defaultStationName = computed<string | null>(() => {
     const st = this.stations();
-    return (st.find((s) => s.defaultStation) ?? st[0])?.name ?? null;
+    const pick: PrepStationDto | undefined = st.find((s) => s.defaultStation) ?? st[0];
+    return pick ? pick.name : null;
   });
   /** The route change this save would make, or null when nothing changes. */
   readonly pendingRoute = computed(() => {
