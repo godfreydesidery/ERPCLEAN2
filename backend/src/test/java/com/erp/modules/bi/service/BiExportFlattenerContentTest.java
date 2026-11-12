@@ -9,6 +9,7 @@ import com.erp.modules.bi.domain.dto.BranchSalesRowDto;
 import com.erp.modules.bi.domain.dto.CashPositionDto;
 import com.erp.modules.bi.domain.dto.DashboardDto;
 import com.erp.modules.bi.domain.dto.FinanceSummaryDto;
+import com.erp.modules.bi.domain.dto.InventorySummaryDto;
 import com.erp.modules.bi.domain.dto.SalesByBranchDto;
 import com.erp.modules.bi.domain.dto.WorkingCapitalDto;
 import com.erp.modules.cashbank.domain.dto.CashAccountBalanceDto;
@@ -67,6 +68,30 @@ class BiExportFlattenerContentTest {
         assertThat(amountOf(model, "DSM — DSM Main (34 invoices)")).contains(new BigDecimal("5120000.00"));
         assertThat(amountOf(model, "ARU — Arusha (1 invoice)")).contains(new BigDecimal("2890000.00"));
         assertThat(amountOf(model, "Total (35 invoices)")).contains(new BigDecimal("8010000.00"));
+    }
+
+    @Test
+    void stockSalesValueIsExportedBesideTheCostValue() {
+        DashboardDto d = dashboard();
+        DashboardDto withInv = new DashboardDto(d.header(), d.finance(), d.workingCapital(),
+                new InventorySummaryDto(new BigDecimal("300000.00"), true, BigDecimal.ZERO,
+                        new BigDecimal("420000.00"), 2),
+                null, null, null, d.salesByBranch(), List.of());
+
+        StatementRenderModel model = flattener.flatten(withInv);
+
+        assertThat(amountOf(model, "Stock Value")).contains(new BigDecimal("300000.00"));
+        assertThat(amountOf(model, "Stock Sales Value")).contains(new BigDecimal("420000.00"));
+    }
+
+    @Test
+    void noStockSalesValueRowWhenNothingIsPriced() {
+        DashboardDto d = dashboard();
+        DashboardDto withInv = new DashboardDto(d.header(), d.finance(), d.workingCapital(),
+                new InventorySummaryDto(new BigDecimal("300000.00"), true, BigDecimal.ZERO, null, 5),
+                null, null, null, d.salesByBranch(), List.of());
+
+        assertThat(labels(flattener.flatten(withInv))).doesNotContain("Stock Sales Value");
     }
 
     // -------------------------------------------------------------------------
