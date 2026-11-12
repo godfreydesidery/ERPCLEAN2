@@ -39,6 +39,8 @@ import com.erp.modules.reporting.service.StatementClassifier;
 import com.erp.modules.sales.domain.dto.BranchSalesAggregateDto;
 import com.erp.modules.sales.service.SalesByBranchQuery;
 import com.erp.modules.stock.domain.dto.StockValuationReportDto;
+import com.erp.modules.stock.domain.dto.ProductStockTotalsDto;
+import com.erp.modules.stock.service.ProductStockReportQuery;
 import com.erp.modules.stock.service.StockValuationQuery;
 import com.erp.platform.common.api.ForbiddenException;
 import com.erp.platform.common.api.NotFoundException;
@@ -121,6 +123,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final CashAccountStatementQuery cashStatement;
     private final CashGlReconciliationQuery cashGlRecon;
     private final StockValuationQuery      stockValuation;
+    private final ProductStockReportQuery  productStockReport;
     private final PipelineQuery            pipeline;
     private final FiscalPeriodRepository   fiscalPeriods;
     private final SalesByBranchQuery       salesByBranchQuery;
@@ -139,6 +142,7 @@ public class DashboardServiceImpl implements DashboardService {
                                  CashAccountStatementQuery cashStatement,
                                  CashGlReconciliationQuery cashGlRecon,
                                  StockValuationQuery stockValuation,
+                                 ProductStockReportQuery productStockReport,
                                  PipelineQuery pipeline,
                                  FiscalPeriodRepository fiscalPeriods,
                                  SalesByBranchQuery salesByBranchQuery,
@@ -156,6 +160,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.cashStatement       = cashStatement;
         this.cashGlRecon         = cashGlRecon;
         this.stockValuation      = stockValuation;
+        this.productStockReport  = productStockReport;
         this.pipeline            = pipeline;
         this.fiscalPeriods       = fiscalPeriods;
         this.salesByBranchQuery  = salesByBranchQuery;
@@ -351,7 +356,29 @@ public class DashboardServiceImpl implements DashboardService {
         // O-1: StockValuationQuery.report — stat-card only (totalValue + recon), NOT the per-product table
         StockValuationReportDto sv = stockValuation.report(companyId);
         boolean ties = sv.recon().ties();
-        return new InventorySummaryDto(sv.totalValue(), ties, sv.recon().difference());
+        ProductStockTotalsDto sale = saleTotals(companyId);
+        return new InventorySummaryDto(sv.totalValue(), ties, sv.recon().difference(),
+                sale != null ? sale.totalSaleValue() : null,
+                sale != null ? sale.unpricedItems() : 0);
+    }
+
+    /**
+     * Stock at selling price, from the Stock Value report's totals. Its row set is chosen to agree
+     * with StockValuationQuery, so cost and sale describe the same stock. Only for whole-company
+     * callers: for anyone else the report narrows to their branches, and a branch-sized sale value
+     * beside a company-wide cost would be wrong. A failure here costs only the sale figure — the
+     * cost card and GL tie still show.
+     */
+    private ProductStockTotalsDto saleTotals(Long companyId) {
+        if (!branchGuard.seesWholeCompany(RequestContext.get(), companyId)) {
+            return null;
+        }
+        try {
+            return productStockReport.report(companyId, null, null, true).totals();
+        } catch (Exception ex) {
+            log.warn("BI inventory sale value failed for company {}: {}", companyId, ex.getMessage());
+            return null;
+        }
     }
 
     // =========================================================================

@@ -86,6 +86,13 @@ export interface InventorySummaryDto {
   stockValue: string;
   stockTies: boolean;
   stockDifference: string;
+  /**
+   * The same stock at the default selling price. Null/absent when nothing is priced, the figure
+   * could not be computed, or the server predates it. Never read as zero.
+   */
+  stockSaleValue?: string | number | null;
+  /** Lines holding stock with no selling price — left out of stockSaleValue. */
+  unpricedItems?: number;
 }
 
 // ── CRM (reuses CRM DTOs) ─────────────────────────────────────────────────────

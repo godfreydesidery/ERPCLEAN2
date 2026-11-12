@@ -456,8 +456,27 @@
           <div class="row g-3 mb-4">
             <div class="col-sm-4">
               <div class="erp-kpi">
-                <div class="erp-kpi__label">Stock Value</div>
+                <div class="erp-kpi__label">Stock Value (at cost)</div>
                 <div class="erp-kpi__value">{{ +inv.stockValue | number:'1.2-2' }}</div>
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <div class="erp-kpi">
+                <div class="erp-kpi__label">Stock Sales Value</div>
+                @if (inv.stockSaleValue != null) {
+                  <div class="erp-kpi__value">{{ +inv.stockSaleValue | number:'1.2-2' }}</div>
+                  <div class="small text-muted mt-1">
+                    Profit on shelf {{ +inv.stockSaleValue - +inv.stockValue | number:'1.2-2' }}
+                  </div>
+                } @else {
+                  <div class="erp-kpi__value text-muted">Not priced</div>
+                }
+                @if (inv.unpricedItems) {
+                  <div class="small text-muted mt-1">
+                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>{{ inv.unpricedItems }}
+                    {{ inv.unpricedItems === 1 ? 'item has' : 'items have' }} no selling price (not counted)
+                  </div>
+                }
               </div>
             </div>
             <div class="col-sm-4">
