@@ -623,6 +623,8 @@ public final class AuditActions {
     public static final String PREP_STATION_CREATE       = "RESTAURANT.STATION.CREATE";
     public static final String PREP_STATION_UPDATE       = "RESTAURANT.STATION.UPDATE";
     public static final String PREP_ROUTING_REPLACE      = "RESTAURANT.ROUTING.REPLACE";
+    /** One category's station set from the product form (till add-product, web Product Master). */
+    public static final String PREP_ROUTING_SET          = "RESTAURANT.ROUTING.SET";
     public static final String RESTAURANT_ORDER_OPEN     = "RESTAURANT.ORDER.OPEN";
     public static final String RESTAURANT_ORDER_UPDATE   = "RESTAURANT.ORDER.UPDATE";
     public static final String RESTAURANT_ORDER_SEND     = "RESTAURANT.ORDER.SEND";

@@ -62,7 +62,10 @@ import com.erp.modules.sales.domain.dto.OpenSessionRequest;
 import com.erp.modules.sales.domain.dto.PayRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.PrepSlipDto;
 import com.erp.modules.sales.domain.dto.PrepStationDto;
+import com.erp.modules.sales.domain.dto.PrepStationCategoryDto;
+import com.erp.platform.common.api.ConflictException;
 import com.erp.modules.sales.domain.dto.ReplaceCategoryRoutesRequest;
+import com.erp.modules.sales.domain.dto.SetCategoryRouteRequest;
 import com.erp.modules.sales.domain.dto.RestaurantBillDto;
 import com.erp.modules.sales.domain.dto.RestaurantOrderDto;
 import com.erp.modules.sales.domain.dto.RestaurantOrderLineDto;
@@ -921,6 +924,73 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         RestaurantOrderDto order = openWith(juice);
         assertThat(orders.send(order.uid()).slips()).extracting(PrepSlipDto::stationName)
                 .containsExactly("Bar");
+    }
+
+    // =========================================================================
+    // Tulia 2026-11-12: the product form chooses where a department prints.
+    // =========================================================================
+
+    @Test
+    void aNewDepartment_routedFromTheProductForm_printsThere() {
+        setRootCtx();
+        ProductDto juice = menuItem("Mango Juice", "4000", "Juices");
+
+        setCashierCtx();
+        RestaurantOrderDto before = openWith(juice);
+        assertThat(orders.send(before.uid()).slips()).extracting(PrepSlipDto::stationName)
+                .as("an unrouted department goes to the default station")
+                .containsExactly("Kitchen");
+
+        // A product manager without restaurant set-up rights may route a NEW department.
+        PrepStationCategoryDto route = setup.setCategoryRoute(
+                new SetCategoryRouteRequest(null, "  Juices ", bar.uid()));
+        assertThat(route.category()).isEqualTo("Juices");
+        assertThat(route.prepStationName()).isEqualTo("Bar");
+        assertThat(setup.listCategoryRoutes(null)).extracting(PrepStationCategoryDto::category)
+                .as("the other routes are left alone")
+                .containsExactlyInAnyOrder("drinks", "Juices");
+
+        setRootCtx();
+        ProductDto passion = menuItem("Passion Juice", "4000", "juices");
+        setCashierCtx();
+        orders.addLine(before.uid(), item(passion));
+        assertThat(orders.send(before.uid()).slips()).extracting(PrepSlipDto::stationName)
+                .as("matched case-insensitively")
+                .containsExactly("Bar");
+    }
+
+    @Test
+    void movingADepartmentThatAlreadyPrints_needsRestaurantSetUp() {
+        setCashierCtx();
+        assertThatThrownBy(() -> setup.setCategoryRoute(
+                new SetCategoryRouteRequest(null, "DRINKS", kitchen.uid())))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("already prints at Bar");
+        // Choosing the station it already prints at is fine.
+        assertThat(setup.setCategoryRoute(new SetCategoryRouteRequest(null, "Drinks", bar.uid()))
+                .prepStationName()).isEqualTo("Bar");
+
+        setRootCtx();
+        assertThat(setup.setCategoryRoute(new SetCategoryRouteRequest(null, "Drinks", kitchen.uid()))
+                .prepStationName()).isEqualTo("Kitchen");
+        assertThat(setup.listCategoryRoutes(null)).singleElement()
+                .satisfies(r -> assertThat(r.prepStationName()).isEqualTo("Kitchen"));
+    }
+
+    @Test
+    void aDepartmentCannotBeRoutedToAStationOfAnotherBranch() {
+        setRootCtx();
+        Branch other = branches.save(new Branch(company, "RS3", "Third Branch"));
+        RequestContext.set(new RequestContext.Principal(
+                rootId, "resto_root", true, company.getId(), other.getId(), null, orgId));
+        PrepStationDto foreign = setup.createStation(
+                new CreatePrepStationRequest(null, "Grill", "192.168.1.60", null, false));
+
+        setRootCtx();
+        assertThatThrownBy(() -> setup.setCategoryRoute(
+                new SetCategoryRouteRequest(null, "Grill", foreign.uid())))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("station of this branch");
     }
 
     // =========================================================================
