@@ -48,7 +48,8 @@ class ReceiptLine {
   bool get isBaseUnit => factorToBase == 1;
 }
 
-/// An open till session (`PosSessionDto`).
+/// A till session (`PosSessionDto`): OPEN, CLOSED (counted, awaiting
+/// reconcile) or RECONCILED (final, has a Z read).
 class SessionRow {
   const SessionRow({
     required this.uid,
@@ -58,6 +59,13 @@ class SessionRow {
     required this.status,
     required this.openingFloat,
     this.expectedCash,
+    this.sessionNumber = '',
+    this.branchName,
+    this.closedAt,
+    this.reconciledAt,
+    this.countedCash,
+    this.variance,
+    this.notes,
   });
 
   factory SessionRow.fromJson(Map<String, dynamic> j) => SessionRow(
@@ -68,6 +76,13 @@ class SessionRow {
         status: asStrOr(j['status']),
         openingFloat: asNumOr(j['openingFloatAmount']),
         expectedCash: asNum(j['expectedCashAmount']),
+        sessionNumber: asStrOr(j['sessionNumber']),
+        branchName: asStr(j['branchName']),
+        closedAt: asStr(j['closedAt']),
+        reconciledAt: asStr(j['reconciledAt']),
+        countedCash: asNum(j['countedCashAmount']),
+        variance: asNum(j['varianceAmount']),
+        notes: asStr(j['notes']),
       );
 
   final String uid;
@@ -77,8 +92,19 @@ class SessionRow {
   final String status;
   final double openingFloat;
   final double? expectedCash;
+  final String sessionNumber;
+  final String? branchName;
+  final String? closedAt;
+  final String? reconciledAt;
+  final double? countedCash;
+
+  /// Counted minus expected: positive = over, negative = short.
+  final double? variance;
+  final String? notes;
 
   bool get isOpen => status.toUpperCase() == 'OPEN';
+  bool get isClosed => status.toUpperCase() == 'CLOSED';
+  bool get isReconciled => status.toUpperCase() == 'RECONCILED';
 }
 
 /// A tender subtotal on an X read.
@@ -120,6 +146,7 @@ class TillRead {
     required this.expectedCash,
     required this.invoiceCount,
     required this.tenders,
+    this.expectedKnown = true,
   });
 
   factory TillRead.fromJson(Map<String, dynamic> j) => TillRead(
@@ -132,6 +159,7 @@ class TillRead {
         cashTender: asNumOr(j['cashTenderAmount']),
         payoutsNet: asNumOr(j['totalPayoutsNetAmount']),
         expectedCash: asNumOr(j['expectedCashAmount']),
+        expectedKnown: j['expectedCashAmount'] != null,
         invoiceCount: asIntOr(j['invoiceCount']),
         tenders: asList(j['tenderSubtotals'], TenderSubtotal.fromJson),
       );
@@ -145,8 +173,43 @@ class TillRead {
   final double cashTender;
   final double payoutsNet;
   final double expectedCash;
+
+  /// False when the server withheld expected cash. A user without the
+  /// reconcile permission counts "blind", so the X read leaves it out.
+  final bool expectedKnown;
   final int invoiceCount;
   final List<TenderSubtotal> tenders;
+}
+
+/// The Z read (`ZReadDto`): the final figures of a RECONCILED session.
+class ZRead {
+  const ZRead({
+    required this.read,
+    required this.countedCash,
+    required this.variance,
+    this.branchName,
+    this.closedAt,
+    this.reconciledAt,
+  });
+
+  factory ZRead.fromJson(Map<String, dynamic> j) => ZRead(
+        read: TillRead.fromJson(j),
+        countedCash: asNumOr(j['countedCashAmount']),
+        variance: asNumOr(j['varianceAmount']),
+        branchName: asStr(j['branchName']),
+        closedAt: asStr(j['closedAt']),
+        reconciledAt: asStr(j['reconciledAt']),
+      );
+
+  /// Takings, tenders and expected cash: the same shape as an X read.
+  final TillRead read;
+  final double countedCash;
+
+  /// Counted minus expected: positive = over, negative = short.
+  final double variance;
+  final String? branchName;
+  final String? closedAt;
+  final String? reconciledAt;
 }
 
 class OperationsService {
@@ -201,6 +264,38 @@ class OperationsService {
     return asList(res, SessionRow.fromJson)
         .where((s) => s.isOpen)
         .toList(growable: false);
+  }
+
+  /// Sessions in [status] (CLOSED or RECONCILED), newest first. The list is
+  /// paged on the server; the app shows the most recent page.
+  Future<List<SessionRow>> sessionsIn(String status, {int size = 30}) async {
+    final companyId = session.companyId;
+    if (companyId == null) return const [];
+    final res = await session.api.get('/pos/sessions', query: {
+      'companyId': companyId,
+      'status': status,
+      'size': size,
+      'sort': status == 'RECONCILED' ? 'reconciledAt,desc' : 'closedAt,desc',
+    });
+    return asList(res, SessionRow.fromJson);
+  }
+
+  /// Reconcile a CLOSED session: posts the over/short to the ledger and
+  /// returns the Z read. Needs POS.SESSION.RECONCILE.
+  Future<ZRead> reconcile(String sessionUid, {String? notes}) async {
+    final res = await session.api.post(
+      '/pos/sessions/uid/$sessionUid/reconcile',
+      body: {
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      },
+    );
+    return ZRead.fromJson(asMap(res));
+  }
+
+  /// The Z read of a RECONCILED session, as often as it is asked.
+  Future<ZRead> zRead(String sessionUid) async {
+    final res = await session.api.get('/pos/sessions/uid/$sessionUid/z-read');
+    return ZRead.fromJson(asMap(res));
   }
 
   /// X read — looks at the till, changes nothing.

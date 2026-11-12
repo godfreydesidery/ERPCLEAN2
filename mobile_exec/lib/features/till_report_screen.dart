@@ -8,13 +8,16 @@ import '../services/operations_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
+import 'close_till_screen.dart';
+import 'till_history_screen.dart';
 
-/// X read — `GET /pos/sessions/uid/{uid}/x-read`.
+/// Tills: the X read of each open till (`GET /pos/sessions/uid/{uid}/x-read`)
+/// and, for users who may, closing one.
 ///
-/// Read-only by design. An X read looks at a till and changes nothing, so it
-/// is safe from a phone. Closing the day (the Z) stays at the till itself: a
-/// manager closing a session remotely would end a cashier's shift from under
-/// them mid-sale.
+/// The X read looks and changes nothing. Closing from the phone was asked for
+/// by owners who get the count from the shop and close the day wherever they
+/// are (2026-11-12). It ends the cashier's shift, so it lives on its own
+/// screen behind a warning and a confirmation; see [CloseTillScreen].
 class TillReportScreen extends StatefulWidget {
   const TillReportScreen({super.key});
 
@@ -23,7 +26,20 @@ class TillReportScreen extends StatefulWidget {
 }
 
 class _TillReportScreenState extends State<TillReportScreen> {
+  final _key = GlobalKey<AsyncViewState<List<SessionRow>>>();
   SessionRow? _session;
+
+  Future<void> _close(SessionRow s, TillRead read) async {
+    final closed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CloseTillScreen(session: s, read: read),
+      ),
+    );
+    if (closed == true && mounted) {
+      setState(() => _session = null);
+      _key.currentState?.reload();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,10 +47,26 @@ class _TillReportScreenState extends State<TillReportScreen> {
 
     return Scaffold(
       backgroundColor: HqColors.bg,
-      appBar: AppBar(title: const Text('X read', style: HqText.title)),
+      appBar: AppBar(
+        title: const Text('Tills', style: HqText.title),
+        actions: [
+          if (session.can('POS.SESSION.VIEW'))
+            IconButton(
+              tooltip: 'Closed tills',
+              icon: const Icon(Icons.history_rounded),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const TillHistoryScreen(),
+                ),
+              ),
+            ),
+          const SizedBox(width: 6),
+        ],
+      ),
       body: !session.can('POS.SESSION.VIEW')
           ? const NoPermission(code: 'POS.SESSION.VIEW')
           : AsyncView<List<SessionRow>>(
+              key: _key,
               load: () => AppScope.of(context).operations.openSessions(),
               isEmpty: (d) => d.isEmpty,
               emptyIcon: Icons.point_of_sale_outlined,
@@ -65,7 +97,13 @@ class _TillReportScreenState extends State<TillReportScreen> {
                       const SizedBox(height: 10),
                     ],
                     const SizedBox(height: 10),
-                    _ReadPanel(key: ValueKey(chosen.uid), session: chosen),
+                    _ReadPanel(
+                      key: ValueKey(chosen.uid),
+                      session: chosen,
+                      onClose: session.can('POS.SESSION.CLOSE')
+                          ? (read) => _close(chosen, read)
+                          : null,
+                    ),
                   ],
                 );
               },
@@ -108,9 +146,12 @@ class _ReadNote extends StatelessWidget {
 }
 
 class _ReadPanel extends StatelessWidget {
-  const _ReadPanel({super.key, required this.session});
+  const _ReadPanel({super.key, required this.session, this.onClose});
 
   final SessionRow session;
+
+  /// Null when the user may not close a till: the button is not shown.
+  final void Function(TillRead read)? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +210,8 @@ class _ReadPanel extends StatelessWidget {
                   const Divider(height: 16, thickness: 1.4),
                   FigureRow(
                     label: 'Cash the drawer should hold',
-                    value: tzs(read.expectedCash),
+                    value:
+                        read.expectedKnown ? tzs(read.expectedCash) : 'Hidden',
                     emphasise: true,
                   ),
                 ],
@@ -181,6 +223,14 @@ class _ReadPanel extends StatelessWidget {
               icon: const Icon(Icons.ios_share_rounded, size: 19),
               label: const Text('Export and share'),
             ),
+            if (onClose != null) ...[
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                onPressed: () => onClose!(read),
+                icon: const Icon(Icons.lock_outline_rounded, size: 19),
+                label: const Text('Close this till'),
+              ),
+            ],
           ],
         );
       },
@@ -363,6 +413,7 @@ ExportDoc _readDoc(TillRead read) => ExportDoc(
         DocTotal('Opening float', Cell.money(read.openingFloat)),
         DocTotal('Cash sales', Cell.money(read.cashTender)),
         DocTotal('Paid out', Cell.money(read.payoutsNet)),
-        DocTotal('Cash the drawer should hold', Cell.money(read.expectedCash)),
+        if (read.expectedKnown)
+          DocTotal('Cash the drawer should hold', Cell.money(read.expectedCash)),
       ],
     );

@@ -77,8 +77,8 @@ class OperationsScreen extends StatelessWidget {
           const SizedBox(height: 10),
           ActionTile(
             icon: Icons.receipt_outlined,
-            title: 'X read',
-            subtitle: 'See where a till stands right now',
+            title: 'Tills',
+            subtitle: 'X read, close a till, closed tills',
             tint: const Color(0xFF7C7CD6),
             onTap: () => onNavigate('till'),
           ),

@@ -55,8 +55,8 @@ class ReportsScreen extends StatelessWidget {
           _ReportTile(
             icon: Icons.point_of_sale_outlined,
             tint: const Color(0xFF7C7CD6),
-            title: 'X read',
-            subtitle: 'Where a till stands right now',
+            title: 'Tills',
+            subtitle: 'X read now, Z read of closed tills',
             allowed: session.can('POS.SESSION.VIEW'),
             onTap: () => onNavigate('till'),
           ),
