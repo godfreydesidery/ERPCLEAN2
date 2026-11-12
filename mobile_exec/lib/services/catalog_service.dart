@@ -38,17 +38,59 @@ class ProductItem {
 }
 
 class SupplierItem {
-  const SupplierItem({required this.uid, required this.name, this.phone});
+  const SupplierItem({
+    required this.uid,
+    required this.name,
+    this.phone,
+    this.id,
+  });
 
   factory SupplierItem.fromJson(Map<String, dynamic> j) => SupplierItem(
         uid: asStrOr(j['uid']),
         name: asStrOr(j['displayName'], asStrOr(j['name'])),
         phone: asStr(j['phone']),
+        id: asStr(j['id']),
       );
 
   final String uid;
   final String name;
   final String? phone;
+
+  /// The numeric id, as a string (64-bit ids travel as JSON strings). A
+  /// product's preferred supplier is stored by id, not uid.
+  final String? id;
+}
+
+/// A product in full (`ProductDto`), for editing.
+///
+/// `PUT /products/uid/{uid}` REPLACES name, description, type, sellable,
+/// stockable, base unit, cost and VAT status: a missing cost is written as
+/// null and a missing VAT status as STANDARD. So an edit starts from this
+/// whole record and sends every one of those fields back, changed or not.
+class ProductFull {
+  const ProductFull(this.raw);
+
+  factory ProductFull.fromJson(Map<String, dynamic> j) => ProductFull(j);
+
+  final Map<String, dynamic> raw;
+
+  String get uid => asStrOr(raw['uid']);
+  String get code => asStrOr(raw['code']);
+  String get name => asStrOr(raw['name']);
+  String get description => asStrOr(raw['description']);
+  String get category => asStrOr(raw['category']);
+  String get baseUnitUid => asStrOr(raw['baseUnitUid']);
+  String get baseUnitCode => asStrOr(raw['baseUnitCode'], 'unit');
+  String get vatStatus => asStrOr(raw['vatStatus'], 'STANDARD');
+  String get status => asStrOr(raw['status'], 'ACTIVE');
+  String? get preferredSupplierId => asStr(raw['preferredSupplierId']);
+  double? get cost =>
+      raw['cost'] == null ? null : asNum(asMap(raw['cost'])['amount']);
+  String? get costCurrency =>
+      raw['cost'] == null ? null : asStr(asMap(raw['cost'])['currency']);
+
+  bool get isActive => status.toUpperCase() == 'ACTIVE';
+  bool get isVatable => vatStatus.toUpperCase() != 'EXEMPT';
 }
 
 /// A unit of measure the company has configured (`UnitOfMeasureDto`).
@@ -265,13 +307,28 @@ class CatalogService {
     return {for (final p in all) p.code: p};
   }
 
-  Future<List<SupplierItem>> suppliers({String? search}) async {
+  /// Departments already in use (product `category`), for the picker. Free
+  /// text on the server; this list is only what has been typed before.
+  Future<List<String>> categories() async {
+    final companyId = session.companyId;
+    if (companyId == null) return const [];
+    final res = await session.api.get('/products/categories', query: {
+      'companyId': companyId,
+    });
+    if (res is! List) return const [];
+    return [
+      for (final c in res)
+        if (c != null && c.toString().trim().isNotEmpty) c.toString().trim(),
+    ];
+  }
+
+  Future<List<SupplierItem>> suppliers({String? search, int size = 100}) async {
     final companyId = session.companyId;
     if (companyId == null) return const [];
     final res = await session.api.get('/suppliers', query: {
       'companyId': companyId,
       if (search != null && search.isNotEmpty) 'q': search,
-      'size': 100,
+      'size': size,
     });
     return asList(res, SupplierItem.fromJson);
   }
@@ -396,20 +453,73 @@ class CatalogService {
     required String baseUnitUid,
     bool vatable = true,
     bool stockable = true,
+    String? description,
+    String? category,
+    String? preferredSupplierId,
+    double? cost,
+    String currency = 'TZS',
   }) async {
     final res = await session.api.post('/products', body: {
       'companyUid': session.companyUid,
       // Blank code is legal: the server assigns PROD-#### itself.
       if (code.isNotEmpty) 'code': code,
       'name': name,
+      if (description != null && description.isNotEmpty)
+        'description': description,
       'type': 'GOODS',
       'sellable': true,
       'stockable': stockable,
       'baseUnitUid': baseUnitUid,
       'vatStatus': vatable ? 'STANDARD' : 'EXEMPT',
+      if (category != null && category.isNotEmpty) 'category': category,
+      'preferredSupplierId': ?preferredSupplierId,
+      if (cost != null)
+        'cost': {'amount': cost.toStringAsFixed(2), 'currency': currency},
     });
     return ProductItem.fromJson(asMap(res));
   }
+
+  Future<ProductFull> product(String uid) async {
+    final res = await session.api.get('/products/uid/$uid');
+    return ProductFull.fromJson(asMap(res));
+  }
+
+  /// Save an edit. See [productUpdateBody] for what is sent and why.
+  Future<ProductFull> updateProduct(
+    ProductFull current, {
+    required String name,
+    required String description,
+    required String category,
+    required bool vatable,
+    double? cost,
+    String currency = 'TZS',
+    String? preferredSupplierId,
+    bool clearSupplier = false,
+  }) async {
+    final res = await session.api.put(
+      '/products/uid/${current.uid}',
+      body: productUpdateBody(
+        current,
+        name: name,
+        description: description,
+        category: category,
+        vatable: vatable,
+        cost: cost,
+        currency: currency,
+        preferredSupplierId: preferredSupplierId,
+        clearSupplier: clearSupplier,
+      ),
+    );
+    return ProductFull.fromJson(asMap(res));
+  }
+
+  /// Deactivate: the item stops being offered for sale. Reversible with
+  /// [restore].
+  Future<void> archive(String uid) =>
+      session.api.put('/products/uid/$uid/archive');
+
+  Future<void> restore(String uid) =>
+      session.api.put('/products/uid/$uid/restore');
 
   /// Attach a barcode. Optionally scoped to one unit, so a scan at the till
   /// resolves straight to the carton rather than the piece.
@@ -451,4 +561,49 @@ class CatalogService {
     });
     return SupplierItem.fromJson(asMap(res));
   }
+}
+
+/// The body of `PUT /products/uid/{uid}` for an edit made on the phone.
+///
+/// Starts from [current] and overrides only what the screen shows. Every field
+/// the PUT replaces is sent, so nothing the screen does not show is wiped:
+/// a missing cost would be stored as "no cost", a missing VAT status as
+/// STANDARD.
+///
+/// - [category]: blank clears it (the server's rule for blank).
+/// - [cost]: null keeps the stored cost.
+/// - [preferredSupplierId]: null leaves it; [clearSupplier] removes it (the
+///   server clears a planning field only when it is named in clearFields).
+/// - VAT on keeps a non-standard taxed rate (e.g. ZERO) as it was.
+Map<String, dynamic> productUpdateBody(
+  ProductFull current, {
+  required String name,
+  required String description,
+  required String category,
+  required bool vatable,
+  double? cost,
+  String currency = 'TZS',
+  String? preferredSupplierId,
+  bool clearSupplier = false,
+}) {
+  final r = current.raw;
+  return {
+    'name': name,
+    'description': description,
+    'type': asStrOr(r['type'], 'GOODS'),
+    'sellable': asBool(r['sellable'], true),
+    'stockable': asBool(r['stockable'], true),
+    'baseUnitUid': current.baseUnitUid,
+    if (cost != null)
+      'cost': {'amount': cost.toStringAsFixed(2), 'currency': currency}
+    else if (r['cost'] != null)
+      'cost': r['cost'],
+    'vatStatus': vatable
+        ? (current.isVatable ? current.vatStatus : 'STANDARD')
+        : 'EXEMPT',
+    'category': category,
+    if (!clearSupplier && preferredSupplierId != null)
+      'preferredSupplierId': preferredSupplierId,
+    if (clearSupplier) 'clearFields': ['preferredSupplierId'],
+  };
 }

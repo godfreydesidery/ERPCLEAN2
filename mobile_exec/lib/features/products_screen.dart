@@ -10,6 +10,7 @@ import '../services/stock_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
+import 'edit_item_screen.dart';
 
 /// Products — what an item is, what it cost, what it sells for, and how much is
 /// on the shelf.
@@ -116,11 +117,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
     if (!mounted) return;
 
-    await showModalBottomSheet<void>(
+    final canEdit =
+        product != null && scope.session.can('PRODUCT.MANAGE');
+    final edit = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => _ProductDetail(
+        onEdit: canEdit ? () => Navigator.of(context).pop(true) : null,
         line: line,
         product: product,
         units: units,
@@ -130,6 +134,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
         priceIncludesVat: view.report.priceIncludesVat,
       ),
     );
+
+    if (edit == true && product != null && mounted) {
+      final saved = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => EditItemScreen(productUid: product.uid),
+        ),
+      );
+      if (saved == true) _viewKey.currentState?.reload();
+    }
   }
 
   @override
@@ -372,8 +385,11 @@ class _ProductDetail extends StatelessWidget {
     required this.currency,
     required this.priceListName,
     required this.priceIncludesVat,
+    this.onEdit,
   });
 
+  /// Null when the user may not edit products: no button.
+  final VoidCallback? onEdit;
   final ProductLine line;
   final ProductItem? product;
   final List<TxUnit> units;
@@ -543,6 +559,14 @@ class _ProductDetail extends StatelessWidget {
                 ],
               ),
             ),
+            if (onEdit != null) ...[
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 19),
+                label: const Text('Edit item'),
+              ),
+            ],
             const SizedBox(height: 20),
           ],
         ),
