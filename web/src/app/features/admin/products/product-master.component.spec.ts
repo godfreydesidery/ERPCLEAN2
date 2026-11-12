@@ -35,6 +35,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { BranchService } from '../branch/branch.service';
 import { SupplierService } from '../parties/supplier.service';
 import { StockService } from '../stock/stock.service';
+import { RestaurantService } from '../restaurant/restaurant.service';
 import { ProductService } from './product.service';
 import { ProductMasterComponent } from './product-master.component';
 import type { PriceListDto, UnitOfMeasureDto } from '../models/product.model';
@@ -95,6 +96,7 @@ function makeProductService(overrides: Partial<MockSvc> = {}): MockSvc {
     listUnits:      vi.fn(() => of({ rows: [UNIT_PCS, UNIT_CTN, UNIT_KG],
       meta: { page: 0, size: 200, totalElements: 3, totalPages: 1, hasNext: false } })),
     listPriceLists: vi.fn(() => of([PRICE_LIST_DEFAULT, PRICE_LIST_RETAIL])),
+    listCategories: vi.fn(() => of([])),
     listBarcodes:   vi.fn(() => of([])),
     listBulkPacks:  vi.fn(() => of([])),
     listPrices:     vi.fn(() => of([])),
@@ -117,6 +119,10 @@ interface BedOptions {
   productServiceOverrides?: Partial<MockSvc>;
   activeBranchUid?: string;
   openingBalance?: ReturnType<typeof vi.fn>;
+  /** Restaurant stations/routes of the active branch; absent = a shop (no stations). */
+  restaurant?: Partial<MockSvc>;
+  /** Permissions the session holds; absent = all of them. */
+  permissions?: string[];
 }
 
 /** Configure TestBed and return the openingBalance spy for assertions. */
@@ -143,7 +149,17 @@ function makeBed(opts: BedOptions = {}): ReturnType<typeof vi.fn> {
       { provide: AlertService,
         useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: SessionStore,
-        useValue: makeSessionStore(opts.activeBranchUid ?? 'B1') },
+        useValue: {
+          ...makeSessionStore(opts.activeBranchUid ?? 'B1'),
+          hasPermission: vi.fn((code: string) => !opts.permissions || opts.permissions.includes(code)),
+        } },
+      { provide: RestaurantService,
+        useValue: {
+          listStations:       vi.fn(() => of([])),
+          listCategoryRoutes: vi.fn(() => of([])),
+          setCategoryRoute:   vi.fn(() => of({})),
+          ...(opts.restaurant ?? {}),
+        } },
     ],
   });
   return openingBalance;
@@ -1072,5 +1088,118 @@ describe('ProductMasterComponent — amounts with separators', () => {
     expect(comp.formError()).toContain('Cost price');
     expect(comp.activeTab()).toBe('pricing');
     expect(asMock(TestBed.inject(ProductService))['create']).not.toHaveBeenCalled();
+  });
+});
+
+// ── 13. Where the department prints (Tulia 2026-11-12) ────────────────────────
+
+const KITCHEN = { id: '1', uid: 'ST-KIT', branchId: '1', name: 'Kitchen', printerHost: null,
+  printerPort: 9100, paperWidth: 80, defaultStation: false, status: 'ACTIVE' };
+const BARISTA = { ...KITCHEN, id: '2', uid: 'ST-BAR', name: 'Barista', defaultStation: true };
+const ROUTE_FOOD = { uid: 'R1', category: 'Food', prepStationUid: 'ST-KIT', prepStationName: 'Kitchen' };
+
+function restaurantBranch(routes = [ROUTE_FOOD]): Partial<MockSvc> {
+  return {
+    listStations:       vi.fn(() => of([KITCHEN, BARISTA])),
+    listCategoryRoutes: vi.fn(() => of(routes)),
+    setCategoryRoute:   vi.fn((category: string, uid: string) =>
+      of({ uid: 'R9', category, prepStationUid: uid, prepStationName: uid === 'ST-KIT' ? 'Kitchen' : 'Barista' })),
+  };
+}
+
+describe('ProductMasterComponent — prints at', () => {
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  async function open(opts: BedOptions) {
+    vi.useFakeTimers();
+    makeBed(opts);
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+    comp.fName.set('Chips Masala');
+    comp.fBaseUnitUid.set('U1');
+    return comp;
+  }
+
+  it('a shop (no stations) has no "Prints at" and never routes', async () => {
+    const comp = await open({});
+    comp.onCategoryChange('Electronics');
+    expect(comp.departmentIsNew()).toBe(false);
+    comp.save();
+    await vi.runAllTimersAsync();
+    expect(asMock(TestBed.inject(ProductService))['create']).toHaveBeenCalledOnce();
+    expect(asMock(TestBed.inject(RestaurantService))['setCategoryRoute']).not.toHaveBeenCalled();
+    expect(comp.sectionResults().map((s) => s.label)).not.toContain('Kitchen / bar printing');
+  });
+
+  it('a routed department shows its station, matched in any case, and saves no route', async () => {
+    const comp = await open({ restaurant: restaurantBranch() });
+    comp.onCategoryChange('  FOOD ');
+    expect(comp.printsAtValue()).toBe('ST-KIT');
+    expect(comp.departmentIsNew()).toBe(false);
+    comp.save();
+    await vi.runAllTimersAsync();
+    expect(asMock(TestBed.inject(RestaurantService))['setCategoryRoute']).not.toHaveBeenCalled();
+  });
+
+  it('a new department must be given a station before the product is saved', async () => {
+    const comp = await open({ restaurant: restaurantBranch() });
+    comp.onCategoryChange('Kitchen');
+    expect(comp.departmentIsNew()).toBe(true);
+    comp.save();
+    expect(comp.formError()).toContain('new department');
+    expect(asMock(TestBed.inject(ProductService))['create']).not.toHaveBeenCalled();
+
+    comp.fPrintsAt.set('ST-KIT');
+    comp.save();
+    await vi.runAllTimersAsync();
+    expect(asMock(TestBed.inject(RestaurantService))['setCategoryRoute'])
+      .toHaveBeenCalledWith('Kitchen', 'ST-KIT');
+    const row = comp.sectionResults().find((s) => s.label === 'Kitchen / bar printing');
+    expect(row?.status).toBe('done');
+    expect(comp.currentRoute()?.prepStationName).toBe('Kitchen');
+  });
+
+  it('changing the department drops a station picked for the old one', async () => {
+    const comp = await open({ restaurant: restaurantBranch() });
+    comp.onCategoryChange('Juices');
+    comp.fPrintsAt.set('ST-BAR');
+    comp.onCategoryChange('Food');
+    expect(comp.fPrintsAt()).toBeNull();
+    expect(comp.pendingRoute()).toBeNull();
+  });
+
+  it('a manager can move a department; the move is a separate result row', async () => {
+    const comp = await open({ restaurant: restaurantBranch() });
+    comp.onCategoryChange('Food');
+    expect(comp.canMoveDepartment()).toBe(true);
+    comp.fPrintsAt.set('ST-BAR');
+    comp.save();
+    await vi.runAllTimersAsync();
+    expect(asMock(TestBed.inject(RestaurantService))['setCategoryRoute'])
+      .toHaveBeenCalledWith('Food', 'ST-BAR');
+  });
+
+  it('without restaurant set-up rights a routed department cannot be moved here', async () => {
+    const comp = await open({ restaurant: restaurantBranch(), permissions: ['PRODUCT.MANAGE'] });
+    expect(comp.canMoveDepartment()).toBe(false);
+  });
+
+  it('a refused route fails only its row; the product stays saved', async () => {
+    const comp = await open({
+      restaurant: {
+        ...restaurantBranch(),
+        setCategoryRoute: vi.fn(() => throwError(() => new HttpErrorResponse({
+          status: 409, error: { errors: ['"Food" already prints at Kitchen.'] },
+        }))),
+      },
+    });
+    comp.onCategoryChange('Snacks');
+    comp.fPrintsAt.set('ST-BAR');
+    comp.save();
+    await vi.runAllTimersAsync();
+    expect(comp.savedUid()).toBe('PUID1');
+    const row = comp.sectionResults().find((s) => s.label === 'Kitchen / bar printing');
+    expect(row?.status).toBe('failed');
   });
 });

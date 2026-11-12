@@ -18,6 +18,7 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { BranchService } from '../branch/branch.service';
 import { SupplierService } from '../parties/supplier.service';
 import { StockService } from '../stock/stock.service';
+import { RestaurantService } from '../restaurant/restaurant.service';
 import { ProductService } from './product.service';
 import { ProductMasterComponent } from './product-master.component';
 import { CurrencyService } from '../../../shared/currency-select/currency.service';
@@ -55,6 +56,13 @@ function makeBranch(uid: string, code: string): Branch {
 const BRANCHES = [makeBranch('B1', 'HQ'), makeBranch('B2', 'BRANCH-2')];
 const UNITS    = [makeUnit('U1', 'PCS')];
 const LISTS    = [makePriceList('PL1', 'DEFAULT')];
+const STATIONS = [
+  { id: '1', uid: 'ST-KIT', branchId: '1', name: 'Kitchen', printerHost: null, printerPort: 9100,
+    paperWidth: 80, defaultStation: false, status: 'ACTIVE' },
+  { id: '2', uid: 'ST-BAR', branchId: '1', name: 'Barista', printerHost: null, printerPort: 9100,
+    paperWidth: 80, defaultStation: true, status: 'ACTIVE' },
+];
+
 
 function makeBed() {
   TestBed.configureTestingModule({
@@ -71,6 +79,7 @@ function makeBed() {
           getByUid:       vi.fn(() => of({})),
           listUnits:      vi.fn(() => of({ rows: UNITS, meta: { page: 0, size: 200, totalElements: 1, totalPages: 1, hasNext: false } })),
           listPriceLists: vi.fn(() => of(LISTS)),
+          listCategories: vi.fn(() => of(['Food', 'Hot Drinks'])),
           listBarcodes:   vi.fn(() => of([])),
           listBulkPacks:  vi.fn(() => of([])),
           listPrices:     vi.fn(() => of([])),
@@ -100,6 +109,15 @@ function makeBed() {
       {
         provide: StockService,
         useValue: { openingBalance: vi.fn(() => of({})) },
+      },
+      {
+        // A restaurant branch: the General tab also shows "Prints at".
+        provide: RestaurantService,
+        useValue: {
+          listStations: vi.fn(() => of(STATIONS)),
+          listCategoryRoutes: vi.fn(() => of([])),
+          setCategoryRoute: vi.fn(() => of({})),
+        },
       },
       {
         // CurrencySelectComponent (imported by ProductMasterComponent) calls this.

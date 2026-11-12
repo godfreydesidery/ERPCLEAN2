@@ -74,6 +74,11 @@ export class ProductService {
       );
   }
 
+  /** The departments (categories) in use in the company, for the department suggestions. */
+  listCategories(companyId: string): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/categories`, { params: { companyId } });
+  }
+
   /** Sets only the category (blank clears it) — PRODUCT.MANAGE. */
   setCategory(uid: string, category: string | null): Observable<ProductModel> {
     return this.http.put<ProductModel>(`${this.base}/uid/${uid}/category`, { category });

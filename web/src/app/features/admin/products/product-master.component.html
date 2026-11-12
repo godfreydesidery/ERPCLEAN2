@@ -195,11 +195,46 @@
             <div class="col-sm-4">
               <label class="form-label" for="masterCategory">Department / Category</label>
               <input id="masterCategory" name="masterCategory" type="text" class="form-control"
-                     placeholder="Free text — no FK"
-                     [ngModel]="fCategory()" (ngModelChange)="fCategory.set($event)"
+                     placeholder="Choose or type a department" list="masterCategoryList"
+                     [ngModel]="fCategory()" (ngModelChange)="onCategoryChange($event)"
                      [disabled]="saving()" autocomplete="off" />
-              <div class="form-text">Free-text label; not linked to HR departments.</div>
+              <datalist id="masterCategoryList">
+                @for (d of departments(); track d) {
+                  <option [value]="d"></option>
+                }
+              </datalist>
+              <div class="form-text">Pick an existing department or type a new one.</div>
             </div>
+
+            <!-- Where the department prints (restaurant branches only) -->
+            @if (stations().length > 0) {
+              <div class="col-sm-4">
+                <label class="form-label" for="masterPrintsAt">Prints at (this branch)</label>
+                <select id="masterPrintsAt" name="masterPrintsAt" class="form-select"
+                        aria-describedby="masterPrintsAtHelp"
+                        [ngModel]="printsAtValue()" (ngModelChange)="fPrintsAt.set($event || null)"
+                        [disabled]="saving() || !fCategory().trim()
+                                    || (!!currentRoute() && !canMoveDepartment())">
+                  <option value="">{{ fCategory().trim() ? 'Choose a station' : 'Default station' }}</option>
+                  @for (st of stations(); track st.uid) {
+                    <option [value]="st.uid">{{ st.name }}</option>
+                  }
+                </select>
+                <div id="masterPrintsAtHelp" class="form-text">
+                  @if (!fCategory().trim()) {
+                    No department: orders print at {{ defaultStationName() ?? 'the default station' }}.
+                  } @else if (departmentIsNew()) {
+                    A new department: choose where its orders print.
+                  } @else if (!canMoveDepartment()) {
+                    Set for the whole department. A manager can change it in Restaurant Setup.
+                  } @else if (pendingRoute()) {
+                    Saving moves every item in “{{ fCategory().trim() }}” to this station.
+                  } @else {
+                    Set for the whole department; changing it moves all its items.
+                  }
+                </div>
+              </div>
+            }
 
             <!-- Brand -->
             <div class="col-sm-3">

@@ -112,6 +112,37 @@ class PrepStation {
       );
 }
 
+/// Where one product department prints (ERP prep_station_categories): items
+/// whose department matches [category] go to [stationUid]; anything else goes
+/// to the branch's default station.
+class CategoryRoute {
+  CategoryRoute({required this.category, this.stationUid, this.stationName});
+
+  final String category;
+  final String? stationUid;
+  final String? stationName;
+
+  factory CategoryRoute.fromJson(Map<String, dynamic> j) => CategoryRoute(
+        category: asStrOr(j['category']),
+        stationUid: asStr(j['prepStationUid']),
+        stationName: asStr(j['prepStationName']),
+      );
+
+  /// The server's matching key: trimmed, inner spaces collapsed, any case.
+  static String key(String department) =>
+      department.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  /// The route for [department], or null when it has none (blank included).
+  static CategoryRoute? find(List<CategoryRoute> routes, String department) {
+    final k = key(department);
+    if (k.isEmpty) return null;
+    for (final r in routes) {
+      if (key(r.category) == k) return r;
+    }
+    return null;
+  }
+}
+
 class RestaurantOrderLine {
   RestaurantOrderLine({
     required this.uid,
