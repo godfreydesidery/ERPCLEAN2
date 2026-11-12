@@ -15,13 +15,13 @@ class _Overview {
     required this.today,
     required this.month,
     required this.stock,
-    required this.stockValue,
+    required this.valuation,
   });
 
   final SalesReport? today;
   final SalesReport? month;
   final List<StockRow> stock;
-  final double? stockValue;
+  final ValuationResult? valuation;
 
   List<StockRow> get needsAttention {
     final rows = stock.where((r) => r.low || r.negative).toList()
@@ -55,12 +55,12 @@ class DashboardScreen extends StatelessWidget {
       stock = await scope.stock.onHand();
     }
 
-    double? stockValue;
+    ValuationResult? valuation;
     if (session.can('INVENTORY.VALUATION.VIEW')) {
       try {
-        stockValue = (await scope.stock.valuation()).total;
+        valuation = await scope.stock.valuation();
       } catch (_) {
-        stockValue = null; // a valuation failure must not blank the dashboard
+        valuation = null; // a valuation failure must not blank the dashboard
       }
     }
 
@@ -68,7 +68,7 @@ class DashboardScreen extends StatelessWidget {
       today: today,
       month: month,
       stock: stock,
-      stockValue: stockValue,
+      valuation: valuation,
     );
   }
 
@@ -100,7 +100,7 @@ class DashboardScreen extends StatelessWidget {
               const SectionLabel(text: 'STOCK'),
               const SizedBox(height: 10),
               _StockCard(
-                value: data.stockValue,
+                valuation: data.valuation,
                 itemCount: data.stock.length,
                 onTap: () => onNavigate('valuation'),
               ),
@@ -308,17 +308,19 @@ class _HeroFigure extends StatelessWidget {
 
 class _StockCard extends StatelessWidget {
   const _StockCard({
-    required this.value,
+    required this.valuation,
     required this.itemCount,
     required this.onTap,
   });
 
-  final double? value;
+  /// Null when the user may not see valuation, or it failed to load.
+  final ValuationResult? valuation;
   final int itemCount;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final v = valuation;
     return HqCard(
       onTap: onTap,
       child: Row(
@@ -328,25 +330,99 @@ class _StockCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Stock value', style: HqText.label),
-                const SizedBox(height: 4),
-                Text(
-                  value == null ? 'Not available' : tzs(value!),
-                  style: TextStyle(
-                    fontSize: value == null ? 17 : 26,
-                    fontWeight: FontWeight.w700,
-                    color: value == null ? HqColors.ink3 : HqColors.ink,
-                    letterSpacing: -0.5,
+                if (v == null) ...[
+                  Text('Stock value', style: HqText.label),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Not available',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: HqColors.ink3,
+                    ),
                   ),
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _StockFigure(
+                          label: 'Stock value (cost)',
+                          value: tzs(v.total),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _StockFigure(
+                          label: 'Sales value',
+                          value: v.saleTotal == null
+                              ? 'Not priced'
+                              : tzs(v.saleTotal!),
+                          muted: v.saleTotal == null,
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 6),
+                Text(
+                  _footer(v),
+                  style: HqText.tiny,
                 ),
-                const SizedBox(height: 4),
-                Text('$itemCount items on hand', style: HqText.tiny),
               ],
             ),
           ),
           const Icon(Icons.chevron_right, color: HqColors.ink3),
         ],
       ),
+    );
+  }
+
+  String _footer(ValuationResult? v) {
+    final parts = <String>['$itemCount items on hand'];
+    final profit = v?.potentialProfit;
+    if (profit != null) parts.add('profit on shelf ${tzs(profit)}');
+    if (v != null && v.unpricedCount > 0) {
+      parts.add('${v.unpricedCount} without a selling price');
+    }
+    return parts.join(' · ');
+  }
+}
+
+/// One labelled money figure on the stock card. FittedBox keeps a long
+/// amount on one line on a narrow phone instead of wrapping mid-number.
+class _StockFigure extends StatelessWidget {
+  const _StockFigure({
+    required this.label,
+    required this.value,
+    this.muted = false,
+  });
+
+  final String label;
+  final String value;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: HqText.label),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: muted ? 17 : 21,
+              fontWeight: FontWeight.w700,
+              color: muted ? HqColors.ink3 : HqColors.ink,
+              letterSpacing: -0.4,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
