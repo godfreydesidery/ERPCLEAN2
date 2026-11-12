@@ -45,9 +45,19 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
       subtitle: data.branchName ?? 'All branches',
       meta: [
         'Valued at moving average cost.',
+        if (data.saleTotal != null)
+          'Sales value at the default selling price'
+              '${data.priceIncludesVat ? ', VAT included' : ', before VAT'}.',
         if (data.generatedAt != null) 'Generated ${data.generatedAt}',
       ],
-      columns: const ['Item', 'Code', 'Quantity', 'Unit', 'Value at cost'],
+      columns: const [
+        'Item',
+        'Code',
+        'Quantity',
+        'Unit',
+        'Value at cost',
+        'Sales value',
+      ],
       rows: [
         for (final r in rows)
           [
@@ -60,17 +70,34 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
               const Cell.text('not valued')
             else
               Cell.money(r.value),
+            if (r.saleValue == null)
+              const Cell.text('no price')
+            else
+              Cell.money(r.saleValue!),
           ],
       ],
       totals: [
         DocTotal('Lines', Cell.number(rows.length.toDouble())),
         DocTotal('Total at cost', Cell.money(data.total)),
+        if (data.saleTotal != null)
+          DocTotal('Total sales value', Cell.money(data.saleTotal!)),
+        if (data.potentialProfit != null)
+          DocTotal('Profit on shelf', Cell.money(data.potentialProfit!)),
       ],
-      footnote: data.unvaluedCount == 0
-          ? null
-          : '${data.unvaluedCount} of ${rows.length} lines have never been '
-              'valued and count as zero in the total.',
+      footnote: _footnote(data, rows.length),
     );
+  }
+
+  static String? _footnote(ValuationResult data, int lines) {
+    final notes = [
+      if (data.unvaluedCount > 0)
+        '${data.unvaluedCount} of $lines lines have never been valued and '
+            'count as zero in the cost total.',
+      if (data.unpricedCount > 0)
+        '${data.unpricedCount} of $lines lines have no selling price and are '
+            'left out of the sales value.',
+    ];
+    return notes.isEmpty ? null : notes.join(' ');
   }
 
   @override
@@ -140,7 +167,14 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
                                     letterSpacing: -1,
                                   ),
                                 ),
-                                const SizedBox(height: 6),
+                                if (data.saleTotal != null) ...[
+                                  const SizedBox(height: 14),
+                                  _HeroSplit(
+                                    saleTotal: data.saleTotal!,
+                                    profit: data.potentialProfit!,
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
                                 Text(
                                   '${data.rows.length} lines · '
                                   '${data.branchName ?? 'all branches'}',
@@ -154,6 +188,14 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
                               ],
                             ),
                           ),
+                          if (data.unpricedCount > 0) ...[
+                            const SizedBox(height: 12),
+                            _Warn(
+                              text: '${data.unpricedCount} of '
+                                  '${data.rows.length} lines have no selling '
+                                  'price and are left out of the sales value.',
+                            ),
+                          ],
                           if (data.unvaluedCount > 0) ...[
                             const SizedBox(height: 12),
                             Container(
@@ -272,6 +314,90 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Sales value and the profit still sitting on the shelf, under the cost
+/// figure in the hero.
+class _HeroSplit extends StatelessWidget {
+  const _HeroSplit({required this.saleTotal, required this.profit});
+
+  final double saleTotal;
+  final double profit;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget figure(String label, String value) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: HqOnDark.tertiary,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+    return Row(
+      children: [
+        figure('SALES VALUE', tzs(saleTotal)),
+        const SizedBox(width: 12),
+        figure('PROFIT ON SHELF', tzs(profit)),
+      ],
+    );
+  }
+}
+
+class _Warn extends StatelessWidget {
+  const _Warn({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: HqColors.warnSoft,
+        borderRadius: BorderRadius.circular(HqRadii.sm),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded,
+              size: 19, color: HqColors.warn),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: Color(0xFF8A5A0B),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
