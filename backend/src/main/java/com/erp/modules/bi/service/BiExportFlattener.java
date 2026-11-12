@@ -113,6 +113,9 @@ public class BiExportFlattener {
         if (inv != null) {
             rows.add(Row.sectionHeader("Inventory"));
             rows.add(Row.line("Stock Value", bd(inv.stockValue()), BigDecimal.ZERO));
+            if (inv.stockSaleValue() != null) {
+                rows.add(Row.line("Stock Sales Value", bd(inv.stockSaleValue()), BigDecimal.ZERO));
+            }
             rows.add(Row.reconciliation("Stock vs GL 1300", bd(inv.stockDifference()), inv.stockTies()));
         }
 

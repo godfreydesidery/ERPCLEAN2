@@ -44,6 +44,7 @@ class ValuationRowData {
     required this.quantity,
     required this.value,
     this.unvalued = false,
+    this.saleValue,
   });
 
   factory ValuationRowData.fromJson(Map<String, dynamic> j) {
@@ -56,14 +57,21 @@ class ValuationRowData {
       // costValue is null when a product has never been valued. It is shown
       // as unvalued rather than silently counted as zero.
       unvalued: cost == null,
+      saleValue: asNum(j['saleValue']),
     );
   }
 
   final String code;
   final String label;
   final double quantity;
+
+  /// Value at cost; 0 when [unvalued].
   final double value;
   final bool unvalued;
+
+  /// Quantity times the default selling price; null when the item has no
+  /// selling price — unpriced, not free.
+  final double? saleValue;
 }
 
 class ValuationResult {
@@ -71,18 +79,67 @@ class ValuationResult {
     required this.rows,
     required this.total,
     required this.unvaluedCount,
+    this.saleTotal,
+    this.unpricedCount = 0,
+    this.priceIncludesVat = false,
     this.branchName,
     this.generatedAt,
   });
 
+  /// Reads a `ProductStockReportDto` from `/stock/reports/stock-value`.
+  ///
+  /// The server's totals are preferred; the row sums are only a fallback for
+  /// an older server that sends no totals block.
+  factory ValuationResult.fromJson(Map<String, dynamic> map) {
+    final rows = asList(map['rows'], ValuationRowData.fromJson);
+    final totals = asMap(map['totals']);
+
+    final declaredCost =
+        asNum(totals['totalCostValue'] ?? totals['costValue']);
+    final declaredSale =
+        asNum(totals['totalSaleValue'] ?? totals['saleValue']);
+    final priced = rows.where((r) => r.saleValue != null).toList();
+
+    return ValuationResult(
+      rows: rows,
+      total: declaredCost ?? rows.fold<double>(0, (a, r) => a + r.value),
+      unvaluedCount: asNum(totals['unvaluedItems'])?.toInt() ??
+          rows.where((r) => r.unvalued).length,
+      saleTotal: declaredSale ??
+          (priced.isEmpty
+              ? null
+              : priced.fold<double>(0, (a, r) => a + r.saleValue!)),
+      unpricedCount: asNum(totals['unpricedItems'])?.toInt() ??
+          rows.length - priced.length,
+      priceIncludesVat: asBool(map['priceIncludesVat']),
+      branchName: asStr(map['branchName']),
+      generatedAt: asStr(map['generatedAt']),
+    );
+  }
+
   final List<ValuationRowData> rows;
+
+  /// Stock on hand at cost.
   final double total;
 
   /// How many lines carried no cost. Surfaced on screen so the total is never
   /// read as complete when it is not.
   final int unvaluedCount;
+
+  /// Stock on hand at selling price; null when nothing in scope is priced.
+  final double? saleTotal;
+
+  /// Lines holding stock with no selling price — left out of [saleTotal].
+  final int unpricedCount;
+
+  /// Whether the selling prices behind [saleTotal] already include VAT.
+  final bool priceIncludesVat;
   final String? branchName;
   final String? generatedAt;
+
+  /// What the shelf would earn over its cost if it all sold at list price.
+  /// Null when there is no sale total to compare.
+  double? get potentialProfit => saleTotal == null ? null : saleTotal! - total;
 }
 
 /// A line of the Product List report (`ProductStockRowDto`) — the catalogue
@@ -235,17 +292,6 @@ class StockService {
       if (branchUid != null) 'branchUid': branchUid,
     });
 
-    final map = asMap(res);
-    final rows = asList(map['rows'], ValuationRowData.fromJson);
-    final totals = asMap(map['totals']);
-
-    final declared = asNum(totals['costValue'] ?? totals['totalCostValue']);
-    return ValuationResult(
-      rows: rows,
-      total: declared ?? rows.fold<double>(0, (a, r) => a + r.value),
-      unvaluedCount: rows.where((r) => r.unvalued).length,
-      branchName: asStr(map['branchName']),
-      generatedAt: asStr(map['generatedAt']),
-    );
+    return ValuationResult.fromJson(asMap(res));
   }
 }

@@ -68,6 +68,8 @@ const MOCK_DTO: DashboardDto = {
     stockValue: '300000',
     stockTies: true,
     stockDifference: '0',
+    stockSaleValue: 420000,
+    unpricedItems: 2,
   },
   crm: {
     pipeline: {
@@ -352,6 +354,34 @@ describe('DashboardComponent', () => {
     expect(apTag?.classList).toContain('status-tag--danger');
   });
 
+  // Stock sales value sits beside the cost value (clients asked to see both).
+  it('inventory panel shows stock sales value, profit on shelf and the unpriced count', () => {
+    vi.useFakeTimers();
+    makeBed(of(MOCK_DTO));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    TestBed.flushEffects();
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Stock Sales Value');
+    expect(text).toContain('420,000.00');
+    expect(text).toContain('Profit on shelf 120,000.00');
+    expect(text).toContain('2 items have no selling price');
+  });
+
+  it('inventory panel says "Not priced" when there is no sales value — never 0.00', () => {
+    vi.useFakeTimers();
+    makeBed(of({
+      ...MOCK_DTO,
+      inventory: { stockValue: '300000', stockTies: true, stockDifference: '0', stockSaleValue: null },
+    }));
+    const fixture = TestBed.createComponent(DashboardComponent);
+    TestBed.flushEffects();
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Not priced');
+    expect(text).not.toContain('Profit on shelf');
+  });
+
   // 9. Full DTO: panels all populate correctly on success
   it('successful load populates all panel signals', () => {
     vi.useFakeTimers();
@@ -364,6 +394,7 @@ describe('DashboardComponent', () => {
     expect(comp.workingCapital()?.arOutstanding).toBe('100000');
     expect(comp.inventoryState()).toBe('idle');
     expect(comp.inventory()?.stockValue).toBe('300000');
+    expect(comp.inventory()?.stockSaleValue).toBe(420000);
     expect(comp.crmState()).toBe('idle');
     expect(comp.crm()?.kpis?.wonCount).toBe(3);
     expect(comp.revenueTrendState()).toBe('idle');
