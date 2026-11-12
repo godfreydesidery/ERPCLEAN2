@@ -654,11 +654,23 @@ export class ShellComponent {
   }
 
   onBranchPick(branchUid: string): void {
-    if (this.session.platformTenant()) {
-      // Picking one of the operator's OWN branches from inside a tenant leaves that tenant.
-      this.session.setPlatformTenant(null);
-      this.session.setActiveBranchUid(branchUid);
-      this.navigate('/admin/home');
+    const entered = this.session.platformTenant();
+    if (entered) {
+      // Inside a tenant the list holds the TENANT's branches (/auth/my-branches answers with them
+      // for the platform operator, owner 2026-11-12): moving between them stays inside the tenant.
+      // Leaving is "Return to my organisation". Reload the page, as entering does, so every cached
+      // list is rebuilt for the new branch.
+      const picked = this.branches().find((b) => b.branchUid === branchUid);
+      this.branchMenuOpen.set(false);
+      if (!picked || branchUid === this.session.activeBranchUid()) return;
+      this.session.setPlatformTenant({
+        ...entered,
+        branchUid: picked.branchUid,
+        branchName: picked.branchName,
+        branchCode: picked.branchCode,
+      });
+      this.session.setActiveBranchUid(picked.branchUid);
+      this.navigate(window.location.pathname + window.location.search);
       return;
     }
     const active = this.activeBranch();
