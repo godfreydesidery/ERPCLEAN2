@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.repository.AppUserRepository;
+import com.erp.modules.iam.domain.entity.Branch;
 import com.erp.modules.iam.repository.BranchRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.iam.repository.OrganisationRepository;
 import com.erp.platform.bootstrap.TenantProvisioningService;
 import com.erp.platform.security.PermissionResolver;
@@ -49,6 +51,7 @@ class RootEntersTenantIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private OrganisationRepository organisations;
     @Autowired private BranchRepository branches;
+    @Autowired private CompanyRepository companies;
 
     private record T(Long orgId, String orgUid, Long companyId, Long branchId, String branchUid,
                      String token) {
@@ -172,5 +175,61 @@ class RootEntersTenantIT extends PostgresIntegrationTest {
         MvcResult tenant = call(MockMvcRequestBuilders.get("/api/v1/organisations/uid/" + home.orgUid()
                 + "/entry"), beta.token(), null);
         assertThat(tenant.getResponse().getStatus()).isIn(403, 404);
+    }
+
+    // ── Branch pickers inside a tenant (owner, 2026-11-12) ───────────────────
+
+    private List<String> myBranchUids(String token, String branchUid) throws Exception {
+        MvcResult r = call(MockMvcRequestBuilders.get("/api/v1/auth/my-branches"), token, branchUid);
+        assertThat(r.getResponse().getStatus()).isEqualTo(200);
+        List<String> out = new java.util.ArrayList<>();
+        data(r).forEach(b -> out.add(b.path("branchUid").asText()));
+        return out;
+    }
+
+    @Test
+    @DisplayName("inside a tenant, root's branch list is the tenant's active branches, not its own")
+    void rootInsideATenantSeesTheTenantsBranches() throws Exception {
+        Branch second = branches.save(new Branch(
+                companies.findById(beta.companyId()).orElseThrow(), "B2ND", "Beta Second"));
+        Branch closed = branches.save(new Branch(
+                companies.findById(beta.companyId()).orElseThrow(), "BOLD", "Beta Closed"));
+        jdbc.update("UPDATE branches SET status = 'INACTIVE' WHERE id = ?", closed.getId());
+
+        assertThat(myBranchUids(home.token(), beta.branchUid()))
+                .as("the tenant's active branches; never the operator's home branch")
+                .containsExactlyInAnyOrder(beta.branchUid(), second.getUid());
+
+        MvcResult r = call(MockMvcRequestBuilders.get("/api/v1/auth/my-branches"),
+                home.token(), beta.branchUid());
+        for (JsonNode b : data(r)) {
+            assertThat(b.path("isDefault").asBoolean())
+                    .as("the default is the branch the tenant is entered at")
+                    .isEqualTo(b.path("branchUid").asText().equals(beta.branchUid()));
+            assertThat(b.path("uid").asText()).isEqualTo(b.path("branchUid").asText());
+        }
+
+        // And the second branch is one the operator can actually work in.
+        MvcResult inSecond = call(MockMvcRequestBuilders.get("/api/v1/organisations/current"),
+                home.token(), second.getUid());
+        assertThat(inSecond.getResponse().getStatus()).isEqualTo(200);
+        assertThat(data(inSecond).path("uid").asText()).isEqualTo(beta.orgUid());
+        assertThat(myBranchUids(home.token(), second.getUid()))
+                .containsExactlyInAnyOrder(beta.branchUid(), second.getUid());
+    }
+
+    @Test
+    @DisplayName("at home, root's branch list is its own assignments, as before")
+    void rootAtHomeSeesItsOwnAssignments() throws Exception {
+        assertThat(myBranchUids(home.token(), null)).containsExactly(home.branchUid());
+        assertThat(myBranchUids(home.token(), home.branchUid())).containsExactly(home.branchUid());
+    }
+
+    @Test
+    @DisplayName("a tenant administrator's branch list is unchanged: its own assignments only")
+    void aTenantAdministratorSeesOnlyItsAssignments() throws Exception {
+        branches.save(new Branch(companies.findById(beta.companyId()).orElseThrow(), "B3RD",
+                "Beta Unassigned"));
+        assertThat(myBranchUids(beta.token(), null)).containsExactly(beta.branchUid());
     }
 }
