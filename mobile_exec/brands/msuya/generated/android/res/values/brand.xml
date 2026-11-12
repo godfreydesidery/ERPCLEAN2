@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GENERATED from brands/msuya/brand.json by tool/brand.py. -->
+<resources>
+    <string name="app_name">Msuya Tronix</string>
+    <color name="hq_brand_teal">#0F2DBF</color>
+</resources>

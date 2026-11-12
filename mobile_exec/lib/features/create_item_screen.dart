@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../app/app_scope.dart';
+import '../app/format.dart';
 import '../app/theme.dart';
 import '../core/api/api_exception.dart';
 import '../services/catalog_service.dart';
+import '../services/operations_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
+import 'master_pickers.dart';
 import 'pack_sizes.dart';
 
 /// Register a product against `/products`, with the pack sizes it is bought
@@ -18,6 +22,12 @@ import 'pack_sizes.dart';
 /// exists on the product every one of those days ends in a manual adjustment.
 /// So the pack sizes are asked for here, at registration, not left for someone
 /// to remember to add on a desktop later.
+///
+/// 1.4.0 (asked for by owners registering stock from the phone): description,
+/// department, supplier, cost price and opening stock. Opening stock is taken
+/// in as a direct goods receipt from that supplier at that cost, not as a
+/// stock adjustment, so the stock carries its real value and the first sale
+/// already shows a true margin.
 class CreateItemScreen extends StatefulWidget {
   const CreateItemScreen({super.key});
 
@@ -30,6 +40,16 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
   final _code = TextEditingController();
   final _barcode = TextEditingController();
   final _price = TextEditingController();
+  final _description = TextEditingController();
+  final _cost = TextEditingController();
+  final _openingQty = TextEditingController();
+
+  String _department = '';
+  SupplierItem? _supplier;
+
+  /// One key per screen: a retry after a timeout must not receive the same
+  /// opening stock twice.
+  final String _receiptKey = const Uuid().v4();
 
   UnitRef? _unit;
   bool _vatable = true;
@@ -54,12 +74,21 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
     super.initState();
     _name.addListener(() => setState(() {}));
     _code.addListener(() => setState(() {}));
+    _openingQty.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
-    for (final c in [_name, _code, _barcode, _price]) {
+    for (final c in [
+      _name,
+      _code,
+      _barcode,
+      _price,
+      _description,
+      _cost,
+      _openingQty,
+    ]) {
       c.dispose();
     }
     for (final p in _packs) {
@@ -100,8 +129,20 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
     }
   }
 
+  static double? _num(TextEditingController c) =>
+      double.tryParse(c.text.trim().replaceAll(',', ''));
+
+  double get _openingValue => _num(_openingQty) ?? 0;
+
+  /// Opening stock is received FROM a supplier, so it needs one.
+  bool get _openingNeedsSupplier => _openingValue > 0 && _supplier == null;
+
   bool get _ready =>
-      _name.text.trim().isNotEmpty && _unit != null && !_busy && !_loadingUnits;
+      _name.text.trim().isNotEmpty &&
+      _unit != null &&
+      !_busy &&
+      !_loadingUnits &&
+      !_openingNeedsSupplier;
 
   /// Units still free to use as a pack — the base unit and units already taken
   /// are excluded, which is exactly what the server enforces.
@@ -138,11 +179,17 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
     // silently did not save is how the catalogue drifts out of shape.
     final failures = <String>[];
     try {
+      final cost = _num(_cost);
       final created = await catalog.createProduct(
         name: _name.text.trim(),
         code: _code.text.trim().toUpperCase(),
         baseUnitUid: baseUnit.uid,
         vatable: _vatable,
+        description: _description.text.trim(),
+        category: _department,
+        preferredSupplierId: _supplier?.id,
+        cost: cost != null && cost >= 0 ? cost : null,
+        currency: _priceList?.currency ?? 'TZS',
       );
 
       final basePrice = double.tryParse(_price.text.trim());
@@ -205,6 +252,36 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
         }
       }
 
+      // Last, once the item and its units exist: bring the opening stock in.
+      final opening = _openingValue;
+      var received = false;
+      if (opening > 0 && _supplier != null && mounted) {
+        try {
+          await AppScope.of(context).operations.receiveDirect(
+            supplierUid: _supplier!.uid,
+            idempotencyKey: _receiptKey,
+            notes: 'Opening stock',
+            lines: [
+              ReceiptLine(
+                productUid: created.uid,
+                productName: created.name,
+                baseUnit: baseUnit.code,
+                unitUid: baseUnit.uid,
+                unit: baseUnit.code,
+                factorToBase: 1,
+                qty: opening,
+                unitCost: cost != null && cost >= 0 ? cost : 0,
+              ),
+            ],
+          );
+          received = true;
+        } on ApiException catch (e) {
+          failures.add('the opening stock (${e.message})');
+        } catch (_) {
+          failures.add('the opening stock');
+        }
+      }
+
       if (!mounted) return;
       await showDoneSheet(
         context,
@@ -212,9 +289,11 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
         detail: failures.isEmpty
             ? '${created.name}\n${created.code}\n'
                 '${_soldByLine(baseUnit)}'
+                '${received ? '\n${qty(opening)} ${baseUnit.code} in stock' : ''}'
             : '${created.name}\n${created.code}\n\n'
                 'Could not save: ${failures.join(', ')}.\n'
-                'Add them from Pack sizes.',
+                'Add packs from Pack sizes; bring stock in with '
+                'Receive goods.',
       );
       if (mounted) Navigator.of(context).pop();
     } on ApiException catch (e) {
@@ -278,6 +357,26 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
                   hint: 'Optional',
                   prefix: Icons.qr_code_scanner_rounded,
                 ),
+                const SizedBox(height: 16),
+                HqField(
+                  label: 'Description',
+                  controller: _description,
+                  hint: 'Optional, e.g. model, colour, size',
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 16),
+                PickTile(
+                  label: 'Department',
+                  icon: Icons.category_outlined,
+                  value: _department,
+                  placeholder: 'Optional, choose or type one',
+                  onTap: () async {
+                    final d =
+                        await pickDepartment(context, current: _department);
+                    if (d != null) setState(() => _department = d);
+                  },
+                  onClear: () => setState(() => _department = ''),
+                ),
                 const SizedBox(height: 24),
                 const SectionLabel(text: 'HOW IT IS COUNTED'),
                 const SizedBox(height: 12),
@@ -321,6 +420,45 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     suffixText: currency,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                const SectionLabel(text: 'BUYING AND STOCK'),
+                const SizedBox(height: 12),
+                PickTile(
+                  label: 'Supplier',
+                  icon: Icons.storefront_outlined,
+                  value: _supplier?.name,
+                  placeholder: 'Optional, who you buy it from',
+                  onTap: () async {
+                    final s = await pickSupplier(context);
+                    if (s != null) setState(() => _supplier = s);
+                  },
+                  onClear: () => setState(() => _supplier = null),
+                ),
+                const SizedBox(height: 16),
+                HqField(
+                  label: 'Cost price'
+                      '${_unit == null ? '' : ' per ${_unit!.code}'}',
+                  controller: _cost,
+                  hint: 'What you pay the supplier',
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  suffixText: currency,
+                ),
+                if (session.can('PURCHASE.RECEIVE.DIRECT')) ...[
+                  const SizedBox(height: 16),
+                  HqField(
+                    label: 'Opening stock'
+                        '${_unit == null ? '' : ' in ${_unit!.code}'}',
+                    controller: _openingQty,
+                    hint: 'Optional, how many you have now',
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    helper: _openingNeedsSupplier
+                        ? 'Choose the supplier: opening stock is received '
+                            'from them at the cost price.'
+                        : 'Received from the supplier at the cost price.',
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -384,8 +522,7 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
                   icon: Icons.info_outline_rounded,
                   tint: HqColors.ink3,
                   text: _priceList == null
-                      ? 'Prices and opening stock are set separately — '
-                          'receive the goods to bring stock in.'
+                      ? 'Selling prices are set separately on the web.'
                       : 'A pack with no price of its own sells at the '
                           '${_unit?.code ?? 'base'} price times its size.',
                 ),
