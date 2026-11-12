@@ -1284,6 +1284,8 @@ The flow is the standard one:
 
 > **Set up once, in the ERP.** A manager sets up the tables, the kitchen and bar stations and their printers, and which item categories go to which station in the ERP under **Point of Sale → Restaurant Setup**. The till reads all of that; nothing is typed on the till except which printer each station uses on *this* device (3.10).
 
+> **The department decides where an item prints.** Slips go by the item's **Department**, not by its name: a department the manager has not linked to a station prints at the default station. When you add a product on the till (**Add a product**, for staff allowed to manage products), the **Department** buttons show where each one prints — for example *Juices · Barista*. A **new** department must be given a station under **Prints at** before the product can be added. Changes are made in the ERP, not on the till: in **Point of Sale → Restaurant Setup**, **What prints where** moves a whole department to another station, and **Items and their departments** moves items to another department (one at a time, or several at once). A product's page under **Products** has the same **Department** and **Prints at**. An item's department is the same in every branch; where a department prints is set per branch.
+
 ### 3.1 The floor
 
 When you open the Restaurant register you see the **Floor**: one tile per table with its name and seats, and its state.
