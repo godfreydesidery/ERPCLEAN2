@@ -7,6 +7,7 @@ import com.erp.modules.sales.domain.dto.PrepStationDto;
 import com.erp.modules.sales.domain.dto.ReplaceCategoryRoutesRequest;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
 import com.erp.modules.sales.domain.dto.RestaurantWaiterDto;
+import com.erp.modules.sales.domain.dto.SetCategoryRouteRequest;
 import com.erp.modules.sales.domain.dto.UpdatePrepStationRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantTableRequest;
 import com.erp.modules.sales.domain.entity.PrepStation;
@@ -26,6 +27,8 @@ import com.erp.platform.audit.AuditService;
 import com.erp.platform.common.api.ConflictException;
 import com.erp.platform.common.api.NotFoundException;
 import com.erp.platform.common.domain.MasterStatus;
+import com.erp.platform.security.PermissionResolver;
+import com.erp.platform.security.RequestContext;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,6 +56,7 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
     private final RestaurantScope scope;
     private final AuditService audit;
     private final JdbcTemplate jdbc;
+    private final PermissionResolver permissions;
 
     public RestaurantSetupServiceImpl(RestaurantTableRepository tables,
                                       PrepStationRepository stations,
@@ -61,7 +65,8 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
                                       RestaurantOrderLineRepository orderLines,
                                       RestaurantScope scope,
                                       AuditService audit,
-                                      JdbcTemplate jdbc) {
+                                      JdbcTemplate jdbc,
+                                      PermissionResolver permissions) {
         this.tables   = tables;
         this.stations = stations;
         this.routes   = routes;
@@ -70,6 +75,7 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
         this.scope    = scope;
         this.audit    = audit;
         this.jdbc     = jdbc;
+        this.permissions = permissions;
     }
 
     // -------------------------------------------------------------------------
@@ -280,6 +286,61 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
                 .detail(Map.of("branchId", String.valueOf(branchId),
                         "routes", String.valueOf(byKey.size()))));
         return toRouteDtos(companyId, branchId);
+    }
+
+    @Override
+    public PrepStationCategoryDto setCategoryRoute(SetCategoryRouteRequest req) {
+        Long companyId = scope.companyId();
+        Long branchId = scope.branchId(req.branchUid());
+        String category = PrepStationCategory.normalise(req.category());
+        if (category == null) {
+            throw new IllegalArgumentException("Enter a department.");
+        }
+        if (category.length() > 60) {
+            throw new IllegalArgumentException("A department name can be at most 60 characters.");
+        }
+        PrepStation station = stations.findByCompanyIdAndBranchIdOrderByNameAsc(companyId, branchId)
+                .stream()
+                .filter(s -> s.getUid().equals(req.prepStationUid()))
+                .filter(s -> s.getStatus() == MasterStatus.ACTIVE)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Choose an active kitchen or bar station of this branch."));
+
+        var existing = routes.findRoute(companyId, branchId, PrepStationCategory.key(category));
+        PrepStationCategory route;
+        if (existing.isPresent()) {
+            route = existing.get();
+            if (!route.getPrepStationId().equals(station.getId())) {
+                // Moving a department moves every item in it — that is restaurant set-up, not
+                // product entry. A product manager may only route a department that has no route.
+                if (!permissions.hasPermission(RequestContext.get(), "RESTAURANT.SETUP.MANAGE",
+                        System.currentTimeMillis())) {
+                    throw new ConflictException("\"" + route.getCategory() + "\" already prints at "
+                            + stationName(companyId, branchId, route.getPrepStationId())
+                            + ". A manager can change that in Restaurant Setup.");
+                }
+                route.moveTo(station.getId(), scope.actorId());
+            }
+        } else {
+            route = routes.save(new PrepStationCategory(companyId, branchId, station.getId(), category,
+                    scope.actorId()));
+        }
+        audit.record(AuditEvent.of(AuditActions.PREP_ROUTING_SET, "prep_station_categories",
+                        route.getId(), route.getUid())
+                .detail(Map.of("branchId", String.valueOf(branchId),
+                        "category", route.getCategory(),
+                        "station", station.getName())));
+        return new PrepStationCategoryDto(route.getUid(), route.getCategory(), station.getUid(),
+                station.getName());
+    }
+
+    private String stationName(Long companyId, Long branchId, Long stationId) {
+        return stations.findByCompanyIdAndBranchIdOrderByNameAsc(companyId, branchId).stream()
+                .filter(s -> s.getId().equals(stationId))
+                .map(PrepStation::getName)
+                .findFirst()
+                .orElse("another station");
     }
 
     @Override

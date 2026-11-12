@@ -19,6 +19,17 @@ class RestaurantService {
   Future<List<PrepStation>> listStations() async =>
       asList(await _api.get('$_base/prep-stations'), PrepStation.fromJson);
 
+  /// Where each department prints in this branch.
+  Future<List<CategoryRoute>> listCategoryRoutes() async =>
+      asList(await _api.get('$_base/category-routes'), CategoryRoute.fromJson);
+
+  /// Sends [category]'s items to [stationUid] from now on. The server only lets
+  /// a product manager route a department that has no route yet (Tulia
+  /// 2026-11-12); moving one is done in the ERP's Restaurant Setup.
+  Future<CategoryRoute> setCategoryRoute(String category, String stationUid) async =>
+      CategoryRoute.fromJson(asMap(await _api.put('$_base/category-routes/one',
+          body: {'category': category.trim(), 'prepStationUid': stationUid})));
+
   /// The branch's waiters, for the sign-in tiles (J COB 2026-10-30).
   Future<List<RestaurantWaiter>> listWaiters() async =>
       asList(await _api.get('$_base/waiters'), RestaurantWaiter.fromJson);

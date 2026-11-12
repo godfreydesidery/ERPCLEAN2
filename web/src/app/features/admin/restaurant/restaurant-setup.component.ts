@@ -1,7 +1,20 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { EMPTY, concatMap, expand, forkJoin, from, reduce, switchMap, toArray } from 'rxjs';
+import {
+  EMPTY,
+  Observable,
+  catchError,
+  concatMap,
+  expand,
+  forkJoin,
+  from,
+  map,
+  of,
+  reduce,
+  switchMap,
+  toArray,
+} from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { AlertService } from '../../../core/feedback/alert.service';
@@ -10,7 +23,12 @@ import { ProductModel } from '../models/product.model';
 import { UserBranch } from '../models/user-branch.model';
 import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from '../products/product.service';
-import { MasterStatus, PrepStationDto, RestaurantTableDto } from './models/restaurant.model';
+import {
+  MasterStatus,
+  PrepStationCategoryDto,
+  PrepStationDto,
+  RestaurantTableDto,
+} from './models/restaurant.model';
 import { RestaurantModifiersComponent } from './restaurant-modifiers.component';
 import { RestaurantService } from './restaurant.service';
 
@@ -40,12 +58,46 @@ export class RestaurantSetupComponent {
   private readonly companies = inject(CompanyService);
   protected readonly session = inject(SessionStore);
 
-  // ── Items without a category (they all print at the default station) ─────
+  // ── Items and their departments (Tulia 2026-11-12) ───────────────────────
+  // An item's department is company-wide; where a department prints is per branch. This list
+  // changes the DEPARTMENT only — Product Master stays the full product editor.
   private readonly companyId = signal('');
-  readonly uncategorised = signal<ProductModel[]>([]);
+  readonly items = signal<ProductModel[]>([]);
+  readonly itemSearch = signal('');
+  /** '' = every item; NO_DEPARTMENT = items without one; else a department key. */
+  readonly itemDeptFilter = signal('');
+  /** Department typed for an item; absent = unchanged. */
   readonly categoryDraft = signal<Record<string, string>>({});
+  /** Station chosen for an item whose new department does not print anywhere yet. */
+  readonly stationDraft = signal<Record<string, string>>({});
+  readonly selected = signal<ReadonlySet<string>>(new Set<string>());
+  readonly bulkDept = signal('');
+  readonly bulkStation = signal('');
+  /** The item uid being saved, or 'bulk'. */
+  readonly itemSaving = signal<string | null>(null);
   readonly canEditProducts = computed(() => this.session.hasPermission('PRODUCT.MANAGE'));
   readonly knownCategories = computed(() => this.routeRows().map((r) => r.category));
+  /** The branch's routing as saved (the grid above may hold unsaved edits). */
+  readonly savedRoutes = signal<PrepStationCategoryDto[]>([]);
+  readonly noDepartment = NO_DEPARTMENT;
+  readonly uncategorisedCount = computed(
+    () => this.items().filter((p) => !departmentKey(p.category)).length,
+  );
+  readonly filteredItems = computed(() => {
+    const q = this.itemSearch().trim().toLowerCase();
+    const dept = this.itemDeptFilter();
+    return this.items().filter((p) => {
+      const key = departmentKey(p.category);
+      if (dept === NO_DEPARTMENT ? key !== '' : dept !== '' && key !== dept) return false;
+      return !q || p.name.toLowerCase().includes(q) || (p.code ?? '').toLowerCase().includes(q);
+    });
+  });
+  readonly shownItems = computed(() => this.filteredItems().slice(0, ITEMS_SHOWN));
+  readonly allShownSelected = computed(() => {
+    const shown = this.shownItems();
+    const sel = this.selected();
+    return shown.length > 0 && shown.every((p) => sel.has(p.uid));
+  });
 
   // ── Add several tables at once ────────────────────────────────────────────
   readonly bulkPrefix = signal('T');
@@ -104,7 +156,7 @@ export class RestaurantSetupComponent {
       .subscribe({
         next: (list) => {
           this.companyId.set(list[0]?.id ?? '');
-          this.loadUncategorised();
+          this.loadItems();
         },
         error: () => this.companyId.set(''),
       });
@@ -140,6 +192,7 @@ export class RestaurantSetupComponent {
       next: ({ tables, stations, routes, categories }) => {
         this.tables.set(tables);
         this.stations.set(stations);
+        this.savedRoutes.set(routes);
         this.routeRows.set(buildRouteRows(categories, routes.map((r) => ({
           category: r.category,
           stationUid: r.prepStationUid ?? '',
@@ -291,13 +344,13 @@ export class RestaurantSetupComponent {
     });
   }
 
-  // ── Items without a category ─────────────────────────────────────────────
+  // ── Items and their departments ──────────────────────────────────────────
 
   /**
-   * Sellable items with no category — they all print at the default station. Read in pages of
-   * 200 (a menu is rarely bigger than a few pages); only someone who may edit products sees it.
+   * The company's active sellable items, read in pages of 200 (up to 2,000 — a menu is rarely more
+   * than a few pages). Only someone who may edit products sees the list.
    */
-  loadUncategorised(): void {
+  loadItems(): void {
     const companyId = this.companyId();
     if (!companyId || !this.canEditProducts()) return;
     const size = 200;
@@ -310,29 +363,188 @@ export class RestaurantSetupComponent {
         reduce((all, res) => all.concat(res.rows), [] as ProductModel[]),
       )
       .subscribe({
-        next: (rows) => this.uncategorised.set(
-          rows.filter((p) => p.sellable && p.status === 'ACTIVE' && !(p.category ?? '').trim()),
+        next: (rows) => this.items.set(
+          rows
+            .filter((p) => p.sellable && p.status === 'ACTIVE')
+            .sort((a, b) => a.name.localeCompare(b.name)),
         ),
-        error: () => this.uncategorised.set([]),
+        error: () => this.items.set([]),
       });
+  }
+
+  /** The saved route of a department in this branch, or null (blank or not routed). */
+  routeOf(department: string | null | undefined): PrepStationCategoryDto | null {
+    const key = departmentKey(department);
+    if (!key) return null;
+    return this.savedRoutes().find((r) => departmentKey(r.category) === key && r.prepStationUid) ?? null;
+  }
+
+  /** Where an item of [department] prints in this branch, for the list. */
+  printsAt(department: string | null | undefined): string {
+    const route = this.routeOf(department);
+    const station = route && this.stations().find((s) => s.uid === route.prepStationUid);
+    if (route && station) return station.name;
+    if (route?.prepStationName) return route.prepStationName;
+    return `Default (${this.defaultStation()?.name ?? 'none'})`;
+  }
+
+  /** A department that does not print anywhere yet in this branch: it must be given a station. */
+  needsStation(department: string | null | undefined): boolean {
+    return this.activeStations().length > 0 && !!departmentKey(department) && !this.routeOf(department);
+  }
+
+  /** The department shown in an item's box: what was typed, else its current one. */
+  draftOf(p: ProductModel): string {
+    return this.categoryDraft()[p.uid] ?? p.category ?? '';
   }
 
   setDraft(uid: string, value: string): void {
     this.categoryDraft.update((d) => ({ ...d, [uid]: value }));
   }
 
+  stationDraftOf(uid: string): string {
+    return this.stationDraft()[uid] || '';
+  }
+
+  setStationDraft(uid: string, value: string): void {
+    this.stationDraft.update((d) => ({ ...d, [uid]: value }));
+  }
+
+  /** The item's department was changed to one that prints nowhere yet in this branch. */
+  rowNeedsStation(p: ProductModel): boolean {
+    const draft = this.categoryDraft()[p.uid];
+    return draft !== undefined && draft.trim() !== (p.category ?? '').trim() && this.needsStation(draft);
+  }
+
+  /** True when the item's department was changed and can be saved. */
+  canSaveItem(p: ProductModel): boolean {
+    const draft = this.categoryDraft()[p.uid];
+    if (draft === undefined || draft.trim() === (p.category ?? '').trim()) return false;
+    if (this.needsStation(draft) && !this.stationDraft()[p.uid]) return false;
+    return this.itemSaving() === null;
+  }
+
+  /** Saves one item's department; a new department is routed first, so it never lands unrouted. */
   saveCategory(p: ProductModel): void {
+    if (!this.canSaveItem(p)) return;
     const value = (this.categoryDraft()[p.uid] ?? '').trim();
-    if (!value) return;
-    this.products.setCategory(p.uid, value).subscribe({
-      next: () => {
-        this.uncategorised.update((list) => list.filter((x) => x.uid !== p.uid));
-        this.alerts.success('Category set', `${p.name}: ${value}`);
-        this.load();
-      },
-      error: (err: unknown) =>
-        this.alerts.error('Could not set the category', messageFrom(err, 'Please try again.')),
+    const station = this.needsStation(value) ? this.stationDraft()[p.uid] : null;
+    this.itemSaving.set(p.uid);
+    this.routeFirst(value, station)
+      .pipe(switchMap(() => this.products.setCategory(p.uid, value)))
+      .subscribe({
+        next: () => {
+          this.itemSaving.set(null);
+          this.applyLocally([p.uid], value);
+          this.alerts.success('Department saved', `${p.name}: ${value || 'no department'}`);
+          this.load();
+        },
+        error: (err: unknown) => {
+          this.itemSaving.set(null);
+          this.alerts.error('Could not save the department', messageFrom(err, 'Please try again.'));
+        },
+      });
+  }
+
+  // ── Several items at once ──
+
+  toggleItem(uid: string, on: boolean): void {
+    this.selected.update((s) => {
+      const next = new Set(s);
+      if (on) next.add(uid);
+      else next.delete(uid);
+      return next;
     });
+  }
+
+  clearSelection(): void {
+    this.selected.set(new Set<string>());
+  }
+
+  /** The matching key of a department, for the filter's option values. */
+  deptKey(department: string): string {
+    return departmentKey(department);
+  }
+
+  toggleAllShown(on: boolean): void {
+    this.selected.update((s) => {
+      const next = new Set(s);
+      for (const p of this.shownItems()) {
+        if (on) next.add(p.uid);
+        else next.delete(p.uid);
+      }
+      return next;
+    });
+  }
+
+  readonly canApplyBulk = computed(() => {
+    const dept = this.bulkDept().trim();
+    return this.selected().size > 0 && !!dept && this.itemSaving() === null
+      && (!this.needsStation(dept) || !!this.bulkStation());
+  });
+
+  /** Moves every selected item to one department, after the user confirms. */
+  applyBulk(): void {
+    if (!this.canApplyBulk()) return;
+    const dept = this.bulkDept().trim();
+    const uids = [...this.selected()];
+    const station = this.needsStation(dept)
+      ? this.activeStations().find((s) => s.uid === this.bulkStation()) ?? null
+      : null;
+    const where = station
+      ? ` "${dept}" is new here: it will print at ${station.name} in ${this.branchName() || 'this branch'}.`
+      : '';
+    const question = `Move ${uids.length} item${uids.length === 1 ? '' : 's'} to "${dept}"? `
+      + `An item's department is the same in every branch.${where}`;
+    if (!window.confirm(question)) return;
+
+    this.itemSaving.set('bulk');
+    this.routeFirst(dept, station?.uid ?? null)
+      .pipe(
+        switchMap(() => from(uids)),
+        concatMap((uid) => this.products.setCategory(uid, dept).pipe(
+          map(() => ({ uid, ok: true })),
+          catchError(() => of({ uid, ok: false })),
+        )),
+        toArray(),
+      )
+      .subscribe({
+        next: (results) => {
+          this.itemSaving.set(null);
+          const done = results.filter((r) => r.ok).map((r) => r.uid);
+          this.applyLocally(done, dept);
+          this.selected.set(new Set(results.filter((r) => !r.ok).map((r) => r.uid)));
+          const failed = results.length - done.length;
+          if (failed === 0) {
+            this.alerts.success('Departments saved', `${done.length} moved to ${dept}`);
+            this.bulkDept.set('');
+            this.bulkStation.set('');
+          } else {
+            this.alerts.error('Some items were not moved',
+              `${done.length} moved to ${dept}; ${failed} could not be saved and are still selected.`);
+          }
+          this.load();
+        },
+        error: (err: unknown) => {
+          this.itemSaving.set(null);
+          this.alerts.error('Could not set where it prints', messageFrom(err, 'Nothing was moved.'));
+        },
+      });
+  }
+
+  /** Routes a new department in this branch before items are moved into it; else nothing. */
+  private routeFirst(department: string, stationUid: string | null): Observable<unknown> {
+    if (!department || !stationUid) return of(null);
+    return this.restaurant.setCategoryRoute(department, stationUid, this.branchUid() || undefined);
+  }
+
+  private applyLocally(uids: string[], department: string): void {
+    const set = new Set(uids);
+    this.items.update((list) => list.map((p) => (set.has(p.uid) ? { ...p, category: department || null } : p)));
+    const clear = (d: Record<string, string>) =>
+      Object.fromEntries(Object.entries(d).filter(([k]) => !set.has(k)));
+    this.categoryDraft.update(clear);
+    this.stationDraft.update(clear);
   }
 
   // ── Add several tables ──────────────────────────────────────────────────
@@ -399,6 +611,15 @@ export class RestaurantSetupComponent {
 }
 
 /** Every category in use, plus any routed category no product uses any more, sorted. */
+/** How many items the list shows at once; search or filter to reach the rest. */
+const ITEMS_SHOWN = 100;
+const NO_DEPARTMENT = '\u0000none';
+
+/** The server's department matching key: trimmed, inner spaces collapsed, any case. */
+function departmentKey(value: string | null | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 function buildRouteRows(categories: string[], routed: RouteRow[]): RouteRow[] {
   const byKey = new Map<string, RouteRow>();
   for (const c of categories) byKey.set(c.toLowerCase(), { category: c, stationUid: '' });

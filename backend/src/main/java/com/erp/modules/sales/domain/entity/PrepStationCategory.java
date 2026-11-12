@@ -13,7 +13,7 @@ import lombok.Getter;
  * <p>The category is the free-text {@code products.category}, stored normalised (trimmed, inner
  * whitespace collapsed) and matched case-insensitively — {@code ux_prep_station_category_branch_category}
  * is on {@code lower(category)}. Configuration, not a document: the routing screen replaces a
- * branch's whole set, so rows are deleted freely.
+ * branch's whole set, so rows are deleted freely; the product form moves one row ({@link #moveTo}).
  */
 @Getter
 @Entity
@@ -26,7 +26,7 @@ public class PrepStationCategory extends UidEntity {
     @Column(name = "branch_id", nullable = false, updatable = false)
     private Long branchId;
 
-    @Column(name = "prep_station_id", nullable = false, updatable = false)
+    @Column(name = "prep_station_id", nullable = false)
     private Long prepStationId;
 
     @Column(name = "category", nullable = false, length = 60, updatable = false)
@@ -53,6 +53,13 @@ public class PrepStationCategory extends UidEntity {
         this.prepStationId = prepStationId;
         this.category      = normalise(category);
         this.createdBy     = createdBy;
+    }
+
+    /** Sends this category's items to another station from now on. */
+    public void moveTo(Long prepStationId, Long actorId) {
+        this.prepStationId = prepStationId;
+        this.updatedAt     = Instant.now();
+        this.updatedBy     = actorId;
     }
 
     /**

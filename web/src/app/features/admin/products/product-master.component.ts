@@ -44,6 +44,8 @@ import { OrganisationService } from '../organisation/organisation.service';
 import { ProductService } from './product.service';
 import { SupplierService } from '../parties/supplier.service';
 import { StockService } from '../stock/stock.service';
+import { RestaurantService } from '../restaurant/restaurant.service';
+import { PrepStationCategoryDto, PrepStationDto } from '../restaurant/models/restaurant.model';
 import { CurrencySelectComponent } from '../../../shared/currency-select/currency-select.component';
 import { LookupFailure, LookupNoticeComponent, lookupFailure } from '../../../shared/lookup-access';
 import {
@@ -150,6 +152,7 @@ export class ProductMasterComponent implements OnInit {
   private readonly organisationService = inject(OrganisationService);
   private readonly supplierService = inject(SupplierService);
   private readonly stockService = inject(StockService);
+  private readonly restaurantService = inject(RestaurantService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
@@ -184,6 +187,44 @@ export class ProductMasterComponent implements OnInit {
   readonly fDescription = signal('');
   readonly fType = signal<ProductType>('GOODS');
   readonly fCategory = signal('');
+  /** Departments already in use, offered as suggestions. */
+  readonly departments = signal<string[]>([]);
+
+  // ── Where the department prints (Tulia 2026-11-12) ────────────────────────
+  // A restaurant routes each department to a kitchen/bar station, per branch. Empty (a shop, or
+  // no access) hides the "Prints at" field.
+  readonly stations = signal<PrepStationDto[]>([]);
+  readonly routes = signal<PrepStationCategoryDto[]>([]);
+  /** The station the user picked; null = leave the department where it prints. */
+  readonly fPrintsAt = signal<string | null>(null);
+  readonly canMoveDepartment = computed(() =>
+    this.session.hasPermission('RESTAURANT.SETUP.MANAGE'),
+  );
+  /** The route of the department as typed; null when blank or new. */
+  readonly currentRoute = computed(() => {
+    const key = departmentKey(this.fCategory());
+    return key ? (this.routes().find((r) => departmentKey(r.category) === key) ?? null) : null;
+  });
+  /** A department this branch has not routed yet: it must be given a station. */
+  readonly departmentIsNew = computed(
+    () => this.stations().length > 0 && !!departmentKey(this.fCategory()) && !this.currentRoute(),
+  );
+  /** What the "Prints at" select shows. */
+  readonly printsAtValue = computed(
+    () => this.fPrintsAt() ?? this.currentRoute()?.prepStationUid ?? '',
+  );
+  readonly defaultStationName = computed<string | null>(() => {
+    const st = this.stations();
+    const pick: PrepStationDto | undefined = st.find((s) => s.defaultStation) ?? st[0];
+    return pick ? pick.name : null;
+  });
+  /** The route change this save would make, or null when nothing changes. */
+  readonly pendingRoute = computed(() => {
+    const category = this.fCategory().trim();
+    const chosen = this.fPrintsAt();
+    if (!category || !chosen || this.stations().length === 0) return null;
+    return chosen === this.currentRoute()?.prepStationUid ? null : { category, stationUid: chosen };
+  });
   readonly fBrand = signal('');
   readonly fManufacturer = signal('');
   readonly fSellable = signal(true);
@@ -403,9 +444,39 @@ export class ProductMasterComponent implements OnInit {
   }
 
   private loadDependencies(companyId: string, companyUid: string): void {
+    this.loadDepartments(companyId);
     this.loadUnits(companyId);
     this.loadPriceLists(companyId);
     this.loadBranches(companyUid);
+  }
+
+  private loadDepartments(companyId: string): void {
+    this.productService.listCategories(companyId).subscribe({
+      next: (list) => this.departments.set(list),
+      error: () => undefined,
+    });
+    // The active branch's kitchen/bar stations and routing. A failure (no restaurant, no access)
+    // simply hides "Prints at".
+    forkJoin({
+      stations: this.restaurantService.listStations(),
+      routes: this.restaurantService.listCategoryRoutes(),
+    }).subscribe({
+      next: ({ stations, routes }) => {
+        this.stations.set(
+          stations
+            .filter((s) => s.status === 'ACTIVE')
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
+        this.routes.set(routes);
+      },
+      error: () => undefined,
+    });
+  }
+
+  /** The department field changed: a pick made for the old department no longer applies. */
+  onCategoryChange(value: string): void {
+    this.fCategory.set(value);
+    this.fPrintsAt.set(null);
   }
 
   private loadUnits(companyId: string): void {
@@ -857,6 +928,14 @@ export class ProductMasterComponent implements OnInit {
       return;
     }
 
+    if (this.departmentIsNew() && !this.fPrintsAt()) {
+      this.formError.set(
+        `"${this.fCategory().trim()}" is a new department. Choose where its orders print.`,
+      );
+      this.setTab('general');
+      return;
+    }
+
     // Validate exactly one primary barcode if rows exist.
     const barcodes = this.barcodeRows();
     if (barcodes.length > 0 && !barcodes.some((b) => b.isPrimary)) {
@@ -890,6 +969,9 @@ export class ProductMasterComponent implements OnInit {
       { label: 'Opening stock', status: 'pending', error: null },
       { label: 'Weighed goods', status: 'pending', error: null },
     ];
+    if (this.pendingRoute()) {
+      sections.push({ label: 'Kitchen / bar printing', status: 'pending', error: null });
+    }
     this.sectionResults.set(sections);
 
     const cost: Money | undefined = costAmount
@@ -1024,6 +1106,7 @@ export class ProductMasterComponent implements OnInit {
       .then(() => this.runBranches(productUid))
       .then(() => this.runOpeningStock(productUid))
       .then(() => this.runWeighing(productUid))
+      .then(() => this.runPrintsAt())
       .finally(() => {
         this.saving.set(false);
         this.saveComplete.set(true);
@@ -1274,6 +1357,33 @@ export class ProductMasterComponent implements OnInit {
     });
   }
 
+  // ── Sub-step: where the department prints ─────────────────────────────────
+
+  private runPrintsAt(): Promise<void> {
+    const change = this.pendingRoute();
+    const idx = PRINTS_AT_SECTION;
+    if (!change) return Promise.resolve();
+    this.setSection(idx, 'saving');
+    return new Promise((resolve) => {
+      this.restaurantService.setCategoryRoute(change.category, change.stationUid).subscribe({
+        next: (route) => {
+          const key = departmentKey(route.category);
+          this.routes.update((rs) => [
+            ...rs.filter((r) => departmentKey(r.category) !== key),
+            route,
+          ]);
+          this.fPrintsAt.set(null);
+          this.setSection(idx, 'done');
+          resolve();
+        },
+        error: (err) => {
+          this.setSection(idx, 'failed', this.messageFrom(err, 'Could not set where it prints.'));
+          resolve();
+        },
+      });
+    });
+  }
+
   // ── Retry a failed section ─────────────────────────────────────────────────
 
   retrySection(idx: number): void {
@@ -1288,6 +1398,7 @@ export class ProductMasterComponent implements OnInit {
       () => this.runBranches(productUid),
       () => this.runOpeningStock(productUid),
       () => this.runWeighing(productUid),
+      () => this.runPrintsAt(),
     ];
     retriers[idx]?.();
   }
@@ -1363,4 +1474,12 @@ export class ProductMasterComponent implements OnInit {
   trackByIdx(idx: number): number {
     return idx;
   }
+}
+
+/** Index of the optional "Kitchen / bar printing" result row (after the seven fixed ones). */
+const PRINTS_AT_SECTION = 7;
+
+/** The server's department matching key: trimmed, inner spaces collapsed, any case. */
+export function departmentKey(value: string | null | undefined): string {
+  return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 }

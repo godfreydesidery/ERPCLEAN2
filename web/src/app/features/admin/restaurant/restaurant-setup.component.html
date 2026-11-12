@@ -169,8 +169,8 @@
         </div>
         <div class="erp-card__body">
           <p class="text-muted small">
-            Route each product category to a station — for example Drinks to the Bar. Categories are
-            set on the products (the "Department" column in the product import).
+            Route each department to a station — for example Drinks to the Bar. An item's department is
+            set below, in Products, or by the "Department" column in the product import.
           </p>
           @if (routeRows().length === 0) {
             <div class="erp-empty">
@@ -221,45 +221,145 @@
             </button>
           }
 
-          @if (canEditProducts() && uncategorised().length > 0) {
-            <h3 class="h6 mt-4">Items without a category ({{ uncategorised().length }})</h3>
-            <p class="text-muted small">
-              These print at the default station ({{ defaultStation()?.name ?? 'none' }}). Give drinks a
-              category such as <em>Drinks</em> and route it to the bar above.
+          @if (canEditProducts() && items().length > 0) {
+            <h3 class="h6 mt-4" id="itemsHeading">Items and their departments</h3>
+            <p class="text-muted small mb-2">
+              An item prints where its department prints. Change an item's department here — the
+              department is the <strong>same in every branch</strong>; where a department prints is set
+              per branch, above. Prices and everything else are changed in Products.
+              @if (uncategorisedCount() > 0) {
+                {{ uncategorisedCount() }} item(s) have no department and print at the default station
+                ({{ defaultStation()?.name ?? 'none' }}).
+              }
             </p>
             <datalist id="knownCategories">
               @for (c of knownCategories(); track c) { <option [value]="c"></option> }
             </datalist>
+
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <div>
+                <label class="form-label small mb-0" for="itemSearch">Search items</label>
+                <input id="itemSearch" name="itemSearch" type="search" class="form-control form-control-sm"
+                       placeholder="Name or code" autocomplete="off"
+                       [ngModel]="itemSearch()" (ngModelChange)="itemSearch.set($event)" />
+              </div>
+              <div>
+                <label class="form-label small mb-0" for="itemDeptFilter">Department</label>
+                <select id="itemDeptFilter" name="itemDeptFilter" class="form-select form-select-sm"
+                        [ngModel]="itemDeptFilter()" (ngModelChange)="itemDeptFilter.set($event)">
+                  <option value="">All departments</option>
+                  <option [value]="noDepartment">No department</option>
+                  @for (c of knownCategories(); track c) {
+                    <option [value]="deptKey(c)">{{ c }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+
+            @if (selected().size > 0) {
+              <div class="d-flex flex-wrap align-items-end gap-2 mb-2 p-2 border rounded" role="group"
+                   aria-labelledby="bulkHeading">
+                <span id="bulkHeading" class="small fw-semibold align-self-center">
+                  {{ selected().size }} selected
+                </span>
+                <div>
+                  <label class="form-label small mb-0" for="bulkDept">Move to department</label>
+                  <input id="bulkDept" name="bulkDept" type="text" maxlength="60" list="knownCategories"
+                         class="form-control form-control-sm" autocomplete="off"
+                         [ngModel]="bulkDept()" (ngModelChange)="bulkDept.set($event)" />
+                </div>
+                @if (needsStation(bulkDept())) {
+                  <div>
+                    <label class="form-label small mb-0" for="bulkStation">New department prints at</label>
+                    <select id="bulkStation" name="bulkStation" class="form-select form-select-sm"
+                            [ngModel]="bulkStation()" (ngModelChange)="bulkStation.set($event)">
+                      <option value="">Choose a station</option>
+                      @for (s of activeStations(); track s.uid) { <option [value]="s.uid">{{ s.name }}</option> }
+                    </select>
+                  </div>
+                }
+                <button type="button" class="btn btn-sm btn-primary" (click)="applyBulk()"
+                        [disabled]="!canApplyBulk()">
+                  @if (itemSaving() === 'bulk') {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Moving…
+                  } @else {
+                    Move items
+                  }
+                </button>
+                <button type="button" class="btn btn-sm btn-link" (click)="clearSelection()">Clear</button>
+              </div>
+            }
+
             <div class="erp-table-wrap">
-              <table class="erp-table">
-                <caption class="visually-hidden">Items without a category</caption>
+              <table class="erp-table" aria-describedby="itemsHeading">
+                <caption class="visually-hidden">Items and their departments</caption>
                 <thead>
                   <tr>
+                    <th scope="col">
+                      <input type="checkbox" class="form-check-input" id="itemSelectAll"
+                             aria-label="Select all items shown"
+                             [checked]="allShownSelected()" (change)="toggleAllShown($any($event.target).checked)" />
+                    </th>
                     <th scope="col">Item</th>
-                    <th scope="col">Category</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Prints at ({{ branchName() || 'this branch' }})</th>
                     <th scope="col"><span class="visually-hidden">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  @for (p of uncategorised(); track p.uid; let i = $index) {
+                  @for (p of shownItems(); track p.uid; let i = $index) {
                     <tr>
-                      <td><label class="mb-0" [for]="'cat-' + i">{{ p.name }}</label></td>
+                      <td>
+                        <input type="checkbox" class="form-check-input" [id]="'sel-' + i"
+                               [attr.aria-label]="'Select ' + p.name"
+                               [checked]="selected().has(p.uid)" (change)="toggleItem(p.uid, $any($event.target).checked)" />
+                      </td>
+                      <td>
+                        <label class="mb-0" [for]="'cat-' + i">{{ p.name }}</label>
+                        @if (p.code) { <div class="text-muted small">{{ p.code }}</div> }
+                      </td>
                       <td>
                         <input class="form-control form-control-sm route-select" type="text" maxlength="60"
-                               list="knownCategories" placeholder="e.g. Drinks"
+                               list="knownCategories" placeholder="No department"
                                [id]="'cat-' + i" [name]="'cat-' + i"
-                               [ngModel]="categoryDraft()[p.uid] ?? ''" (ngModelChange)="setDraft(p.uid, $event)" />
+                               [ngModel]="draftOf(p)" (ngModelChange)="setDraft(p.uid, $event)" />
+                      </td>
+                      <td>
+                        @if (rowNeedsStation(p)) {
+                          <label class="visually-hidden" [for]="'st-' + i">New department prints at</label>
+                          <select class="form-select form-select-sm route-select" [id]="'st-' + i" [name]="'st-' + i"
+                                  [ngModel]="stationDraftOf(p.uid)" (ngModelChange)="setStationDraft(p.uid, $event)">
+                            <option value="">New — choose a station</option>
+                            @for (s of activeStations(); track s.uid) { <option [value]="s.uid">{{ s.name }}</option> }
+                          </select>
+                        } @else {
+                          {{ printsAt(draftOf(p)) }}
+                        }
                       </td>
                       <td>
                         <button type="button" class="btn btn-sm btn-outline-primary" (click)="saveCategory(p)"
-                                [disabled]="!(categoryDraft()[p.uid] ?? '').trim()"
-                                [attr.aria-label]="'Save category for ' + p.name">Save</button>
+                                [disabled]="!canSaveItem(p)"
+                                [attr.aria-label]="'Save department for ' + p.name">
+                          @if (itemSaving() === p.uid) {
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                          } @else {
+                            Save
+                          }
+                        </button>
                       </td>
                     </tr>
+                  } @empty {
+                    <tr><td colspan="5" class="text-muted">No items match.</td></tr>
                   }
                 </tbody>
               </table>
             </div>
+            @if (filteredItems().length > shownItems().length) {
+              <p class="text-muted small mt-1">
+                Showing {{ shownItems().length }} of {{ filteredItems().length }} items — search or pick a
+                department to see the rest.
+              </p>
+            }
           }
         </div>
       </div>

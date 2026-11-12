@@ -7,6 +7,7 @@ import com.erp.modules.sales.domain.dto.PrepStationDto;
 import com.erp.modules.sales.domain.dto.ReplaceCategoryRoutesRequest;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
 import com.erp.modules.sales.domain.dto.RestaurantWaiterDto;
+import com.erp.modules.sales.domain.dto.SetCategoryRouteRequest;
 import com.erp.modules.sales.domain.dto.UpdatePrepStationRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantTableRequest;
 import com.erp.modules.sales.service.RestaurantSetupService;
@@ -28,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
  * Restaurant setup per branch (ADR-0065 D-3, D-4, D-10): floor tables, prep stations, and the
  * category → station routing. Writes need {@code RESTAURANT.SETUP.MANAGE}; reads are also open to
  * {@code RESTAURANT.ORDER.MANAGE}, because every till needs the floor and the station printers.
+ * {@code PRODUCT.MANAGE} may read stations and routes and route a NEW department, so the product
+ * form can say where an item prints.
  *
  * <p>{@code branchUid} is optional everywhere: absent means the caller's active branch. Company and
  * branch assignment are enforced in the service, from the loaded row for uid-addressed writes.
@@ -80,7 +83,7 @@ public class RestaurantSetupController {
 
     @GetMapping("/prep-stations")
     @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE') or @perm.has('RESTAURANT.SETUP.MANAGE')"
-            + " or @perm.has('RESTAURANT.KITCHEN.MANAGE')")
+            + " or @perm.has('RESTAURANT.KITCHEN.MANAGE') or @perm.has('PRODUCT.MANAGE')")
     public List<PrepStationDto> listStations(@RequestParam(required = false) String branchUid) {
         return setup.listStations(branchUid);
     }
@@ -102,7 +105,8 @@ public class RestaurantSetupController {
     // ---- category routing ----
 
     @GetMapping("/category-routes")
-    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE') or @perm.has('RESTAURANT.SETUP.MANAGE')")
+    @PreAuthorize("@perm.has('RESTAURANT.ORDER.MANAGE') or @perm.has('RESTAURANT.SETUP.MANAGE')"
+            + " or @perm.has('PRODUCT.MANAGE')")
     public List<PrepStationCategoryDto> listCategoryRoutes(
             @RequestParam(required = false) String branchUid) {
         return setup.listCategoryRoutes(branchUid);
@@ -113,6 +117,16 @@ public class RestaurantSetupController {
     public List<PrepStationCategoryDto> replaceCategoryRoutes(
             @Valid @RequestBody ReplaceCategoryRoutesRequest request) {
         return setup.replaceCategoryRoutes(request);
+    }
+
+    /**
+     * Sets where one department prints — the product form (till add-product, web Product Master).
+     * Without RESTAURANT.SETUP.MANAGE only a department with no route yet can be routed.
+     */
+    @PutMapping("/category-routes/one")
+    @PreAuthorize("@perm.has('RESTAURANT.SETUP.MANAGE') or @perm.has('PRODUCT.MANAGE')")
+    public PrepStationCategoryDto setCategoryRoute(@Valid @RequestBody SetCategoryRouteRequest request) {
+        return setup.setCategoryRoute(request);
     }
 
     /** The product categories in use, to route on the routing screen. */
