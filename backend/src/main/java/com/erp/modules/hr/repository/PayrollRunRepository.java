@@ -20,8 +20,6 @@ public interface PayrollRunRepository extends JpaRepository<PayrollRun, Long> {
 
     List<PayrollRun> findByCompanyIdAndStatus(Long companyId, PayrollRunStatus status);
 
-    Optional<PayrollRun> findByRunNumber(String runNumber);
-
     /** Check for an active (non-reversed) run for the same period (by year+month). */
     @Query("SELECT r FROM PayrollRun r WHERE r.companyId = :companyId AND r.periodYear = :periodYear " +
            "AND r.periodMonth = :periodMonth AND r.status <> com.erp.modules.hr.domain.enums.PayrollRunStatus.REVERSED")

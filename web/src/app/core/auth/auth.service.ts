@@ -106,8 +106,12 @@ export class AuthService {
 
   /**
    * Returns the authenticated caller's own active branch assignments from GET /auth/my-branches.
-   * Used by the shell branch selector (Slice 5). The interceptor unwraps the ApiResponse envelope,
-   * so the observable emits UserBranch[] directly.
+   * Used by the shell branch selector (Slice 5) and every branch picker. The interceptor unwraps
+   * the ApiResponse envelope, so the observable emits UserBranch[] directly.
+   *
+   * For the platform operator INSIDE a tenant the server answers with that tenant's branches
+   * instead (owner, 2026-11-12); those rows have no assignment, so `id` and `assignedAt` are null
+   * and `uid` is the branch uid.
    */
   myBranches(): Observable<UserBranch[]> {
     return this.http.get<UserBranch[]>(`${this.base}/my-branches`);

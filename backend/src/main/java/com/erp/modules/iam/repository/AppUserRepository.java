@@ -16,6 +16,12 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
     boolean existsByUsername(String username);
 
+    /** Whether an organisation is a platform operator's home (it holds an {@code is_root} user). */
+    boolean existsByOrganisationIdAndRootTrue(Long organisationId);
+
+    /** How many root accounts an organisation holds (platform organisation move, 2026-11-07). */
+    long countByOrganisationIdAndRootTrue(Long organisationId);
+
     List<AppUser> findAllByOrderByUsername();
 
     /**
@@ -89,6 +95,9 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
      * organisation is invisible here, which is the fail-closed direction.
      */
     List<AppUser> findByRootFalseAndOrganisationIdOrderByUsername(Long organisationId);
+
+    /** How many accounts a tenant has — the platform console's tenant list (R-2). */
+    long countByOrganisationId(Long organisationId);
 
     /**
      * Every user of one tenant, root users included, plus any not yet attributed (ADR-0062 P3-8).

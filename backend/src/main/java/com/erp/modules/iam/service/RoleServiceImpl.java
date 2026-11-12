@@ -165,10 +165,22 @@ public class RoleServiceImpl implements RoleService {
     @Override
     @Transactional(readOnly = true)
     public List<PermissionDto> listPermissions() {
+        // The `platform` module (ORG.CREATE, ORG.SUSPEND, ...) is the vendor's, not a tenant's. A
+        // tenant administrator could never confer it - ADR-0059's subset rule refuses a code the
+        // conferrer does not hold, and the seed keeps the module out of ORG_ADMIN - so showing it in
+        // every tenant's role editor only invites a question nobody can act on (P4-1e follow-up).
+        // Only the platform operator (root) sees it. Presentation only: grant-time enforcement is
+        // AuthorityCeiling's, unchanged.
+        RequestContext.Principal caller = RequestContext.get();
+        boolean platformOperator = caller != null && caller.root();
         return permissions.findAll().stream()
+                .filter(p -> platformOperator || !PLATFORM_MODULE.equals(p.getModule()))
                 .map(PermissionDto::from)
                 .toList();
     }
+
+    /** The vendor-only permission module (R__seed_permissions.sql). */
+    static final String PLATFORM_MODULE = "platform";
 
     // --- private helpers ---
 

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@code OrganisationController} may expose exactly three write mappings, each gated on a
+ * {@code OrganisationController} may expose exactly the allowlisted write mappings, each gated on a
  * platform-only permission (ADR-0062 P1-9, re-specified 2026-08-15).
  *
  * <h2>Why this replaces "no write mapping at all"</h2>
@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Deleting it would have been the easy move and the wrong one. The accident it prevents is real:
  * an organisation write reachable by a tenant is how one customer edits another's tenancy. So the
- * rule becomes an allowlist — these three, and each must carry a {@code platform}-module code.
+ * rule becomes an allowlist — the ALLOWLIST map below (create, suspend, resume, export, purge), and each must carry a {@code platform}-module code.
  *
  * <h2>Why the code matters as much as the count</h2>
  *
@@ -47,6 +47,9 @@ class OrganisationWriteMappingsAreAllowlistedTest {
         put("createTenant", "ORG.CREATE");
         put("suspend", "ORG.SUSPEND");
         put("resume", "ORG.SUSPEND");
+        put("export", "ORG.SUSPEND");   // R-7: platform operator only
+        put("purge", "ORG.CREATE");     // R-8: platform operator only
+        put("createPlatform", "ORG.CREATE"); // owner 2026-11-07: platform operator only
     }};
 
     /** Codes that must never gate an organisation write — they are held by tenant administrators. */
@@ -60,7 +63,7 @@ class OrganisationWriteMappingsAreAllowlistedTest {
     private static final Pattern PRE_AUTHORIZE = Pattern.compile("@PreAuthorize\\(\"([^\"]+)\"\\)");
 
     @Test
-    @DisplayName("only the three allowlisted writes exist, and each names a platform code")
+    @DisplayName("only the allowlisted writes exist, and each names a platform code")
     void writeMappingsAreExactlyTheAllowlist() throws IOException {
         String src = Files.readString(CONTROLLER, StandardCharsets.UTF_8);
 
@@ -79,7 +82,7 @@ class OrganisationWriteMappingsAreAllowlistedTest {
         }
 
         assertThat(found.keySet())
-                .as("a write mapping on OrganisationController that is not create/suspend/resume is "
+                .as("a write mapping on OrganisationController that is not on the allowlist is "
                         + "how one customer reaches another's tenancy. If it is intended, add it "
                         + "here WITH its platform code — do not delete this test.")
                 .containsExactlyInAnyOrderElementsOf(ALLOWED.keySet());

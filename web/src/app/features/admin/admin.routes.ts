@@ -20,6 +20,13 @@ export const ADMIN_ROUTES: Routes = [
       import('./home/admin-home.component').then((m) => m.AdminHomeComponent),
   },
   {
+    // Platform console (MULTITENANCY-PLAN R-2). Guard code == backend @perm.has('ORG.CREATE').
+    path: 'platform/tenants',
+    canActivate: [requirePermission('ORG.CREATE')],
+    loadComponent: () =>
+      import('./platform/tenant-list.component').then((m) => m.TenantListComponent),
+  },
+  {
     path: 'companies',
     canActivate: [requirePermission('COMPANY.VIEW')],
     loadComponent: () =>
@@ -1176,6 +1183,12 @@ export const ADMIN_ROUTES: Routes = [
     canActivate: [requirePermission('POS.SESSION.VIEW')],
     loadComponent: () =>
       import('./pos/pos-session-detail.component').then((m) => m.PosSessionDetailComponent),
+  },
+  {
+    path: 'pos/offline-review',
+    canActivate: [requirePermission('POS.OFFLINE.REVIEW')],
+    loadComponent: () =>
+      import('./pos/offline-review.component').then((m) => m.OfflineReviewComponent),
   },
   {
     path: 'pos/sell',

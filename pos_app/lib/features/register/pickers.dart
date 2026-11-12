@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
 import '../../models/parties.dart';
+import '../../offline/offline_controller.dart';
 import '../../state/app_controller.dart';
 import '../../state/basket_pricer.dart';
 import '../../state/cart_controller.dart';
@@ -95,7 +96,12 @@ Future<SaleUnit?> showUnitPicker(
 
 /// Customer picker (FR-CUST-1/2): walk-in default + search registered customers.
 /// Sets the basket customer.
-Future<void> showCustomerPicker(BuildContext context, WidgetRef ref) {
+Future<void> showCustomerPicker(BuildContext context, WidgetRef ref) async {
+  // ERP ADR-0068: offline sales are for the walk-in customer only.
+  if (ref.read(offlineControllerProvider).offline) {
+    showToast(context, 'Offline sales are for the walk-in customer only.');
+    return;
+  }
   return showDialog(
     context: context,
     builder: (_) => const _CustomerPicker(),

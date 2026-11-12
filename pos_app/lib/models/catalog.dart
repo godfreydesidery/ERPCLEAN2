@@ -17,6 +17,8 @@ class Product {
     required this.vatStatus,
     required this.restrictedKind,
     required this.status,
+    this.category,
+    this.stockable = true,
   });
 
   final String id;
@@ -31,6 +33,12 @@ class Product {
   final String vatStatus;
   final RestrictedKind restrictedKind;
   final String status;
+
+  /// The department label (PRD-03), for the category buttons. Null when unset.
+  final String? category;
+
+  /// Whether a sale takes it out of stock. Carried for the offline cache.
+  final bool stockable;
 
   bool get isActive => status == 'ACTIVE';
 
@@ -47,6 +55,8 @@ class Product {
         vatStatus: asStrOr(j['vatStatus'], 'STANDARD'),
         restrictedKind: RestrictedKind.fromWire(asStr(j['restrictedKind'])),
         status: asStrOr(j['status'], 'ACTIVE'),
+        category: asStr(j['category']),
+        stockable: asBool(j['stockable'], true),
       );
 
   /// Round-trips through [Product.fromJson] — used to keep a parked basket on
@@ -64,6 +74,8 @@ class Product {
         'vatStatus': vatStatus,
         'restrictedKind': restrictedKind.wire,
         'status': status,
+        'category': category,
+        'stockable': stockable,
       };
 }
 
@@ -279,6 +291,17 @@ class Unit {
         decimalPlaces: asIntOr(j['decimalPlaces'], 0),
         fractional: asBool(j['fractional']),
       );
+
+  /// Round-trips through [Unit.fromJson] (the offline catalogue cache).
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'code': code,
+        'name': name,
+        'symbol': symbol,
+        'decimalPlaces': decimalPlaces,
+        'fractional': fractional,
+      };
 }
 
 /// A product price row (`ProductPriceDto`) — used for the **preview** unit price

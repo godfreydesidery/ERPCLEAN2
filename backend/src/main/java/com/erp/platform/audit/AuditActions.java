@@ -74,12 +74,28 @@ public final class AuditActions {
 
     /** A tenant was provisioned by the platform operator (ADR-0062 P5-2). */
     public static final String ORG_CREATE = "ORG.CREATE";
+    /** The platform organisation was created and the operator moved into it (2026-11-07). */
+    public static final String ORG_PLATFORM_CREATE = "ORG.PLATFORM.CREATE";
 
     /** A tenant was suspended - it can no longer log in (P5-3). */
     public static final String ORG_SUSPEND = "ORG.SUSPEND";
 
     /** A suspended tenant was restored (P5-3). */
     public static final String ORG_RESUME = "ORG.RESUME";
+
+    /**
+     * A tenant's data was exported in full (R-7). Written only after the archive was completely
+     * produced; a purge is refused unless one exists AFTER the latest suspension.
+     */
+    public static final String ORG_EXPORT = "ORG.EXPORT";
+
+    /**
+     * A tenant's data was deleted on departure (R-8). Written in the same transaction as the
+     * deletes. It records who, when, the organisation's uid and name, and per-table row counts, and
+     * references nothing that the purge removed (the target id is a plain number, not a foreign
+     * key; the actor is the platform operator).
+     */
+    public static final String ORG_PURGE = "ORG.PURGE";
 
     // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
     public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";
@@ -465,6 +481,17 @@ public final class AuditActions {
     /** A waiter's POS PIN removed by a manager. */
     public static final String USER_POS_PIN_CLEAR        = "USER.POS_PIN.CLEAR";
     public static final String POS_REFUND                = "POS.REFUND";
+    // Offline POS (ADR-0068, V114)
+    /** A till's offline period was recorded at sync (who switched, why). */
+    public static final String POS_OFFLINE_SWITCH        = "POS.OFFLINE.SWITCH";
+    /** A shift the till opened offline was created on the server at sync. */
+    public static final String POS_OFFLINE_SESSION_OPEN  = "POS.OFFLINE.SESSION_OPEN";
+    /** An offline sale was posted at sync, with any review flags. */
+    public static final String POS_OFFLINE_SALE_SYNC     = "POS.OFFLINE.SALE_SYNC";
+    /** An offline sale could not be posted and was held for a manager. */
+    public static final String POS_OFFLINE_SALE_HELD     = "POS.OFFLINE.SALE_HELD";
+    /** A manager acknowledged an item on the offline review list. */
+    public static final String POS_OFFLINE_REVIEW_ACK    = "POS.OFFLINE.REVIEW_ACK";
     // Pricing rules
     public static final String PRICING_TIER_CREATE       = "PRICING.TIER.CREATE";
     public static final String PRICING_TIER_UPDATE       = "PRICING.TIER.UPDATE";
@@ -596,6 +623,8 @@ public final class AuditActions {
     public static final String PREP_STATION_CREATE       = "RESTAURANT.STATION.CREATE";
     public static final String PREP_STATION_UPDATE       = "RESTAURANT.STATION.UPDATE";
     public static final String PREP_ROUTING_REPLACE      = "RESTAURANT.ROUTING.REPLACE";
+    /** One category's station set from the product form (till add-product, web Product Master). */
+    public static final String PREP_ROUTING_SET          = "RESTAURANT.ROUTING.SET";
     public static final String RESTAURANT_ORDER_OPEN     = "RESTAURANT.ORDER.OPEN";
     public static final String RESTAURANT_ORDER_UPDATE   = "RESTAURANT.ORDER.UPDATE";
     public static final String RESTAURANT_ORDER_SEND     = "RESTAURANT.ORDER.SEND";

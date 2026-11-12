@@ -5,6 +5,7 @@ import com.erp.modules.iam.domain.dto.TokenResponse;
 import com.erp.modules.iam.domain.dto.UserBranchDto;
 import com.erp.modules.iam.domain.entity.AppUser;
 import com.erp.modules.iam.domain.entity.Branch;
+import com.erp.modules.iam.domain.entity.Company;
 import com.erp.modules.iam.domain.entity.RefreshToken;
 import com.erp.modules.iam.domain.entity.UserBranch;
 import com.erp.modules.iam.repository.AppUserRepository;
@@ -279,6 +280,12 @@ public class AuthServiceImpl implements AuthService {
         if (!user.isActive()) {
             throw AuthenticationException.invalidCredentials();
         }
+        // A suspended tenant (P5-3) must stop at the next refresh, not merely at the next password
+        // sign-in. Without this a refresh token - rotated on every use, seven days each time - kept
+        // a suspended customer's tills and browsers signed in indefinitely, and "enforced at login"
+        // only ever caught the people who had signed out. Access tokens already issued still run out
+        // their 15 minutes, which is the documented behaviour.
+        assertTenantIsOpen(user);
 
         // Rotate: mint a successor, mark the old one rotated and pointing at it.
         TokenResponse response = issueSession(user);
@@ -411,10 +418,40 @@ public class AuthServiceImpl implements AuthService {
         }
         AppUser user = users.findById(principal.userId())
                 .orElseThrow(AuthenticationException::invalidCredentials);
+        // The platform operator INSIDE a tenant (owner, 2026-11-07 / 2026-11-12): the request runs
+        // as that tenant (the filter set the principal's organisation to the entered branch's), so
+        // every branch picker must offer the TENANT's branches, not the operator's own assignments -
+        // otherwise only the entry branch is reachable and the operator's home branch is offered
+        // inside another organisation. Root alone: a tenant user never gets here with a foreign org.
+        if (user.isRoot() && principal.organisationId() != null
+                && !principal.organisationId().equals(user.getOrganisationId())) {
+            return tenantBranches(principal.organisationId(), user.getUid());
+        }
         // Only ACTIVE branches are switchable — don't offer a branch the user can't actually enter.
         return userBranches.findByUserIdOrderByAssignedAtAscIdAsc(user.getId()).stream()
                 .filter(ub -> ub.getBranch().getStatus() == com.erp.platform.common.domain.MasterStatus.ACTIVE)
                 .map(ub -> UserBranchDto.from(ub, user.getUid()))
+                .toList();
+    }
+
+    /**
+     * Every usable branch of the tenant's companies, shaped like assignments so every picker works
+     * unchanged. There is no assignment row, so {@code id} is null and {@code uid} is the branch uid
+     * (unique, which is all a list key needs). The default is the branch the tenant is entered at
+     * (OrganisationServiceImpl.entryPoint): the first company's default branch, else its first.
+     */
+    private List<UserBranchDto> tenantBranches(Long organisationId, String userUid) {
+        List<Company> tenantCompanies = companies.findByOrganisationIdOrderByName(organisationId);
+        String entryUid = tenantCompanies.stream().findFirst()
+                .flatMap(c -> branches.findByCompanyIdAndIsDefaultTrue(c.getId())
+                        .or(() -> branches.findByCompanyIdOrderByName(c.getId()).stream().findFirst()))
+                .map(Branch::getUid)
+                .orElse(null);
+        return tenantCompanies.stream()
+                .flatMap(c -> branches.findByCompanyIdOrderByName(c.getId()).stream())
+                .filter(Branch::isUsableForSession)
+                .map(b -> new UserBranchDto(null, b.getUid(), userUid, b.getUid(), b.getCode(),
+                        b.getName(), b.getCompany().getUid(), b.getUid().equals(entryUid), null))
                 .toList();
     }
 

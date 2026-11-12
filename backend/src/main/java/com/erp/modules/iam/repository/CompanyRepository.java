@@ -15,6 +15,9 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
 
     boolean existsByOrganisationIdAndCode(Long organisationId, String code);
 
+    /** How many companies a tenant has — the platform console's tenant list (R-2). */
+    long countByOrganisationId(Long organisationId);
+
     /**
      * Load a company by its own id. Named finder (not the inherited {@code findById}) so callers in
      * {@code ..service..} that resolve <em>the active-scope company itself</em> — where the id is the

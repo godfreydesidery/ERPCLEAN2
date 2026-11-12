@@ -5,6 +5,7 @@ import com.erp.modules.sales.domain.dto.CreateRestaurantTableRequest;
 import com.erp.modules.sales.domain.dto.PrepStationCategoryDto;
 import com.erp.modules.sales.domain.dto.PrepStationDto;
 import com.erp.modules.sales.domain.dto.ReplaceCategoryRoutesRequest;
+import com.erp.modules.sales.domain.dto.SetCategoryRouteRequest;
 import com.erp.modules.sales.domain.dto.RestaurantTableDto;
 import com.erp.modules.sales.domain.dto.RestaurantWaiterDto;
 import com.erp.modules.sales.domain.dto.UpdatePrepStationRequest;
@@ -35,6 +36,13 @@ public interface RestaurantSetupService {
 
     /** Replaces the branch's whole routing (an empty list clears it). */
     List<PrepStationCategoryDto> replaceCategoryRoutes(ReplaceCategoryRoutesRequest request);
+
+    /**
+     * Sets where one category prints, leaving every other route alone. A caller without
+     * {@code RESTAURANT.SETUP.MANAGE} (a product manager adding an item) may route a category that
+     * has no route yet, but not move one that already prints somewhere else.
+     */
+    PrepStationCategoryDto setCategoryRoute(SetCategoryRouteRequest request);
 
     /** The distinct product categories in use in the caller's company, for the routing screen. */
     List<String> listProductCategories();

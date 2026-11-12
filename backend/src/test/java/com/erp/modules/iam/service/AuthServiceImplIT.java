@@ -138,4 +138,33 @@ class AuthServiceImplIT extends PostgresIntegrationTest {
         assertThatThrownBy(() -> authService.refresh(res.refreshToken()))
                 .isInstanceOf(AuthenticationException.class);
     }
+
+    /**
+     * P5-3 follow-up: a suspended tenant stops at the next REFRESH, not only at the next password
+     * sign-in. Before this, a rotating seven-day refresh token kept a suspended customer's tills and
+     * browsers signed in indefinitely.
+     */
+    @Test
+    void refresh_afterTheTenantIsSuspended_isRefused() {
+        TokenResponse res = authService.login("alice", PASSWORD, null);
+        Organisation org = organisations.findAll().get(0);
+        org.setStatus(com.erp.platform.common.domain.MasterStatus.INACTIVE);
+        organisations.save(org);
+
+        assertThatThrownBy(() -> authService.refresh(res.refreshToken()))
+                .isInstanceOf(AuthenticationException.class)
+                .hasMessageNotContaining("suspend");
+    }
+
+    @Test
+    void refresh_afterTheTenantIsResumed_worksAgain() {
+        TokenResponse res = authService.login("alice", PASSWORD, null);
+        Organisation org = organisations.findAll().get(0);
+        org.setStatus(com.erp.platform.common.domain.MasterStatus.INACTIVE);
+        org = organisations.save(org);   // the saved copy carries the bumped @Version
+        org.setStatus(com.erp.platform.common.domain.MasterStatus.ACTIVE);
+        organisations.save(org);
+
+        assertThat(authService.refresh(res.refreshToken()).accessToken()).isNotBlank();
+    }
 }

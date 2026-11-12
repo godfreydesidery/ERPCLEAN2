@@ -8,6 +8,9 @@ public interface OrganisationRepository extends JpaRepository<Organisation, Long
 
     Optional<Organisation> findByUid(String uid);
 
+    /** The organisation with this sign-in alias; aliases are immutable (D-7b). */
+    Optional<Organisation> findByAlias(String alias);
+
     /**
      * Sign-in aliases of every CUSTOMER organisation (the platform operator's own organisation is
      * excluded). Used by login to resolve a bare username on a single-customer installation

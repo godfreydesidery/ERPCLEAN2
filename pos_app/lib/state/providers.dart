@@ -4,6 +4,9 @@ import '../core/api/api_client.dart';
 import '../core/api/token_manager.dart';
 import '../core/config/app_config.dart';
 import '../core/storage/secure_store.dart';
+import '../offline/offline_catalog_service.dart';
+import '../offline/offline_controller.dart';
+import '../offline/offline_providers.dart';
 import '../services/auth_service.dart';
 import '../services/catalog_service.dart';
 import '../services/context_service.dart';
@@ -57,8 +60,13 @@ final authServiceProvider = Provider<AuthService>(
 final contextServiceProvider =
     Provider<ContextService>((ref) => ContextService(ref.watch(apiClientProvider)));
 
-final catalogServiceProvider =
-    Provider<CatalogService>((ref) => CatalogService(ref.watch(apiClientProvider)));
+/// Catalogue reads. Offline (ERP ADR-0068) they are answered from the offline
+/// cache, so the registers keep searching, scanning and pricing unchanged.
+final catalogServiceProvider = Provider<CatalogService>((ref) => OfflineAwareCatalogService(
+      ref.watch(apiClientProvider),
+      cache: ref.watch(offlineCatalogProvider),
+      isOffline: () => ref.read(offlineControllerProvider).offline,
+    ));
 
 final partyServiceProvider =
     Provider<PartyService>((ref) => PartyService(ref.watch(apiClientProvider)));

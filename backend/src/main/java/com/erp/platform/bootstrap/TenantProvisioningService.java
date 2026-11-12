@@ -87,6 +87,7 @@ public class TenantProvisioningService {
     private final PosTillProvisioner posTillProvisioner;
     private final com.erp.modules.iam.repository.RoleRepository roles;
     private final com.erp.modules.iam.repository.UserRoleRepository userRoles;
+    private final com.erp.modules.iam.repository.RefreshTokenRepository refreshTokens;
 
     /** Seeded by V1__baseline.sql; the tenant administrator bundle. */
     private static final String ORG_ADMIN_CODE = "ORG_ADMIN";
@@ -105,7 +106,8 @@ public class TenantProvisioningService {
                                      WalkInCustomerProvisioner walkInCustomerProvisioner,
                                      PosTillProvisioner posTillProvisioner,
                                      com.erp.modules.iam.repository.RoleRepository roles,
-                                     com.erp.modules.iam.repository.UserRoleRepository userRoles) {
+                                     com.erp.modules.iam.repository.UserRoleRepository userRoles,
+                                     com.erp.modules.iam.repository.RefreshTokenRepository refreshTokens) {
         this.organisations = organisations;
         this.companies = companies;
         this.branches = branches;
@@ -121,6 +123,7 @@ public class TenantProvisioningService {
         this.posTillProvisioner = posTillProvisioner;
         this.roles = roles;
         this.userRoles = userRoles;
+        this.refreshTokens = refreshTokens;
     }
 
     /** Everything a caller needs back after provisioning, without exposing the entities. */
@@ -215,6 +218,24 @@ public class TenantProvisioningService {
      */
     @Transactional
     public ProvisionedTenant provision(NewTenantRequest request) {
+        Structure s = createStructure(request);
+        Organisation org = s.org();
+        Company company = s.company();
+        Branch branch = s.branch();
+        return attachNewAdministrator(request, org, company, branch);
+    }
+
+    /** What {@link #createStructure} built: the organisation, its company and default branch. */
+    private record Structure(Organisation org, Company company, Branch branch) {
+    }
+
+    /**
+     * Organisation, company, branch and every company-scoped default - everything a tenant is
+     * EXCEPT its administrator. Shared by {@link #provision} and {@link #provisionPlatform}, so the
+     * platform organisation is built by exactly the path every tenant takes (owner, 2026-11-07:
+     * "usual defaults").
+     */
+    private Structure createStructure(NewTenantRequest request) {
         Organisation org = new Organisation(request.organisationName());
         org.setDefaultTimeZone(request.timeZone());
         organisations.save(org);
@@ -301,7 +322,11 @@ public class TenantProvisioningService {
         walkInCustomerProvisioner.createIfNamed(company.getId(), request.walkInCustomerName());
         posTillProvisioner.createIfNamed(
                 company.getId(), branch.getId(), request.posTillName(), priceListId);
+        return new Structure(org, company, branch);
+    }
 
+    private ProvisionedTenant attachNewAdministrator(NewTenantRequest request, Organisation org,
+                                                     Company company, Branch branch) {
         // The tenant's first administrator is a TENANT user, so their username composes like every
         // other one (D-7): the caller supplies the local part and the alias is appended here. Without
         // this, two tenants each provisioning an `admin` would collide on the globally-unique
@@ -390,5 +415,72 @@ public class TenantProvisioningService {
 
         return new ProvisionedTenant(org.getId(), company.getId(), branch.getId(), admin.getId(),
                 org.getName(), company.getCode(), branch.getCode(), admin.getUsername());
+    }
+
+    /** Name, and therefore alias, of the platform organisation. */
+    public static final String PLATFORM_NAME = "Platform";
+
+    /** What {@link #provisionPlatform} built. */
+    public record ProvisionedPlatform(Long organisationId, Long companyId, Long branchId,
+                                      Long previousOrganisationId) {
+    }
+
+    /**
+     * Creates the platform organisation and MOVES the given root operator into it, in the caller's
+     * transaction (owner, 2026-11-07). The caller has already checked every precondition.
+     *
+     * <p>Only the operator's own rows change: its organisation, a membership of and default branch
+     * in the new company, and its assignments and grants in the old organisation revoked (never
+     * deleted). Its refresh tokens are revoked so the next sign-in builds a session in Platform. The
+     * old organisation's business data is not touched.
+     */
+    @Transactional
+    public ProvisionedPlatform provisionPlatform(Long operatorUserId, String timeZone) {
+        AppUser operator = users.findById(operatorUserId)
+                .orElseThrow(() -> new IllegalStateException("Operator not found."));
+        Long previousOrganisationId = operator.getOrganisationId();
+
+        Structure s = createStructure(new NewTenantRequest(
+                PLATFORM_NAME, timeZone, "PLATFORM", "Platform", null, null, null,
+                "HQ", "Platform HQ", "unused", "unused", "unused",
+                "TZS", "TZS", java.util.List.of("TZS"), null, null, null, null, null,
+                false, false));
+
+        java.time.Instant now = java.time.Instant.now();
+        for (UserBranch ub : userBranches.findByUserIdOrderByAssignedAtAscIdAsc(operator.getId())) {
+            if (ub.isDefault()) {
+                ub.clearDefault();
+            }
+            if (ub.getRevokedAt() == null) {
+                ub.revoke(now);
+            }
+            userBranches.save(ub);
+        }
+        // Flush NOW: Hibernate orders INSERTs before UPDATEs, so without this the new default row
+        // below would be inserted while the old one still has is_default = true, and the partial
+        // unique index uq_user_branch_default (one default per user) would reject it.
+        userBranches.flush();
+        for (UserCompany uc : userCompanies
+                .findByUserIdAndRevokedAtIsNullOrderByAssignedAtAscIdAsc(operator.getId())) {
+            uc.revoke(now);
+            userCompanies.save(uc);
+        }
+        for (UserRole ur : userRoles.findByUserIdAndRevokedAtIsNull(operator.getId())) {
+            ur.revoke(now);
+            userRoles.save(ur);
+        }
+
+        operator.setOrganisationId(s.org().getId());
+        users.save(operator);
+        UserBranch home = new UserBranch(operator.getId(), s.branch(), operator.getId());
+        home.markDefault();
+        userBranches.save(home);
+        userCompanies.save(new UserCompany(operator.getId(), s.company(), operator.getId()));
+        refreshTokens.revokeAllForUser(operator.getId(), now);
+
+        log.warn("Platform organisation {} created; operator {} moved from organisation {}.",
+                s.org().getId(), operator.getUsername(), previousOrganisationId);
+        return new ProvisionedPlatform(s.org().getId(), s.company().getId(), s.branch().getId(),
+                previousOrganisationId);
     }
 }

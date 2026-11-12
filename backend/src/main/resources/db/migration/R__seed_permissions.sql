@@ -141,6 +141,8 @@ INSERT INTO permissions (code, module, description) VALUES
     ('POS.CASHUP.VIEW', 'sales', 'View the company-wide cash-up / payment summary across every cashier (managers)'),
     ('POS.EXPENSE.RECORD', 'sales', 'Record a categorised expense paid out of the till drawer'),
     ('POS.EXPENSE.VIEW', 'sales', 'View the till-expense report across sessions'),
+    ('POS.OFFLINE.REVIEW', 'pos', 'Review offline periods and flagged or held offline sales'),
+    ('POS.OFFLINE.SWITCH', 'pos', 'Switch a till to offline selling by hand (server reachable but unusable)'),
     ('POS.SALE.AGE_OVERRIDE', 'pos', 'Sell an age-restricted item without an age-verification acknowledgement'),
     ('POS.SALE.CREATE', 'sales', 'Ring a POS sale on an open session'),
     ('POS.SALE.VOID', 'sales', 'Reverse / void a POS sale at the till (refund)'),
@@ -694,6 +696,11 @@ SELECT r.id, p.id FROM (VALUES
   -- failure, not a security posture.
   ('SALES_MANAGER','POS.SESSION.VIEW'),
   ('SALES_MANAGER','POS.CASHUP.VIEW'),
+  -- ADR-0068 (V114): offline POS. A manager confirms a manual switch to offline and reviews what
+  -- the tills sold offline. CASHIER holds neither: a cashier's switch when the server is truly
+  -- unreachable needs no permission, and syncing uses POS.SALE.CREATE.
+  ('SALES_MANAGER','POS.OFFLINE.SWITCH'),
+  ('SALES_MANAGER','POS.OFFLINE.REVIEW'),
   ('SALES_MANAGER','RESTAURANT.ORDER.MANAGE'),
   ('SALES_MANAGER','RESTAURANT.ORDER.VOID'),
   ('SALES_MANAGER','BRANCH.VIEW'),
@@ -719,6 +726,8 @@ SELECT r.id, p.id FROM (VALUES
   -- (till stranded by an ended shift / lost device) before reconciling it -- without it CASHIER
   -- was the only bundle holding the code, so a stranded till waited for a cashier to come back.
   ('BRANCH_MANAGER','POS.SESSION.CLOSE'),
+  ('BRANCH_MANAGER','POS.OFFLINE.SWITCH'),
+  ('BRANCH_MANAGER','POS.OFFLINE.REVIEW'),
   ('BRANCH_MANAGER','POS.SESSION.RECONCILE'),
   ('BRANCH_MANAGER','POS.SALE.VOID'),
   ('BRANCH_MANAGER','POS.SALE.AGE_OVERRIDE'),

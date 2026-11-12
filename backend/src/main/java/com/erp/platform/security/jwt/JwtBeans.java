@@ -10,7 +10,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 /**
@@ -22,13 +21,17 @@ public class JwtBeans {
 
     @Bean
     public JwtEncoder jwtEncoder(RsaKeyProvider keys) {
-        JWK jwk = new RSAKey.Builder(keys.publicKey()).privateKey(keys.privateKey()).build();
+        // Tokens are only ever signed with the CURRENT key; its kid goes into the JWS header.
+        JWK jwk = new RSAKey.Builder(keys.publicKey())
+                .privateKey(keys.privateKey())
+                .keyID(keys.keyId())
+                .build();
         JWKSource<SecurityContext> source = new ImmutableJWKSet<>(new JWKSet(jwk));
         return new NimbusJwtEncoder(source);
     }
 
     @Bean
     public JwtDecoder jwtDecoder(RsaKeyProvider keys) {
-        return NimbusJwtDecoder.withPublicKey(keys.publicKey()).build();
+        return new KidAwareJwtDecoder(keys.keyId(), keys.publicKey(), keys.previousPublicKeys());
     }
 }

@@ -86,6 +86,10 @@ enum GatedAction {
 
   /// Move a table to another waiter (ADR-0067 D-2), when a waiter asks.
   restaurantTransfer,
+
+  /// Switch the till to offline selling while the server still answers
+  /// (ERP ADR-0068 D-1). Only a manager's PASSWORD — never the 4-digit PIN.
+  offlineSwitch,
 }
 
 /// How one [GatedAction] is treated.
@@ -214,6 +218,17 @@ const Map<GatedAction, StepUpRule> kStepUpPolicy = {
     permissionCode: 'RESTAURANT.ORDER.VOID',
     title: 'Manager approval — move table',
     purpose: 'Move a table to another waiter, who then serves it and is credited with its bill.',
+  ),
+  GatedAction.offlineSwitch: StepUpRule(
+    requiresApproval: true,
+    // ADR-0068 D-1 / Appendix B: seeded for SALES_MANAGER and BRANCH_MANAGER, never CASHIER. The
+    // till sends the approver's uid as the offline period's switchedByUid; the server records it.
+    // The dialog asks for the manager's password: a PIN verifier falls to 10,000 guesses, and the
+    // switch relaxes the rules for the whole till (D-7).
+    permissionCode: 'POS.OFFLINE.SWITCH',
+    title: 'Manager approval — sell offline',
+    purpose: 'The server still answers. Switch this till to offline selling anyway '
+        '(it returns online by itself once the server answers quickly again).',
   ),
   GatedAction.abandonUnfinishedSale: StepUpRule(
     requiresApproval: true,

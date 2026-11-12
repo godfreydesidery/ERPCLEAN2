@@ -62,6 +62,15 @@ public class PosTill extends UidEntity {
     @Setter
     private MasterStatus status = MasterStatus.ACTIVE;
 
+    /**
+     * ADR-0068 D-1 (V114): may this till keep selling while the server is unreachable? Off by
+     * default — a till that is not allowed never goes offline, and its offline sales are refused at
+     * sync.
+     */
+    @Column(name = "offline_allowed", nullable = false)
+    @Setter
+    private boolean offlineAllowed = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

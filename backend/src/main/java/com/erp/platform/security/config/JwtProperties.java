@@ -1,5 +1,6 @@
 package com.erp.platform.security.config;
 
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -14,7 +15,16 @@ public record JwtProperties(
         String publicKeyLocation,
         int accessTokenTtlMinutes,
         int refreshTokenTtlDays,
-        String issuer) {
+        String issuer,
+        List<String> previousPublicKeyPaths) {
+
+    /** Normalises the optional rotation-overlap list: null/blank entries dropped. */
+    public JwtProperties {
+        previousPublicKeyPaths = previousPublicKeyPaths == null
+                ? List.of()
+                : previousPublicKeyPaths.stream()
+                        .map(String::trim).filter(p -> !p.isEmpty()).toList();
+    }
 
     public boolean isDevInMemory() {
         return signingMode == null || "dev-in-memory".equalsIgnoreCase(signingMode);

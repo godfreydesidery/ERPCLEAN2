@@ -775,4 +775,28 @@ void main() {
       expect(AndroidBtPrinters.addressOf('Kitchen · not-an-address'), isNull);
     });
   });
+
+  group('department routing (Tulia 2026-11-12)', () {
+    final routes = [
+      CategoryRoute.fromJson({
+        'uid': 'R1',
+        'category': 'Hot Drinks',
+        'prepStationUid': 'BAR',
+        'prepStationName': 'Barista',
+      }),
+      CategoryRoute.fromJson({'category': 'Food', 'prepStationUid': 'KIT', 'prepStationName': 'Kitchen'}),
+    ];
+
+    test('matches a department the way the server does: trimmed, spaces collapsed, any case', () {
+      expect(CategoryRoute.find(routes, '  hot   DRINKS ')?.stationName, 'Barista');
+      expect(CategoryRoute.find(routes, 'food')?.stationUid, 'KIT');
+    });
+
+    test('a new or blank department has no route, so it prints at the default station', () {
+      expect(CategoryRoute.find(routes, 'Kitchen'), isNull,
+          reason: 'naming a department "Kitchen" does not route it to the kitchen');
+      expect(CategoryRoute.find(routes, '   '), isNull);
+      expect(CategoryRoute.find(const [], 'Food'), isNull);
+    });
+  });
 }

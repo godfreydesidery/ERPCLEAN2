@@ -1,0 +1,209 @@
+<section class="admin-page">
+  <header class="erp-page-head">
+    <div class="erp-page-head__titles">
+      <h1>Offline sales review</h1>
+      <p class="subtitle">
+        <i class="bi bi-wifi-off me-1" aria-hidden="true"></i>
+        Sales made while a till could not reach the server, and anything that needs a manager's attention.
+      </p>
+    </div>
+  </header>
+
+  @if (!canReview()) {
+    <p class="text-muted d-flex align-items-center gap-2">
+      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+      You don't have permission to review offline sales.
+    </p>
+  } @else {
+    <!-- Review items -->
+    <div class="erp-card mb-4">
+      <div class="erp-card__head">
+        <h2 id="reviewHeading">Review items</h2>
+      </div>
+      <div class="erp-card__body">
+        <div class="mb-3" style="max-width:320px">
+          <label class="form-label small text-muted mb-1" for="reviewStatus">Show</label>
+          <select id="reviewStatus" name="reviewStatus" class="form-select"
+                  [ngModel]="statusFilter()" (ngModelChange)="setStatus($event)">
+            <option value="OPEN">Needs review</option>
+            <option value="ACKNOWLEDGED">Acknowledged</option>
+          </select>
+        </div>
+
+        @switch (itemsState()) {
+          @case ('loading') {
+            <output class="text-muted d-flex align-items-center gap-2">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading review items…
+            </output>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ itemsError() }}
+            </p>
+          }
+          @default {
+            @if (items().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                {{ statusFilter() === 'OPEN' ? 'Nothing to review.' : 'No acknowledged items yet.' }}
+              </div>
+            } @else {
+              <div class="erp-table-wrap">
+                <table class="erp-table" aria-labelledby="reviewHeading">
+                  <thead>
+                    <tr>
+                      <th scope="col">Kind</th>
+                      <th scope="col">Offline receipt</th>
+                      <th scope="col">Till</th>
+                      <th scope="col">Invoice</th>
+                      <th scope="col">Detail</th>
+                      <th scope="col">Time</th>
+                      <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (i of items(); track i.uid) {
+                      <tr>
+                        <td>{{ kindLabel(i.kind) }}</td>
+                        <td>{{ i.offlineNumber || '—' }}</td>
+                        <td>{{ i.tillName || '—' }}</td>
+                        <td>
+                          @if (i.invoiceUid && i.invoiceNumber) {
+                            <a [routerLink]="['/admin/sales-invoices/uid', i.invoiceUid]">{{ i.invoiceNumber }}</a>
+                          } @else {
+                            {{ i.invoiceNumber || '—' }}
+                          }
+                        </td>
+                        <td>
+                          {{ i.detail || '—' }}
+                          @if (i.status === 'ACKNOWLEDGED') {
+                            <div class="text-muted small">
+                              Acknowledged by {{ i.acknowledgedByName || 'a manager' }}
+                              @if (i.acknowledgedAt) { on {{ i.acknowledgedAt | appDate:'datetime' }} }
+                              @if (i.acknowledgeNote) { — {{ i.acknowledgeNote }} }
+                            </div>
+                          }
+                        </td>
+                        <td class="text-muted">{{ (i.createdAt | appDate:'datetime') || '—' }}</td>
+                        <td>
+                          <div class="d-flex flex-wrap gap-1">
+                            @if (i.kind === 'HELD' && i.heldRequest) {
+                              <button type="button" class="btn btn-sm btn-outline-secondary"
+                                      [attr.aria-expanded]="expandedUid() === i.uid"
+                                      [attr.aria-controls]="'held-' + i.uid"
+                                      (click)="toggleExpand(i.uid)">
+                                View sale as rung
+                              </button>
+                            }
+                            @if (i.status === 'OPEN') {
+                              <button type="button" class="btn btn-sm btn-outline-primary"
+                                      [attr.aria-label]="'Acknowledge ' + kindLabel(i.kind) + ' ' + (i.offlineNumber || '')"
+                                      (click)="startAck(i.uid)">
+                                Acknowledge
+                              </button>
+                            }
+                          </div>
+                        </td>
+                      </tr>
+                      @if (expandedUid() === i.uid && i.heldRequest) {
+                        <tr>
+                          <td colspan="7">
+                            <pre [id]="'held-' + i.uid" class="bg-light border rounded p-2 small mb-0 overflow-auto" tabindex="0"
+                                 aria-label="Sale as rung">{{ prettyHeld(i.heldRequest) }}</pre>
+                          </td>
+                        </tr>
+                      }
+                      @if (ackUid() === i.uid) {
+                        <tr>
+                          <td colspan="7">
+                            <form (ngSubmit)="confirmAck()" aria-label="Acknowledge review item">
+                              <label class="form-label" [for]="'ack-note-' + i.uid">Note (optional)</label>
+                              <textarea [id]="'ack-note-' + i.uid" name="ackNote" class="form-control mb-2"
+                                        rows="2" maxlength="500"
+                                        [ngModel]="ackNote()" (ngModelChange)="ackNote.set($event)"
+                                        [disabled]="ackBusy()"></textarea>
+                              @if (ackError(); as msg) {
+                                <p class="text-danger small mb-2" role="alert">{{ msg }}</p>
+                              }
+                              <button type="submit" class="btn btn-sm btn-primary me-2" [disabled]="ackBusy()">
+                                @if (ackBusy()) {
+                                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                                }
+                                Confirm acknowledge
+                              </button>
+                              <button type="button" class="btn btn-sm btn-outline-secondary"
+                                      [disabled]="ackBusy()" (click)="cancelAck()">Cancel</button>
+                            </form>
+                          </td>
+                        </tr>
+                      }
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <app-paginator [meta]="itemsMeta()" [label]="'Review items'" (pageChange)="loadItems($event)" />
+            }
+          }
+        }
+      </div>
+    </div>
+
+    <!-- Offline periods -->
+    <div class="erp-card">
+      <div class="erp-card__head">
+        <h2 id="periodsHeading">Offline periods</h2>
+      </div>
+      <div class="erp-card__body">
+        @switch (periodsState()) {
+          @case ('loading') {
+            <output class="text-muted d-flex align-items-center gap-2">
+              <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Loading offline periods…
+            </output>
+          }
+          @case ('error') {
+            <p class="text-danger" role="alert">
+              <i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ periodsError() }}
+            </p>
+          }
+          @default {
+            @if (periods().length === 0) {
+              <div class="erp-empty">
+                <i class="bi bi-wifi" aria-hidden="true"></i> No till has gone offline.
+              </div>
+            } @else {
+              <div class="erp-table-wrap">
+                <table class="erp-table" aria-labelledby="periodsHeading">
+                  <thead>
+                    <tr>
+                      <th scope="col">Till</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Switched by</th>
+                      <th scope="col">Started</th>
+                      <th scope="col">Ended</th>
+                      <th scope="col" class="num">Sales</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (p of periods(); track p.uid) {
+                      <tr>
+                        <td>{{ p.tillName || '—' }}</td>
+                        <td>{{ reasonLabel(p.reason) }}</td>
+                        <td>{{ p.switchedByName || '—' }}</td>
+                        <td class="text-muted">{{ (p.startedAt | appDate:'datetime') || '—' }}</td>
+                        <td class="text-muted">
+                          @if (p.endedAt) { {{ p.endedAt | appDate:'datetime' }} } @else { Still offline }
+                        </td>
+                        <td class="num">{{ p.salesCount }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              <app-paginator [meta]="periodsMeta()" [label]="'Offline periods'" (pageChange)="loadPeriods($event)" />
+            }
+          }
+        }
+      </div>
+    </div>
+  }
+</section>

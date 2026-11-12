@@ -29,4 +29,23 @@ public interface OrganisationService {
      * with a message that says nothing about billing or suspension.
      */
     OrganisationDto setStatus(String uid, boolean active);
+
+    /**
+     * Every tenant on the instance, for the platform console (MULTITENANCY-PLAN §14.2 R-2).
+     * Platform operator only; anyone else is told the resource does not exist.
+     */
+    List<com.erp.modules.iam.domain.dto.TenantSummaryDto> listTenants();
+
+    /**
+     * The branch the platform operator enters a tenant through: the default branch of the tenant's
+     * first company (owner, 2026-11-07). Platform operator only; anyone else gets NOT FOUND.
+     */
+    com.erp.modules.iam.domain.dto.TenantEntryDto entryPoint(String organisationUid);
+
+    /**
+     * Creates the platform organisation and moves the signed-in root operator into it (owner,
+     * 2026-11-07). Refused unless every precondition holds; see the implementation.
+     */
+    OrganisationDto createPlatformOrganisation(
+            com.erp.modules.iam.domain.dto.CreatePlatformOrganisationRequest request);
 }

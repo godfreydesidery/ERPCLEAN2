@@ -70,6 +70,23 @@ export class RestaurantService {
     return this.http.put<PrepStationCategoryDto[]>(`${this.base}/category-routes`, request);
   }
 
+  /**
+   * Sets where ONE department prints in the active branch, leaving the rest of the routing alone
+   * (the product form). Without RESTAURANT.SETUP.MANAGE only a department with no route yet can
+   * be routed; the server refuses a move with a message saying so.
+   */
+  setCategoryRoute(
+    category: string,
+    prepStationUid: string,
+    branchUid?: string,
+  ): Observable<PrepStationCategoryDto> {
+    return this.http.put<PrepStationCategoryDto>(`${this.base}/category-routes/one`, {
+      branchUid: branchUid || null,
+      category,
+      prepStationUid,
+    });
+  }
+
   /** The product categories in use in the company — the rows of the routing screen. */
   listProductCategories(): Observable<string[]> {
     return this.http.get<string[]>(`${this.base}/product-categories`);
