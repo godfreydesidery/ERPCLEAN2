@@ -151,9 +151,9 @@ every payment writes an audit row.
 
 ### D-9 · The OrbixHQ add-on needs the app to identify itself
 
-The OrbixHQ app (from **1.5.0**) sends `X-Client-App: orbixhq` on every request. When a tenant without
+The OrbixHQ app (from **1.4.2**) sends `X-Client-App: orbixhq` on every request. When a tenant without
 the add-on sends it, the request is refused with "The OrbixHQ app is not part of your plan." Apps
-older than 1.5.0 do not send the header and are therefore not gated; that is accepted (this is a
+older than 1.4.2 do not send the header and are therefore not gated; that is accepted (this is a
 commercial gate, not a security boundary — every endpoint the app uses is equally open to the web
 client). A minimum-app-version check can close the gap later if it matters.
 
