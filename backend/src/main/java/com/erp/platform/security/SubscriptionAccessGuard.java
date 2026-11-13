@@ -24,7 +24,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  *   <li><b>SUSPENDED</b> — every request is refused except the session calls. Sign-in itself is
  *       refused by {@code AuthServiceImpl}.
  *   <li><b>OrbixHQ</b> — a request carrying {@code X-Client-App: orbixhq} from a tenant without the
- *       add-on is refused. Apps before 1.5.0 do not send the header and are not gated (D-9).
+ *       add-on is refused. Apps before 1.4.2 do not send the header and are not gated (D-9).
  * </ul>
  *
  * <p>The platform operator ({@code is_root}, also inside an entered tenant), system principals and
