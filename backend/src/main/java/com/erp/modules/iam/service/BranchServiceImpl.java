@@ -32,11 +32,15 @@ public class BranchServiceImpl implements BranchService {
     // is NOT NULL), so this branch-scoped call completes the seed once a (default) branch exists,
     // mirroring the stockLocationSeeder wiring above.
     private final PettyCashFundSeeder   pettyCashFundSeeder;
+    /** ADR-0069 D-5: plan caps. */
+    private final com.erp.modules.subscription.service.SubscriptionGate subscriptionGate;
 
     public BranchServiceImpl(BranchRepository branches, CompanyRepository companies,
                              UserBranchRepository userBranches,
                              StockLocationSeeder stockLocationSeeder,
-                             PettyCashFundSeeder pettyCashFundSeeder) {
+                             PettyCashFundSeeder pettyCashFundSeeder,
+                             com.erp.modules.subscription.service.SubscriptionGate subscriptionGate) {
+        this.subscriptionGate = subscriptionGate;
         this.branches            = branches;
         this.companies           = companies;
         this.userBranches        = userBranches;
@@ -52,6 +56,10 @@ public class BranchServiceImpl implements BranchService {
         if (branches.existsByCompanyIdAndCode(company.getId(), request.code())) {
             throw new ConflictException("Branch code already exists in this company: " + request.code());
         }
+
+        // Scope from the LOADED company, never from the caller (ADR-0069 D-5).
+        subscriptionGate.assertCanAddInCompany(company.getId(),
+                com.erp.modules.subscription.domain.enums.CapResource.BRANCHES);
 
         Branch branch = new Branch(company, request.code(), request.name());
         branch.setTimeZone(

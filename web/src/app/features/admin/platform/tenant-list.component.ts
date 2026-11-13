@@ -1,10 +1,13 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
 import { AuthService } from '../../../core/auth/auth.service';
 import { CreateTenantRequest, TenantSummary } from './tenant.model';
 import { TenantService } from './tenant.service';
+import { SubscriptionService } from './subscription.service';
+import { PlanCode, PlanDefinition, stageLabel, stageTagClass } from './subscription.model';
 
 type ConfirmAction = 'suspend' | 'resume';
 
@@ -15,7 +18,7 @@ type ConfirmAction = 'suspend' | 'resume';
  */
 @Component({
   selector: 'app-tenant-list',
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, RouterLink],
   templateUrl: './tenant-list.component.html',
   styleUrl: './tenant-list.component.scss',
 })
@@ -23,6 +26,9 @@ export class TenantListComponent {
   private readonly service = inject(TenantService);
   private readonly session = inject(SessionStore);
   private readonly auth = inject(AuthService);
+  private readonly subscriptions = inject(SubscriptionService);
+  readonly stageLabel = stageLabel;
+  readonly stageTagClass = stageTagClass;
 
   readonly tenants = signal<TenantSummary[]>([]);
   readonly state = signal<'loading' | 'ready' | 'error'>('loading');
@@ -56,6 +62,11 @@ export class TenantListComponent {
   /** True for the platform organisation's row: never entered, suspended or exported. */
   isPlatform(t: TenantSummary): boolean {
     return t.alias === 'platform';
+  }
+  /** Plan column text: the plan's display name, or the unrestricted note when none is assigned. */
+  planName(t: TenantSummary): string {
+    if (!t.planCode) return 'No plan (unrestricted)';
+    return t.planCode.charAt(0) + t.planCode.slice(1).toLowerCase();
   }
   /** The organisation the operator is in, which the move would leave. */
   readonly homeTenant = computed(() => this.tenants().find((t) => t.current) ?? null);
@@ -109,6 +120,12 @@ export class TenantListComponent {
   readonly baseCurrency = signal('');
   readonly defaultCurrency = signal('');
   readonly enabledCurrencies = signal('');
+  /** Required: the tenant starts a 14-day trial on this plan (ADR-0069). */
+  readonly planCode = signal<PlanCode | ''>('');
+  readonly addOnRestaurant = signal(false);
+  readonly addOnOrbixHq = signal(false);
+  readonly plans = signal<PlanDefinition[]>([]);
+  readonly plansError = signal(false);
 
   /**
    * Guard for single-customer servers (owner, 2026-11-07). While this server holds only ONE
@@ -290,6 +307,16 @@ export class TenantListComponent {
     this.submitted.set(false);
     this.sharedConfirm.set('');
     this.showForm.set(true);
+    this.loadPlans();
+  }
+
+  /** The plan catalogue for the Plan select; fetched when the form opens. */
+  loadPlans(): void {
+    this.plansError.set(false);
+    this.subscriptions.catalogue().subscribe({
+      next: (c) => this.plans.set([...c.plans].sort((a, b) => a.rank - b.rank)),
+      error: () => this.plansError.set(true),
+    });
   }
 
   closeForm(): void {
@@ -325,6 +352,9 @@ export class TenantListComponent {
       priceListIncludesVat: this.priceListNamed() ? this.priceListIncludesVat() === 'yes' : undefined,
       walkInCustomerName: opt(this.walkInCustomerName()),
       posTillName: opt(this.posTillName()),
+      planCode: this.planCode() || undefined,
+      addOnRestaurant: this.addOnRestaurant(),
+      addOnOrbixHq: this.addOnOrbixHq(),
     };
   }
 
@@ -335,6 +365,7 @@ export class TenantListComponent {
       this.companyName(),
       this.branchCode(),
       this.branchName(),
+      this.planCode(),
     ].some((v) => !v.trim());
   }
 
@@ -386,6 +417,9 @@ export class TenantListComponent {
       this.enabledCurrencies,
     ].forEach((s) => s.set(''));
     this.priceListIncludesVat.set('');
+    this.planCode.set('');
+    this.addOnRestaurant.set(false);
+    this.addOnOrbixHq.set(false);
     this.sharedConfirm.set('');
     this.submitted.set(false);
   }

@@ -604,3 +604,30 @@
     animation: none;
   }
 }
+
+/* ADR-0069 subscription notice: AA pairs from the design tokens (fg on bg). */
+.subscription-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.subscription-banner--info {
+  background: var(--erp-info-bg);
+  color: var(--erp-info-fg);
+  border-color: var(--erp-info);
+}
+.subscription-banner--warning {
+  background: var(--erp-warn-bg);
+  color: var(--erp-warn-fg);
+  border-color: var(--erp-warn);
+}
+.subscription-banner--error {
+  background: var(--erp-danger-bg);
+  color: var(--erp-danger-fg);
+  border-color: var(--erp-danger);
+}

@@ -124,7 +124,9 @@ class _ErrorState extends StatelessWidget {
       if (e.statusCode == 403) {
         return (
           title: 'You do not have access to this',
-          detail: 'Ask an administrator to grant you permission.',
+          detail: e.errors.isNotEmpty
+              ? e.message
+              : 'Ask an administrator to grant you permission.',
           icon: Icons.lock_outline_rounded,
         );
       }

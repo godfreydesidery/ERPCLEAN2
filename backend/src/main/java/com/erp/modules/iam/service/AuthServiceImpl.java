@@ -57,6 +57,8 @@ public class AuthServiceImpl implements AuthService {
 
     private final PasswordPolicy passwordPolicy;
     private final AuditService audit;
+    private final com.erp.modules.subscription.service.SubscriptionGate subscriptionGate;
+    private final com.erp.modules.subscription.service.SubscriptionService subscriptionService;
 
     /** A bcrypt hash of a random value, computed once, for the constant-time unknown-user path (G3). */
     private final String dummyHash;
@@ -73,7 +75,11 @@ public class AuthServiceImpl implements AuthService {
                            PermissionResolver permissionResolver,
                            OrganisationRepository organisations,
                            PasswordPolicy passwordPolicy,
-                           AuditService audit) {
+                           AuditService audit,
+                           com.erp.modules.subscription.service.SubscriptionGate subscriptionGate,
+                           com.erp.modules.subscription.service.SubscriptionService subscriptionService) {
+        this.subscriptionGate = subscriptionGate;
+        this.subscriptionService = subscriptionService;
         this.organisations = organisations;
         this.passwordPolicy = passwordPolicy;
         this.audit = audit;
@@ -332,7 +338,11 @@ public class AuthServiceImpl implements AuthService {
                 companyUid,
                 branchUid,
                 permissions,
-                user.isMustChangePassword());
+                user.isMustChangePassword(),
+                // ADR-0069 D-11: the banner's summary. None for the platform operator, who is never
+                // under a plan, nor for a tenant without one.
+                user.isRoot() ? null
+                        : subscriptionService.summaryFor(principal.organisationId()).orElse(null));
     }
 
     /**
@@ -524,5 +534,12 @@ public class AuthServiceImpl implements AuthService {
                             "This account is not available at the moment. "
                             + "Please contact your administrator.");
                 });
+        // ADR-0069 D-6: the last rung of the non-payment ladder. Said plainly - unlike a manual
+        // suspension, the customer can act on it.
+        if (subscriptionGate.stageOf(user.getOrganisationId())
+                == com.erp.modules.subscription.domain.enums.SubscriptionStage.SUSPENDED) {
+            throw new AuthenticationException("Your subscription has lapsed and access is "
+                    + "suspended. Please contact your provider to restore it.");
+        }
     }
 }

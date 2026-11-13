@@ -1,4 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
+import { provideRouter } from '@angular/router';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { environment } from '../../../../environments/environment';
@@ -17,6 +18,8 @@ const tenant = (over: Partial<TenantSummary> = {}): TenantSummary => ({
   createdAt: '2026-10-01T08:00:00Z',
   companyCount: 2,
   userCount: 5,
+  planCode: null,
+  subscriptionStage: 'UNRESTRICTED',
   ...over,
 });
 
@@ -26,7 +29,7 @@ describe('TenantListComponent', () => {
   let comp: TenantListComponent;
 
   function setup(rows: TenantSummary[] = [tenant()], perms: string[] = ['ORG.CREATE', 'ORG.SUSPEND']): void {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.configureTestingModule({ providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] });
     const session = TestBed.inject(SessionStore);
     session.clear();
     session.setPermissions(perms);
@@ -37,7 +40,23 @@ describe('TenantListComponent', () => {
     fixture.detectChanges();
   }
 
+  const catalogue = {
+    plans: [
+      { code: 'PREMIUM', name: 'Premium', rank: 3, maxUsers: 50, maxBranches: 15, maxTills: 30, maxCompanies: 3, modules: [] },
+      { code: 'BASIC', name: 'Basic', rank: 1, maxUsers: 5, maxBranches: 1, maxTills: 3, maxCompanies: 1, modules: [] },
+    ],
+    addOns: [],
+  };
+
+  /** Opens the create form and answers its catalogue request. */
+  function openForm(): void {
+    comp.openForm();
+    http.expectOne(`${environment.apiBaseUrl}/subscription-plans`).flush(catalogue);
+    fixture.detectChanges();
+  }
+
   function fillRequired(): void {
+    comp.planCode.set('BASIC');
     comp.organisationName.set('Beta Ltd');
     comp.companyCode.set('BETA');
     comp.companyName.set('Beta Company');
@@ -71,7 +90,7 @@ describe('TenantListComponent', () => {
   });
 
   it('shows the error state when the list fails to load', () => {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.configureTestingModule({ providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] });
     fixture = TestBed.createComponent(TenantListComponent);
     http = TestBed.inject(HttpTestingController);
     http.expectOne(`${base}/tenants`).flush({ errors: ['x'] }, { status: 500, statusText: 'Error' });
@@ -152,6 +171,9 @@ describe('TenantListComponent', () => {
       priceListIncludesVat: undefined,
       walkInCustomerName: undefined,
       posTillName: undefined,
+      planCode: 'BASIC',
+      addOnRestaurant: false,
+      addOnOrbixHq: false,
     });
   });
 
@@ -197,7 +219,7 @@ describe('TenantListComponent', () => {
 
   it('creates the tenant, shows <local>@<alias> and refreshes the list', () => {
     setup();
-    comp.openForm();
+    openForm();
     fillRequired();
     comp.create();
     const req = http.expectOne(base);
@@ -213,7 +235,7 @@ describe('TenantListComponent', () => {
 
   it('shows the server message when creation is refused', () => {
     setup();
-    comp.openForm();
+    openForm();
     fillRequired();
     comp.create();
     http
@@ -225,7 +247,7 @@ describe('TenantListComponent', () => {
 
   it('on a one-organisation server, refuses to create until the current name is typed exactly', () => {
     setup([tenant()]);
-    comp.openForm();
+    openForm();
     fillRequired();
     comp.sharedConfirm.set('');
     fixture.detectChanges();
@@ -246,7 +268,7 @@ describe('TenantListComponent', () => {
 
   it('with two or more organisations, asks for no confirmation name', () => {
     setup([tenant(), tenant({ uid: 'T2', name: 'Second Customer' })]);
-    comp.openForm();
+    openForm();
     fillRequired();
     comp.sharedConfirm.set('');
     fixture.detectChanges();
@@ -257,7 +279,7 @@ describe('TenantListComponent', () => {
   });
 
   it('refuses to create while the tenant list has not loaded (fail closed)', () => {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.configureTestingModule({ providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()] });
     const session = TestBed.inject(SessionStore);
     session.clear();
     session.setPermissions(['ORG.CREATE', 'ORG.SUSPEND']);
@@ -266,7 +288,7 @@ describe('TenantListComponent', () => {
     http = TestBed.inject(HttpTestingController);
     http.expectOne(`${base}/tenants`).flush({ errors: ['x'] }, { status: 500, statusText: 'Error' });
     fixture.detectChanges();
-    comp.openForm();
+    openForm();
     fillRequired();
     comp.create();
     http.expectNone(base);
@@ -366,6 +388,67 @@ describe('TenantListComponent', () => {
     expect(comp.platformSaving()).toBe(false);
   });
 
+  describe('subscription (ADR-0069)', () => {
+    it('shows the plan name and a readable stage badge per tenant', () => {
+      setup([
+        tenant({ uid: 'A', name: 'A', planCode: 'PREMIUM', subscriptionStage: 'TRIAL' }),
+        tenant({ uid: 'B', name: 'B', planCode: 'BASIC', subscriptionStage: 'GRACE' }),
+        tenant({ uid: 'C', name: 'C', planCode: 'STANDARD', subscriptionStage: 'READ_ONLY' }),
+        tenant({ uid: 'D', name: 'D', planCode: 'ENTERPRISE', subscriptionStage: 'SUSPENDED' }),
+        tenant({ uid: 'E', name: 'E', planCode: 'STANDARD', subscriptionStage: 'ACTIVE' }),
+        tenant({ uid: 'F', name: 'F' }),
+      ]);
+      const cells = (id: string): string[] =>
+        Array.from(fixture.nativeElement.querySelectorAll(`[data-testid="${id}"]`) as NodeListOf<HTMLElement>)
+          .map((c) => c.textContent!.trim());
+      expect(cells('tenant-plan')).toEqual([
+        'Premium', 'Basic', 'Standard', 'Enterprise', 'Standard', 'No plan (unrestricted)',
+      ]);
+      expect(cells('tenant-stage')).toEqual([
+        'Trial', 'Payment overdue', 'Read-only', 'Suspended', 'Active', 'Unrestricted',
+      ]);
+    });
+
+    it('links each tenant to its subscription screen by uid, except the platform organisation', () => {
+      setup([tenant(), tenant({ uid: 'P', name: 'Platform', alias: 'platform' })]);
+      const link = fixture.nativeElement.querySelector('[aria-label="Subscription for Acme Traders"]') as HTMLAnchorElement;
+      expect(link.getAttribute('href')).toBe('/admin/platform/tenants/uid/T1/subscription');
+      expect(fixture.nativeElement.querySelector('[aria-label="Subscription for Platform"]')).toBeNull();
+    });
+
+    it('offers the plans cheapest first and requires one', () => {
+      setup();
+      openForm();
+      const options = Array.from(
+        fixture.nativeElement.querySelectorAll('#planCode option') as NodeListOf<HTMLOptionElement>,
+      ).map((o) => o.textContent!.trim());
+      expect(options).toEqual(['Choose a plan', 'Basic', 'Premium']);
+      expect(fixture.nativeElement.textContent).toContain('The tenant starts a 14-day trial on this plan.');
+
+      fillRequired();
+      comp.planCode.set('');
+      comp.create();
+      http.expectNone(base);
+      expect(comp.formError()).toBe('Please correct the fields marked below.');
+    });
+
+    it('sends the plan and add-ons when creating', () => {
+      setup();
+      openForm();
+      fillRequired();
+      comp.planCode.set('PREMIUM');
+      comp.addOnRestaurant.set(true);
+      comp.create();
+      const req = http.expectOne(base);
+      expect(req.request.body.planCode).toBe('PREMIUM');
+      expect(req.request.body.addOnRestaurant).toBe(true);
+      expect(req.request.body.addOnOrbixHq).toBe(false);
+      req.flush({ uid: 'T9', name: 'Beta Ltd', alias: 'beta', status: 'ACTIVE' });
+      http.expectOne(`${base}/tenants`).flush([tenant()]);
+      expect(comp.planCode()).toBe('');
+    });
+  });
+
   describe('filter', () => {
     const rows = () => [
       tenant({ uid: 'A', name: 'Acme Traders', alias: 'acme' }),
@@ -411,7 +494,7 @@ describe('TenantListComponent', () => {
 
   it('has no axe violations (list, form and confirm dialog open)', async () => {
     setup();
-    comp.openForm();
+    openForm();
     comp.priceListCode.set('R');
     comp.priceListName.set('Retail');
     comp.submitted.set(true);

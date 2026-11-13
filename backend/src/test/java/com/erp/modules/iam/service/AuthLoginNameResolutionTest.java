@@ -50,7 +50,7 @@ class AuthLoginNameResolutionTest {
                 mock(UserBranchRepository.class), encoder, mock(JwtService.class),
                 mock(JwtProperties.class), attempts, mock(PermissionResolver.class), organisations,
                 mock(com.erp.platform.security.password.PasswordPolicy.class),
-                mock(com.erp.platform.audit.AuditService.class));
+                mock(com.erp.platform.audit.AuditService.class), org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionGate.class), org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionService.class));
         when(users.findByUsername(anyString())).thenReturn(Optional.empty());
         when(users.findByUsername("asha@duka")).thenReturn(Optional.of(cashier));
         when(encoder.matches(anyString(), any())).thenReturn(false);
