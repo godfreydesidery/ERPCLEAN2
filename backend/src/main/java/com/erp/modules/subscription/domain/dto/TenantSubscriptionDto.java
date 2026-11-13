@@ -31,9 +31,13 @@ public record TenantSubscriptionDto(
         List<PlanCatalogueDto.ModuleDto> modules,
         List<Payment> payments) {
 
-    /** {@code planLimit}/{@code effectiveLimit} null = unlimited; {@code override} null = none. */
+    /**
+     * {@code planLimit}/{@code effectiveLimit} null = unlimited; {@code override} null = none.
+     * {@code inUse} is an int on purpose: a long is written as a JSON string (64-bit ids), and the
+     * console compares it with the limits as a number.
+     */
     public record CapUsage(String resource, Integer planLimit, Integer override,
-                           Integer effectiveLimit, long inUse) {
+                           Integer effectiveLimit, int inUse) {
     }
 
     public record Payment(String uid, BigDecimal amount, String currencyCode, LocalDate paidOn,

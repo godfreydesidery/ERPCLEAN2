@@ -171,9 +171,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     private TenantSubscriptionDto toDto(Organisation org, OrganisationSubscription sub) {
-        Map<CapResource, Long> inUse = new HashMap<>();
+        Map<CapResource, Integer> inUse = new HashMap<>();
         for (CapResource c : CapResource.values()) {
-            inUse.put(c, countOf(org.getId(), c));
+            inUse.put(c, Math.toIntExact(countOf(org.getId(), c)));
         }
         if (sub == null) {
             List<TenantSubscriptionDto.CapUsage> caps = Arrays.stream(CapResource.values())
