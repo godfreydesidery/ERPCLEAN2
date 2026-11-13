@@ -18,5 +18,10 @@ public record MeResponse(
         String activeBranchUid,
         List<String> permissions,
         /** ADM-02: an administrator set this password; the client must force a change. */
-        boolean mustChangePassword) {
+        boolean mustChangePassword,
+        /**
+         * ADR-0069: the tenant's plan, add-ons and stage on the non-payment ladder, for the banner.
+         * Null for the platform operator and for a tenant without a plan.
+         */
+        com.erp.modules.subscription.domain.dto.SubscriptionSummaryDto subscription) {
 }

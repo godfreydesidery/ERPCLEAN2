@@ -213,6 +213,9 @@ public class IamTestData {
         // ORG_ADMIN's grants but does NOT create the role — its own header says the row is created
         // in V1 — so re-running it restores permissions onto a role that no longer exists.
         em.createNativeQuery("DELETE FROM roles WHERE organisation_id IS NOT NULL").executeUpdate();
+        // ADR-0069 (V115): subscriptions and their payments reference an organisation too.
+        em.createNativeQuery("TRUNCATE subscription_payments, organisation_subscriptions "
+                + "RESTART IDENTITY").executeUpdate();
         em.createNativeQuery("DELETE FROM organisations").executeUpdate();
         // TRUNCATE ... RESTART IDENTITY did this for free; DELETE does not, and the id recycling is
         // load-bearing for the tests that assert on freshly issued ids.

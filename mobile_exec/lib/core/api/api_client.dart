@@ -51,6 +51,8 @@ class ApiClient {
     final reqId = (options.extra['xRequestId'] as String?) ?? _uuid.v4();
     options.extra['xRequestId'] = reqId;
     options.headers['X-Request-Id'] = reqId;
+    // ADR-0069 D-9: the server gates the OrbixHQ add-on on this header.
+    options.headers['X-Client-App'] = 'orbixhq';
 
     final idem = options.extra['idempotencyKey'] as String?;
     if (idem != null) options.headers['Idempotency-Key'] = idem;

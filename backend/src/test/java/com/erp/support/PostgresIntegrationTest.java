@@ -80,11 +80,13 @@ public abstract class PostgresIntegrationTest {
     // run before the subclass's fixture is built.
     @Autowired private PermissionResolver  permissionResolverCacheSeam;
     @Autowired private CompanyTenantIndex  companyTenantIndexCacheSeam;
+    @Autowired private com.erp.modules.subscription.service.SubscriptionGateImpl subscriptionGateCacheSeam;
 
     @BeforeEach
     protected void dropIdKeyedCaches() {
         permissionResolverCacheSeam.invalidate();
         companyTenantIndexCacheSeam.clear();
+        subscriptionGateCacheSeam.clear();
     }
 
     @DynamicPropertySource
