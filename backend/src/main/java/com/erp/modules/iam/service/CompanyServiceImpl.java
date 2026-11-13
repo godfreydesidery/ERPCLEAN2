@@ -53,6 +53,8 @@ public class CompanyServiceImpl implements CompanyService {
     private final UserCompanyRepository      userCompanies;
     private final CompanyProvisioningService provisioner;
     private final com.erp.platform.security.TenancyScopeEnforcer tenancy;
+    /** ADR-0069 D-5: plan caps. */
+    private final com.erp.modules.subscription.service.SubscriptionGate subscriptionGate;
 
     public CompanyServiceImpl(CompanyRepository          companies,
                                OrganisationRepository     organisations,
@@ -64,7 +66,9 @@ public class CompanyServiceImpl implements CompanyService {
                                UserBranchRepository       userBranches,
                                UserCompanyRepository      userCompanies,
                                CompanyProvisioningService provisioner,
-                               com.erp.platform.security.TenancyScopeEnforcer tenancy) {
+                               com.erp.platform.security.TenancyScopeEnforcer tenancy,
+                               com.erp.modules.subscription.service.SubscriptionGate subscriptionGate) {
+        this.subscriptionGate = subscriptionGate;
         this.companies        = companies;
         this.organisations    = organisations;
         this.journalEntries   = journalEntries;
@@ -93,6 +97,8 @@ public class CompanyServiceImpl implements CompanyService {
                 && !principal.organisationId().equals(org.getId())) {
             throw NotFoundException.of("Organisation", request.organisationUid());
         }
+        subscriptionGate.assertCanAdd(org.getId(),
+                    com.erp.modules.subscription.domain.enums.CapResource.COMPANIES);
 
         if (companies.existsByOrganisationIdAndCode(org.getId(), request.code())) {
             throw new ConflictException("Company code already exists: " + request.code());

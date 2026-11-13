@@ -1,3 +1,5 @@
+import { SubscriptionSummary } from '../../features/admin/platform/subscription.model';
+
 /**
  * Response from GET /auth/me — the caller's full profile including effective permissions for the
  * active company/branch context.
@@ -12,6 +14,8 @@ export interface MeResponse {
   permissions: string[];
   /** ADM-02: an administrator set the password; the user must replace it before working. */
   mustChangePassword?: boolean;
+  /** ADR-0069: null for the platform operator and for tenants with no plan (unrestricted). */
+  subscription?: SubscriptionSummary | null;
 }
 
 /** Mirrors the backend TokenResponse. ids on the wire are strings; here uids are the identifiers. */
