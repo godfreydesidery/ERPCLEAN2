@@ -148,6 +148,17 @@ describe('TenantSubscriptionComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="payments"]').textContent).toContain('MPESA-1');
   });
 
+  it('shows a dash, not "None", for a payment without a note or reference', () => {
+    const sub = assigned();
+    sub.payments = [{ ...sub.payments[0], reference: null, note: null }];
+    setup(sub);
+    const cells = Array.from(
+      fixture.nativeElement.querySelectorAll('[data-testid="payments"] tbody td') as NodeListOf<HTMLElement>,
+    ).map((c) => c.textContent!.trim());
+    expect(cells).not.toContain('None');
+    expect(cells.filter((c) => c === '—').length).toBe(2);
+  });
+
   it('shows plan limits beside overrides and in-use counts; null limit reads Unlimited', async () => {
     setup(assigned());
     await fixture.whenStable();

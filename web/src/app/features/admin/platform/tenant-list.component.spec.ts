@@ -416,6 +416,15 @@ describe('TenantListComponent', () => {
       expect(fixture.nativeElement.querySelector('[aria-label="Subscription for Platform"]')).toBeNull();
     });
 
+    it('shows a dash for the platform organisation plan and subscription, never No plan', () => {
+      setup([tenant({ uid: 'P', name: 'Platform', alias: 'platform' }), tenant({ uid: 'F', name: 'F' })]);
+      const cells = (id: string): string[] =>
+        Array.from(fixture.nativeElement.querySelectorAll(`[data-testid="${id}"]`) as NodeListOf<HTMLElement>)
+          .map((c) => c.textContent!.trim());
+      expect(cells('tenant-plan')).toEqual(['—', 'No plan (unrestricted)']);
+      expect(cells('tenant-stage')).toEqual(['—', 'Unrestricted']);
+    });
+
     it('offers the plans cheapest first and requires one', () => {
       setup();
       openForm();

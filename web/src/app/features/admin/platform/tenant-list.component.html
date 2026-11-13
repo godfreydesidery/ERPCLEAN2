@@ -465,11 +465,17 @@
                       {{ t.status === 'ACTIVE' ? 'Active' : 'Suspended' }}
                     </span>
                   </td>
-                  <td data-testid="tenant-plan">{{ planName(t) }}</td>
-                  <td>
-                    <span class="status-tag" [class]="'status-tag ' + stageTagClass(t.subscriptionStage)"
-                          data-testid="tenant-stage">{{ stageLabel(t.subscriptionStage) }}</span>
-                  </td>
+                  @if (isPlatform(t)) {
+                    <!-- The platform organisation is never under a plan (ADR-0069 D-10). -->
+                    <td data-testid="tenant-plan" class="text-muted">—</td>
+                    <td data-testid="tenant-stage" class="text-muted">—</td>
+                  } @else {
+                    <td data-testid="tenant-plan">{{ planName(t) }}</td>
+                    <td>
+                      <span class="status-tag" [class]="'status-tag ' + stageTagClass(t.subscriptionStage)"
+                            data-testid="tenant-stage">{{ stageLabel(t.subscriptionStage) }}</span>
+                    </td>
+                  }
                   <td>{{ t.createdAt | date: 'mediumDate' }}</td>
                   <td>{{ t.companyCount }}</td>
                   <td>{{ t.userCount }}</td>

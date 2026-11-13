@@ -295,8 +295,8 @@
                         <td>{{ p.paidOn | date: 'mediumDate' }}</td>
                         <td>{{ p.amount | number: '1.2-2' }} {{ p.currencyCode }}</td>
                         <td>{{ p.paidUntil | date: 'mediumDate' }}</td>
-                        <td>{{ p.reference ?? 'None' }}</td>
-                        <td>{{ p.note ?? 'None' }}</td>
+                        <td>{{ p.reference || '—' }}</td>
+                        <td>{{ p.note || '—' }}</td>
                         <td>{{ p.recordedAt | date: 'medium' }}{{ p.recordedBy ? ' by ' + p.recordedBy : '' }}</td>
                       </tr>
                     }
