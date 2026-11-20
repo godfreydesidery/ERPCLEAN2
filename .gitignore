@@ -94,3 +94,6 @@ __pycache__/
 # Shared server (infra/shared): .env and jwt-keys/ are never committed.
 infra/shared/.env
 infra/shared/jwt-keys/
+
+# Orbix App PWA zips + their build records (dist/build-pwa.ps1)
+dist/orbixapp/*.json

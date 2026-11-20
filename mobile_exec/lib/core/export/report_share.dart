@@ -1,12 +1,12 @@
-import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import 'export_file.dart';
 import 'report_doc.dart';
 
 /// How a report leaves the phone.
@@ -63,20 +63,23 @@ Future<ShareResult> shareDoc(
     ));
   }
 
-  final dir = await getTemporaryDirectory();
   final stem = doc.fileStem(stamp);
-  final sep = Platform.pathSeparator;
 
-  final XFile file;
-  if (format == ExportFormat.csv) {
-    final path = '${dir.path}$sep$stem.csv';
-    await File(path).writeAsString(doc.toCsv());
-    file = XFile(path, mimeType: 'text/csv', name: '$stem.csv');
-  } else {
-    final path = '${dir.path}$sep$stem.pdf';
-    await File(path).writeAsBytes(await buildPdfBytes(doc, now: stamp));
-    file = XFile(path, mimeType: 'application/pdf', name: '$stem.pdf');
-  }
+  // Phones write a cache file; the PWA keeps the bytes in memory
+  // (export_file_io.dart / export_file_web.dart).
+  final XFile file = format == ExportFormat.csv
+      ? await writeExportFile(
+          stem: stem,
+          extension: 'csv',
+          mimeType: 'text/csv',
+          bytes: utf8.encode(doc.toCsv()),
+        )
+      : await writeExportFile(
+          stem: stem,
+          extension: 'pdf',
+          mimeType: 'application/pdf',
+          bytes: await buildPdfBytes(doc, now: stamp),
+        );
 
   return SharePlus.instance.share(ShareParams(
     files: [file],
