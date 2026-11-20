@@ -105,5 +105,15 @@ public record CreateTenantRequest(
          *
          * <p>Blank ⇒ no till, and no session can be opened until someone adds one.
          */
-        @Size(max = 60) String posTillName) {
+        @Size(max = 60) String posTillName,
+
+        /**
+         * ADR-0069 D-7: the plan the tenant starts a 14-day trial on. Null ⇒ no subscription, so
+         * the tenant is unrestricted until the operator assigns a plan (the console requires one).
+         */
+        com.erp.modules.subscription.domain.enums.PlanCode planCode,
+
+        /** ADR-0069 D-2: the paid add-ons included in the trial. Null ⇒ not included. */
+        Boolean addOnRestaurant,
+        Boolean addOnOrbixHq) {
 }

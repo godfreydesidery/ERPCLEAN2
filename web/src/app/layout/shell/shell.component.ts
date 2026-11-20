@@ -10,6 +10,7 @@ import { AlertHostComponent } from '../../core/feedback/alert-host.component';
 import { UserBranch } from '../../features/admin/models/user-branch.model';
 import { OrganisationService } from '../../features/admin/organisation/organisation.service';
 import { NavSearchComponent, NavDestination } from './nav-search.component';
+import { subscriptionBanner } from './subscription-banner';
 
 /**
  * A single sidebar navigation entry.
@@ -96,6 +97,9 @@ export class ShellComponent {
    */
   /** The tenant the platform operator has entered, or null at home (owner, 2026-11-07). */
   readonly enteredTenant = computed(() => this.session.platformTenant());
+
+  /** ADR-0069: trial / due / overdue / read-only notice from /auth/me; null when there is nothing to say. */
+  readonly subscriptionBanner = computed(() => subscriptionBanner(this.session.subscription()));
 
   readonly activeBranch = computed<UserBranch | null>(() => {
     const entered = this.session.platformTenant();

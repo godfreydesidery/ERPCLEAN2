@@ -1,3 +1,5 @@
+import { PlanCode, SubscriptionStage } from './subscription.model';
+
 /** Mirrors the backend TenantSummaryDto. Counts are JSON numbers; ids are strings. */
 export interface TenantSummary {
   uid: string;
@@ -9,6 +11,9 @@ export interface TenantSummary {
   userCount: number;
   /** The organisation the caller is working in right now (home, or the tenant entered). */
   current?: boolean;
+  /** Null when no plan is assigned yet (unrestricted). */
+  planCode: PlanCode | null;
+  subscriptionStage: SubscriptionStage;
 }
 
 /** Mirrors the backend CreateTenantRequest. Optional fields are omitted when blank. */
@@ -33,6 +38,10 @@ export interface CreateTenantRequest {
   priceListIncludesVat?: boolean;
   walkInCustomerName?: string;
   posTillName?: string;
+  /** When given, the tenant starts a 14-day trial on this plan. */
+  planCode?: PlanCode;
+  addOnRestaurant?: boolean;
+  addOnOrbixHq?: boolean;
 }
 
 /** Where the platform operator lands when it enters a tenant (GET /organisations/uid/{uid}/entry). */

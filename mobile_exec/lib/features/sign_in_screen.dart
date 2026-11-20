@@ -57,7 +57,9 @@ class _SignInScreenState extends State<SignInScreen> {
       await AppScope.of(context).session.signIn(_user.text.trim(), _pass.text);
       if (mounted) widget.onSignedIn();
     } on ApiException catch (e) {
-      setState(() => _error = e.statusCode == 401
+      // A 401 with the server's own reason (a locked account, a lapsed
+      // subscription) shows that reason; a bare 401 is a wrong password.
+      setState(() => _error = e.statusCode == 401 && e.errors.isEmpty
           ? 'That username or password is not right.'
           : e.message);
     } catch (_) {

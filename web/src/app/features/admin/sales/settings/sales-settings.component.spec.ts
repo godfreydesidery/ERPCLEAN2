@@ -267,7 +267,7 @@ describe('SalesSettingsComponent', () => {
     expect(text).not.toContain('max_discount_percent');
   });
 
-  it('the ceiling input appears only once a stance is chosen, and is a labelled 0–100 percent field', async () => {
+  it('the ceiling input appears only once a stance is chosen, and is a labelled 0–100 percent field', () => {
     makeBed();
     http = TestBed.inject(HttpTestingController);
 
@@ -279,8 +279,9 @@ describe('SalesSettingsComponent', () => {
     // OFF ignores the ceiling entirely — an input that does nothing must not be on screen.
     expect(fixture.nativeElement.querySelector('#maxDiscountPercent')).toBeNull();
 
+    // A signal change re-renders on detectChanges, synchronously. No whenStable(): it waits for the
+    // whole application to go idle, which on CI never happened (NG0406, 5 s timeout on every run).
     fixture.componentInstance.fDiscountApprovalAction.set('APPROVE');
-    await fixture.whenStable();
     fixture.detectChanges();
 
     const input = fixture.nativeElement.querySelector('#maxDiscountPercent') as HTMLInputElement;

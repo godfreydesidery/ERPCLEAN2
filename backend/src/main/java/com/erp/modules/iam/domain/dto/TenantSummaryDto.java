@@ -22,5 +22,9 @@ public record TenantSummaryDto(
          * has entered. The console offers neither Enter nor Suspend on that row (the server refuses
          * suspending it anyway).
          */
-        boolean current) {
+        boolean current,
+        /** ADR-0069: the tenant's plan, or null when it has none (unrestricted). */
+        String planCode,
+        /** ADR-0069 D-6: today's stage on the non-payment ladder; UNRESTRICTED without a plan. */
+        String subscriptionStage) {
 }

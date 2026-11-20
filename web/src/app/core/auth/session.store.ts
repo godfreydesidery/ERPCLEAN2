@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { AuthUser } from './auth.model';
+import { SubscriptionSummary } from '../../features/admin/platform/subscription.model';
 
 /**
  * Holds the authenticated session: access token, refresh token, the active branch uid (sent as the
@@ -27,6 +28,10 @@ export class SessionStore {
   private readonly platformTenantSig = signal<EnteredTenant | null>(this.readPlatformTenant());
   readonly platformTenant = this.platformTenantSig.asReadonly();
   private readonly permissionsSig = signal<string[]>(this.readPermissions());
+
+  /** ADR-0069: the tenant's plan summary from /auth/me; null when unrestricted or the platform operator. */
+  private readonly subscriptionSig = signal<SubscriptionSummary | null>(null);
+  readonly subscription = this.subscriptionSig.asReadonly();
 
   readonly accessToken = this.accessTokenSig.asReadonly();
   readonly refreshToken = this.refreshTokenSig.asReadonly();
@@ -76,6 +81,10 @@ export class SessionStore {
     sessionStorage.setItem('erp.permissions', JSON.stringify(codes));
   }
 
+  setSubscription(summary: SubscriptionSummary | null): void {
+    this.subscriptionSig.set(summary);
+  }
+
   setAccessToken(token: string | null): void {
     this.setItem('erp.accessToken', token, this.accessTokenSig);
   }
@@ -100,6 +109,7 @@ export class SessionStore {
     this.userSig.set(null);
     this.permissionsSig.set([]);
     this.platformTenantSig.set(null);
+    this.subscriptionSig.set(null);
     [
       'erp.accessToken',
       'erp.refreshToken',

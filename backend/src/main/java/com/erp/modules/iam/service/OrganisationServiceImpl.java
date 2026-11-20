@@ -27,6 +27,8 @@ public class OrganisationServiceImpl implements OrganisationService {
     private final com.erp.modules.iam.repository.BranchRepository branches;
     private final com.erp.modules.iam.repository.UserRoleRepository userRoles;
     private final com.erp.platform.security.PlatformOrganisationRegistry platformRegistry;
+    private final com.erp.modules.subscription.service.SubscriptionService subscriptions;
+    private final com.erp.modules.subscription.service.SubscriptionGate subscriptionGate;
 
     public OrganisationServiceImpl(OrganisationRepository organisations,
                                    com.erp.platform.bootstrap.TenantProvisioningService provisioning,
@@ -36,7 +38,11 @@ public class OrganisationServiceImpl implements OrganisationService {
                                    com.erp.modules.iam.repository.AppUserRepository users,
                                    com.erp.modules.iam.repository.BranchRepository branches,
                                    com.erp.modules.iam.repository.UserRoleRepository userRoles,
-                                   com.erp.platform.security.PlatformOrganisationRegistry platformRegistry) {
+                                   com.erp.platform.security.PlatformOrganisationRegistry platformRegistry,
+                                   com.erp.modules.subscription.service.SubscriptionService subscriptions,
+                                   com.erp.modules.subscription.service.SubscriptionGate subscriptionGate) {
+        this.subscriptions = subscriptions;
+        this.subscriptionGate = subscriptionGate;
         this.organisations = organisations;
         this.provisioning = provisioning;
         this.audit = audit;
@@ -132,6 +138,13 @@ public class OrganisationServiceImpl implements OrganisationService {
                         // Their authority is the ORG_ADMIN role, which carries every non-platform
                         // permission that exists.
                         false));
+
+        // ADR-0069 D-7: the new tenant starts a 14-day trial on the plan the operator chose.
+        if (request.planCode() != null) {
+            subscriptions.startTrial(provisioned.organisationId(), request.planCode(),
+                    Boolean.TRUE.equals(request.addOnRestaurant()),
+                    Boolean.TRUE.equals(request.addOnOrbixHq()));
+        }
 
         // High-severity by nature: this is the vendor creating a customer. The admin password is
         // never part of the event - only who was created, and under what name.
@@ -270,7 +283,10 @@ public class OrganisationServiceImpl implements OrganisationService {
                         o.getCreatedAt(),
                         companies.countByOrganisationId(o.getId()),
                         users.countByOrganisationId(o.getId()),
-                        o.getId().equals(callerOrg)))
+                        o.getId().equals(callerOrg),
+                        subscriptionGate.entitlementOf(o.getId())
+                                .map(e -> e.plan().name()).orElse(null),
+                        subscriptionGate.stageOf(o.getId()).name()))
                 .toList();
     }
 

@@ -1,0 +1,13 @@
+{
+  "name": "orbix-app-pwa-test",
+  "private": true,
+  "description": "Playwright checks for the Orbix App PWA build (mobile_exec/build/web).",
+  "type": "module",
+  "scripts": {
+    "serve": "node serve.mjs",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}

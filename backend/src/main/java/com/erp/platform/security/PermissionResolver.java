@@ -1,9 +1,13 @@
 package com.erp.platform.security;
 
 import com.erp.modules.iam.repository.UserRoleRepository;
+import com.erp.modules.subscription.service.Entitlement;
+import com.erp.modules.subscription.service.SubscriptionGate;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +42,13 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * IAM write throws away every other user's resolved set and sends the whole tenant back to the
  * database, which is exactly the wrong behaviour on a busy morning. {@link #invalidate()} is kept
  * for tests and for the rare write whose blast radius genuinely is "everyone".
+ *
+ * <p><b>Subscription plans (ADR-0069 D-4).</b> The cache holds the user's RAW role grants. The
+ * tenant's plan is applied on every read: a code whose module the tenant has not bought is dropped
+ * from {@link #resolve} and refused by {@link #hasPermission}. Applying it on read (not caching the
+ * filtered set) means a plan change takes effect at once without evicting anyone's grants, and the
+ * subscription module never needs to call back into this class. Root (the platform operator, also
+ * inside an entered tenant) and system principals are exempt; a tenant with no plan is unrestricted.
  */
 @Component
 public class PermissionResolver {
@@ -48,10 +59,21 @@ public class PermissionResolver {
     private static final long TTL_MILLIS = Duration.ofSeconds(30).toMillis();
 
     private final UserRoleRepository userRoles;
+    private final SubscriptionGate subscriptions;
+    private final CompanyTenantIndex companyTenants;
     private final ConcurrentHashMap<String, Entry> cache = new ConcurrentHashMap<>();
 
+    /** Without plan filtering - unit tests of the grant cache only. */
     public PermissionResolver(UserRoleRepository userRoles) {
+        this(userRoles, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PermissionResolver(UserRoleRepository userRoles, SubscriptionGate subscriptions,
+                              CompanyTenantIndex companyTenants) {
         this.userRoles = userRoles;
+        this.subscriptions = subscriptions;
+        this.companyTenants = companyTenants;
     }
 
     private record Entry(Set<String> codes, long expiresAt) {
@@ -62,6 +84,17 @@ public class PermissionResolver {
      * caller's {@code isRoot} short-circuit in {@link #hasPermission}; this only resolves real grants.
      */
     public Set<String> resolve(Long userId, Long companyId, Long branchId, long nowMillis) {
+        Set<String> granted = resolveGranted(userId, companyId, branchId, nowMillis);
+        Optional<Entitlement> plan = entitlementOfCompany(companyId);
+        if (plan.isEmpty() || granted.isEmpty()) {
+            return granted;
+        }
+        return granted.stream().filter(plan.get()::permits)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    /** The user's role grants in scope, before the tenant's plan is applied (cached). */
+    private Set<String> resolveGranted(Long userId, Long companyId, Long branchId, long nowMillis) {
         if (userId == null || companyId == null) {
             // No active company scope (e.g. a user with no branch) → no resolved permissions.
             return Set.of();
@@ -117,8 +150,21 @@ public class PermissionResolver {
                     principal.companyId(), principal.branchId());
             return true;
         }
-        return resolve(principal.userId(), principal.companyId(), principal.branchId(), nowMillis)
-                .contains(permissionCode);
+        if (!resolveGranted(principal.userId(), principal.companyId(), principal.branchId(),
+                nowMillis).contains(permissionCode)) {
+            return false;
+        }
+        // ADR-0069 D-4: held, but is it in the tenant's plan? The principal's organisation is the
+        // tenant the request runs in.
+        return subscriptions == null
+                || subscriptions.permits(principal.organisationId(), permissionCode);
+    }
+
+    private Optional<Entitlement> entitlementOfCompany(Long companyId) {
+        if (subscriptions == null || companyTenants == null || companyId == null) {
+            return Optional.empty();
+        }
+        return subscriptions.entitlementOf(companyTenants.organisationOf(companyId));
     }
 
     // -------------------------------------------------------------------------

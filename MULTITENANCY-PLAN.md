@@ -614,6 +614,10 @@ deletion today means hand-deleting from 204 tables in FK order.
   cannot lock the platform out of its own recovery lever, and `OrganisationServiceImpl.setStatus`
   refuses to suspend the organisation the caller is signed in to. That last guard exists because the
   first version of this shipped without it and one POST locked out everybody, `rootadmin` included.
+- **Subscription plans — DECIDED 2026-11-13, [ADR-0069](docs/decisions/0069-tenant-subscription-plans.md).**
+  The product decision this bullet waited for was made: four tiers, two add-ons, caps, and a
+  grace → read-only → suspended ladder, held in the new `organisation_subscriptions` /
+  `subscription_payments` tables (V115). The two old columns below stay unread and unwritten.
 - **`subscription_plan` / `subscription_status` — leave unread.** Still zero readers, and that is
   the recommendation, not an oversight. Billing state that the application enforces is a product
   decision nobody has made; inventing semantics for two columns because they exist is how a

@@ -27,6 +27,13 @@ export const ADMIN_ROUTES: Routes = [
       import('./platform/tenant-list.component').then((m) => m.TenantListComponent),
   },
   {
+    // One tenant's subscription (ADR-0069). Reading needs ORG.CREATE, like the tenant list.
+    path: 'platform/tenants/uid/:uid/subscription',
+    canActivate: [requirePermission('ORG.CREATE')],
+    loadComponent: () =>
+      import('./platform/tenant-subscription.component').then((m) => m.TenantSubscriptionComponent),
+  },
+  {
     path: 'companies',
     canActivate: [requirePermission('COMPANY.VIEW')],
     loadComponent: () =>

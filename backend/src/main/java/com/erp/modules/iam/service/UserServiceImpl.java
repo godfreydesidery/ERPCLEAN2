@@ -66,6 +66,8 @@ public class UserServiceImpl implements UserService {
     private final AuditService audit;
     private final AuthorityCeiling authorityCeiling;
     private final OrganisationRepository organisations;
+    /** ADR-0069 D-5: plan caps. */
+    private final com.erp.modules.subscription.service.SubscriptionGate subscriptionGate;
 
     public UserServiceImpl(AppUserRepository users,
                            UserCompanyRepository userCompanies,
@@ -75,7 +77,9 @@ public class UserServiceImpl implements UserService {
                            PasswordPolicy passwordPolicy,
                            AuditService audit,
                            AuthorityCeiling authorityCeiling,
-                           OrganisationRepository organisations) {
+                           OrganisationRepository organisations,
+                           com.erp.modules.subscription.service.SubscriptionGate subscriptionGate) {
+        this.subscriptionGate = subscriptionGate;
         this.organisations = organisations;
         this.users = users;
         this.userCompanies = userCompanies;
@@ -95,6 +99,10 @@ public class UserServiceImpl implements UserService {
             throw new ConflictException("Username already exists: " + username);
         }
         passwordPolicy.validate(request.password());
+        if (creator != null) {
+            subscriptionGate.assertCanAdd(creator.organisationId(),
+                    com.erp.modules.subscription.domain.enums.CapResource.USERS);
+        }
 
         AppUser user = new AppUser(
                 username, passwordEncoder.encode(request.password()), request.displayName());
@@ -269,6 +277,11 @@ public class UserServiceImpl implements UserService {
     public void enableByUid(String uid) {
         AppUser user = requireInScope(uid);
         MasterStatus previous = user.getStatus();
+        if (previous != MasterStatus.ACTIVE) {
+            // Re-activating takes a seat, exactly like adding a user (ADR-0069 D-5).
+            subscriptionGate.assertCanAdd(user.getOrganisationId(),
+                    com.erp.modules.subscription.domain.enums.CapResource.USERS);
+        }
         user.setStatus(MasterStatus.ACTIVE);
 
         audit.record(AuditEvent.of(AuditActions.USER_ENABLE, "app_users", user.getId(), user.getUid())

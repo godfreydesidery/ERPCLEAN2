@@ -1,0 +1,31 @@
+/* Loading screen shown before Flutter's first frame. Brand: Orbix teal. */
+html, body { margin: 0; height: 100%; background: #0F766E; }
+#orbix-splash {
+  position: fixed; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  font-family: "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  color: #fff; background: linear-gradient(160deg, #12897F, #0B3B39); z-index: 10;
+  padding: 16px; box-sizing: border-box; text-align: center;
+}
+.orbix-tile {
+  width: 72px; height: 72px; border-radius: 16px; background: #fff; color: #0F766E;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 40px; font-weight: 700;
+}
+.orbix-name { font-size: 20px; font-weight: 600; letter-spacing: .2px; }
+.orbix-msg { font-size: 15px; color: #DDEFEC; max-width: 340px; line-height: 1.45; }
+.orbix-spinner {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.3); border-top-color: #fff;
+  animation: orbix-spin .9s linear infinite;
+}
+.orbix-retry {
+  font: inherit; font-size: 15px; font-weight: 600; color: #0B5A54; background: #fff;
+  border: 0; border-radius: 10px; padding: 10px 22px; cursor: pointer; min-height: 44px;
+}
+.orbix-retry:focus-visible { outline: 3px solid #FDE68A; outline-offset: 2px; }
+@keyframes orbix-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .orbix-spinner { animation-duration: 3s; } }
+a.orbix-retry { text-decoration: none; display: inline-flex; align-items: center; }
+h1.orbix-name { margin: 0; }
+p.orbix-msg { margin: 0; }

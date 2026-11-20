@@ -49,7 +49,10 @@ export class AuthService {
    */
   me(): Observable<MeResponse> {
     return this.http.get<MeResponse>(`${this.base}/me`).pipe(
-      tap((me) => this.session.setPermissions(me.permissions)),
+      tap((me) => {
+        this.session.setPermissions(me.permissions);
+        this.session.setSubscription(me.subscription ?? null);
+      }),
     );
   }
 

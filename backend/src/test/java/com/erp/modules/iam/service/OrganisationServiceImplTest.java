@@ -156,7 +156,7 @@ class OrganisationServiceImplTest {
                 null, null, null,
                 "HQ", "Head Office", "orgadmin", "OrgPass12345", "   ",
                 "  ", "", List.of(),
-                null, null, null, null, null));
+                null, null, null, null, null, null, null, null));
 
         NewTenantRequest mapped = captured();
         assertThat(mapped.timeZone()).isEqualTo("Africa/Dar_es_Salaam");
@@ -349,7 +349,17 @@ class OrganisationServiceImplTest {
                 new com.erp.platform.fiscal.FiscalisationProperties(provider), companies, users,
                 org.mockito.Mockito.mock(com.erp.modules.iam.repository.BranchRepository.class),
                 org.mockito.Mockito.mock(com.erp.modules.iam.repository.UserRoleRepository.class),
-                org.mockito.Mockito.mock(com.erp.platform.security.PlatformOrganisationRegistry.class));
+                org.mockito.Mockito.mock(com.erp.platform.security.PlatformOrganisationRegistry.class),
+                org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionService.class),
+                unrestrictedGate());
+    }
+
+    /** No tenant in these tests has a plan (ADR-0069 D-10). */
+    private static com.erp.modules.subscription.service.SubscriptionGate unrestrictedGate() {
+        var gate = org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionGate.class);
+        org.mockito.Mockito.lenient().when(gate.stageOf(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(com.erp.modules.subscription.domain.enums.SubscriptionStage.UNRESTRICTED);
+        return gate;
     }
 
     /** An organisation with an id, which a mock repository never assigns. */
@@ -388,6 +398,7 @@ class OrganisationServiceImplTest {
                 "HQ", "Head Office",
                 "orgadmin", "OrgPass12345", "Org Admin",
                 "TZS", "TZS", List.of("TZS"),
-                priceListCode, priceListName, priceListIncludesVat, walkInName, tillName);
+                priceListCode, priceListName, priceListIncludesVat, walkInName, tillName,
+                null, null, null);
     }
 }

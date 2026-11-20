@@ -46,6 +46,8 @@ public class PosTillServiceImpl implements PosTillService {
     private final ScopeGuard                 scopeGuard;
     private final AuditService               audit;
     private final SalesDepthNumberGenerator  numberGen;
+    /** ADR-0069 D-5: plan caps. */
+    private final com.erp.modules.subscription.service.SubscriptionGate subscriptionGate;
 
     public PosTillServiceImpl(PosTillRepository tills,
                                CompanyRepository companies,
@@ -54,7 +56,9 @@ public class PosTillServiceImpl implements PosTillService {
                                UserLookupService userLookup,
                                ScopeGuard scopeGuard,
                                AuditService audit,
-                               SalesDepthNumberGenerator numberGen) {
+                               SalesDepthNumberGenerator numberGen,
+                               com.erp.modules.subscription.service.SubscriptionGate subscriptionGate) {
+        this.subscriptionGate = subscriptionGate;
         this.tills        = tills;
         this.companies    = companies;
         this.cashAccounts = cashAccounts;
@@ -70,6 +74,8 @@ public class PosTillServiceImpl implements PosTillService {
         var company = companies.findByUid(req.companyUid())
                 .orElseThrow(() -> NotFoundException.of("Company", req.companyUid()));
         scopeGuard.assertCanActIn(RequestContext.get(), company.getId());
+        subscriptionGate.assertCanAddInCompany(company.getId(),
+                com.erp.modules.subscription.domain.enums.CapResource.TILLS);
 
         Long cashAccountId = resolveCashAccount(company.getId(), req.cashBankAccountUid());
 
@@ -127,6 +133,9 @@ public class PosTillServiceImpl implements PosTillService {
         if (till.getStatus() != MasterStatus.INACTIVE) {
             throw new IllegalArgumentException("Only a deactivated till can be activated again.");
         }
+        // Re-activating takes a till slot, exactly like adding one (ADR-0069 D-5).
+        subscriptionGate.assertCanAddInCompany(till.getCompanyId(),
+                com.erp.modules.subscription.domain.enums.CapResource.TILLS);
         till.setStatus(MasterStatus.ACTIVE);
         till.setUpdatedAt(Instant.now());
         till.setUpdatedBy(actorId());

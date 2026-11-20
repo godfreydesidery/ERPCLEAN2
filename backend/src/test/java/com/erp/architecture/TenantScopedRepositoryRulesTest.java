@@ -308,6 +308,7 @@ class TenantScopedRepositoryRulesTest {
         a("OpportunityLineRepository#findByUidAndOpportunityId", "uid lookup under a parent id already resolved in the caller tenant");
         a("OpportunityLineRepository#findMaxLineNo", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");
         a("OpportunityRepository#findByUid", "uid lookup; service scope-checks the loaded entity (tenant-isolation model), swept by TenantIsolationSweepIT");
+        a("OrganisationSubscriptionRepository#usernameOf", "platform console only (ADR-0069): names the operator who recorded a subscription payment; the id comes from the payment row, never request input, and the operator belongs to the platform organisation, not the tenant");
         a("OtherPartyAddressRepository#findByOtherPartyId", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");
         a("OtherPartyAddressRepository#findByOtherPartyIdAndAddressRole", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");
         a("OtherPartyAddressRepository#findByOtherPartyIdAndAddressRoleAndIsDefaultTrue", "child/detail rows keyed on a parent or account id already resolved and scope-checked in the caller tenant");

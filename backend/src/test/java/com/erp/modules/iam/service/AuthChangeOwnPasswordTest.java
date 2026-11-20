@@ -55,7 +55,7 @@ class AuthChangeOwnPasswordTest {
         when(encoder.encode(anyString())).thenReturn("NEW-HASH");
         auth = new AuthServiceImpl(users, refreshTokens, mock(BranchRepository.class),
                 mock(CompanyRepository.class), userBranches, encoder, jwt, jwtProps, attempts,
-                mock(PermissionResolver.class), mock(OrganisationRepository.class), policy, audit);
+                mock(PermissionResolver.class), mock(OrganisationRepository.class), policy, audit, org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionGate.class), org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionService.class));
         user = new AppUser("asha@duka", "OLD-HASH", "Asha");
         ReflectionTestUtils.setField(user, "id", 41L);
         user.setMustChangePassword(true);

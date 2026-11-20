@@ -172,6 +172,48 @@
         </fieldset>
 
         <fieldset class="mb-3" [disabled]="saving()">
+          <legend class="h6">Plan</legend>
+          <div class="row g-2">
+            <div class="col-sm-4">
+              <label class="form-label small mb-1" for="planCode">Plan <span aria-hidden="true">*</span></label>
+              <select id="planCode" name="planCode" class="form-select" required
+                      [(ngModel)]="planCode" aria-describedby="planHelp"
+                      [attr.aria-invalid]="submitted() && !planCode() ? 'true' : null">
+                <option value="">Choose a plan</option>
+                @for (p of plans(); track p.code) {
+                  <option [value]="p.code">{{ p.name }}</option>
+                }
+              </select>
+              @if (submitted() && !planCode()) {
+                <p id="planErr" class="text-danger small mb-0">Choose a plan.</p>
+              }
+              @if (plansError()) {
+                <p class="text-danger small mb-0" role="alert">
+                  Could not load the plans.
+                  <button type="button" class="btn btn-link btn-sm p-0 align-baseline" (click)="loadPlans()">Retry</button>
+                </p>
+              }
+              <p id="planHelp" class="small text-muted mb-0">The tenant starts a 14-day trial on this plan.</p>
+            </div>
+            <div class="col-sm-8">
+              <fieldset>
+                <legend class="form-label small mb-1">Add-ons</legend>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="addOnRestaurant" name="addOnRestaurant"
+                         [(ngModel)]="addOnRestaurant" />
+                  <label class="form-check-label" for="addOnRestaurant">Restaurant</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="addOnOrbixHq" name="addOnOrbixHq"
+                         [(ngModel)]="addOnOrbixHq" />
+                  <label class="form-check-label" for="addOnOrbixHq">OrbixHQ app</label>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="mb-3" [disabled]="saving()">
           <legend class="h6">Trading set-up</legend>
           <p class="small text-muted mb-2">All optional. Anything left empty is not created and can be added later.</p>
           <div class="row g-2">
@@ -399,12 +441,12 @@
                 <th scope="col">Name</th>
                 <th scope="col">Alias</th>
                 <th scope="col">Status</th>
+                <th scope="col">Plan</th>
+                <th scope="col">Subscription</th>
                 <th scope="col">Created</th>
                 <th scope="col">Companies</th>
                 <th scope="col">Users</th>
-                @if (canSuspend() || canEnter()) {
-                  <th scope="col"><span class="sr-only">Actions</span></th>
-                }
+                <th scope="col"><span class="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -423,11 +465,27 @@
                       {{ t.status === 'ACTIVE' ? 'Active' : 'Suspended' }}
                     </span>
                   </td>
+                  @if (isPlatform(t)) {
+                    <!-- The platform organisation is never under a plan (ADR-0069 D-10). -->
+                    <td data-testid="tenant-plan" class="text-muted">—</td>
+                    <td data-testid="tenant-stage" class="text-muted">—</td>
+                  } @else {
+                    <td data-testid="tenant-plan">{{ planName(t) }}</td>
+                    <td>
+                      <span class="status-tag" [class]="'status-tag ' + stageTagClass(t.subscriptionStage)"
+                            data-testid="tenant-stage">{{ stageLabel(t.subscriptionStage) }}</span>
+                    </td>
+                  }
                   <td>{{ t.createdAt | date: 'mediumDate' }}</td>
                   <td>{{ t.companyCount }}</td>
                   <td>{{ t.userCount }}</td>
-                  @if (canSuspend() || canEnter()) {
-                    <td class="text-nowrap">
+                  <td class="text-nowrap">
+                    @if (!isPlatform(t)) {
+                      <a class="btn btn-sm btn-outline-secondary me-1"
+                         [routerLink]="['/admin/platform/tenants/uid', t.uid, 'subscription']"
+                         [attr.aria-label]="'Subscription for ' + t.name">Subscription</a>
+                    }
+                    @if (canSuspend() || canEnter()) {
                       @if (canEnter() && !t.current && !isPlatform(t)) {
                         <button type="button" class="btn btn-sm btn-outline-primary me-1"
                                 [disabled]="entering() !== null"
@@ -448,12 +506,12 @@
                                 (click)="askConfirm(t, 'resume')"
                                 [attr.aria-label]="'Reactivate ' + t.name">Reactivate</button>
                       }
-                    </td>
-                  }
+                    }
+                  </td>
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="7" class="text-muted" data-testid="tenant-no-match">
+                  <td colspan="9" class="text-muted" data-testid="tenant-no-match">
                     No tenant matches this filter.
                     <button type="button" class="btn btn-link btn-sm p-0 align-baseline" (click)="clearFilter()">Clear the filter</button>
                   </td>

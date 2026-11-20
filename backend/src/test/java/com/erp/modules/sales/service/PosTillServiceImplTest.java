@@ -72,7 +72,7 @@ class PosTillServiceImplTest {
         when(numberGen.nextPosTill(anyLong())).thenReturn("TILL-0001");
         when(userLookup.displayNamesByIds(anyCollection())).thenReturn(Map.of());
         service      = new PosTillServiceImpl(tills, companies, cashAccounts, sessions, userLookup,
-                scopeGuard, audit, numberGen);
+                scopeGuard, audit, numberGen, org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionGate.class));
 
         RequestContext.set(new RequestContext.Principal(1L, "operator", false, 10L, 20L, null));
     }

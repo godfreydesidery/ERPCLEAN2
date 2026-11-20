@@ -199,7 +199,9 @@ class ApiException implements Exception {
         // as a session-expiry prompt.
         return serverMsg ?? 'Your session has expired. Please sign in again.';
       case 403:
-        return 'You do not have permission for this action.';
+        // The server's reason when it gives one, e.g. "The OrbixHQ app is not part
+        // of your plan" or a lapsed subscription (ADR-0069).
+        return serverMsg ?? 'You do not have permission for this action.';
       case 404:
         return serverMsg ?? 'Not found.';
       case 409:

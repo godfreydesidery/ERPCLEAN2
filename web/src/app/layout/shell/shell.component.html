@@ -202,6 +202,14 @@
           <button type="button" class="btn btn-sm btn-dark" (click)="returnHome()">Return to my organisation</button>
         </div>
       }
+      @if (subscriptionBanner(); as banner) {
+        <div class="subscription-banner mb-3" [ngClass]="'subscription-banner--' + banner.severity"
+             [attr.role]="banner.severity === 'error' ? 'alert' : 'status'"
+             data-testid="subscription-banner">
+          <i class="bi" [ngClass]="banner.severity === 'info' ? 'bi-info-circle' : 'bi-exclamation-triangle'" aria-hidden="true"></i>
+          <span>{{ banner.message }}</span>
+        </div>
+      }
       <router-outlet />
     </div>
   </main>

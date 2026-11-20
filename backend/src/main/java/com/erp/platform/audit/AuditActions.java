@@ -97,6 +97,12 @@ public final class AuditActions {
      */
     public static final String ORG_PURGE = "ORG.PURGE";
 
+    /** A tenant's subscription was assigned or its terms changed (ADR-0069). Before/after in detail. */
+    public static final String ORG_SUBSCRIPTION_CHANGE = "ORG.SUBSCRIPTION.CHANGE";
+
+    /** The platform operator recorded a subscription payment (ADR-0069 D-8). */
+    public static final String ORG_SUBSCRIPTION_PAYMENT = "ORG.SUBSCRIPTION.PAYMENT";
+
     // -- Customer lifecycle (ADR-0006 D-12) -----------------------------------
     public static final String CUSTOMER_CREATE        = "CUSTOMER.CREATE";
     public static final String CUSTOMER_UPDATE        = "CUSTOMER.UPDATE";

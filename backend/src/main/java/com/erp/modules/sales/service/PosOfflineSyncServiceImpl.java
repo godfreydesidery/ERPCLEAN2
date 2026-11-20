@@ -70,13 +70,20 @@ public class PosOfflineSyncServiceImpl implements PosOfflineSyncService {
     private final ScopeGuard scopeGuard;
     private final AuditService audit;
     private final ObjectMapper json;
+    /** ADR-0069 D-6: which offline sales a read-only tenant may still sync. */
+    private final com.erp.modules.subscription.service.SubscriptionGate subscriptionGate;
+
+    static final String SOLD_WHILE_READ_ONLY = "Sold after the system became read-only for an "
+            + "overdue subscription.";
 
     public PosOfflineSyncServiceImpl(PosTillRepository tills, PosSessionRepository sessions,
                                      PosOfflineReviewRepository reviews,
                                      PosOfflinePeriodRepository periods,
                                      SalesInvoiceRepository invoices, AppUserRepository users,
                                      PosOfflineSaleIngestor ingestor, ScopeGuard scopeGuard,
-                                     AuditService audit, ObjectMapper json) {
+                                     AuditService audit, ObjectMapper json,
+                                     com.erp.modules.subscription.service.SubscriptionGate subscriptionGate) {
+        this.subscriptionGate = subscriptionGate;
         this.tills = tills;
         this.sessions = sessions;
         this.reviews = reviews;
@@ -122,11 +129,20 @@ public class PosOfflineSyncServiceImpl implements PosOfflineSyncService {
             }
         }
 
-        // 2 — Sales, each on its own.
+        // 2 — Sales, each on its own. ADR-0069 D-6: a tenant that has gone read-only for an overdue
+        // subscription still gets the sales its tills made BEFORE that moment - they really
+        // happened while it was allowed to sell. Later ones are held (kept, not lost) for review.
+        java.time.Instant readOnlySince = principal == null ? null
+                : subscriptionGate.readOnlySince(principal.organisationId());
         List<SaleResult> saleResults = new ArrayList<>();
         for (OfflineSale sale : nullSafe(req.sales())) {
             Long sessionId = resolveSessionId(till, sale.sessionUid(), sale.sessionClientKey(),
                     sessionIdByKey);
+            if (readOnlySince != null && !sale.soldAt().isBefore(readOnlySince)) {
+                saleResults.add(ingestor.hold(till, sale, sessionId, SOLD_WHILE_READ_ONLY,
+                        asJson(sale), actorId));
+                continue;
+            }
             try {
                 var outcome = ingestor.ingest(till, sale, sessionId);
                 saleResults.add(outcome.result() != null ? outcome.result()

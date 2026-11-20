@@ -75,7 +75,7 @@ class UserServiceImplTest {
                 passwordPolicy,
                 mock(AuditService.class),
                 mock(AuthorityCeiling.class),
-                mock(com.erp.modules.iam.repository.OrganisationRepository.class));
+                mock(com.erp.modules.iam.repository.OrganisationRepository.class), org.mockito.Mockito.mock(com.erp.modules.subscription.service.SubscriptionGate.class));
     }
 
     @AfterEach

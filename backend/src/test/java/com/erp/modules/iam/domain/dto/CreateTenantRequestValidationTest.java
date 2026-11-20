@@ -98,6 +98,6 @@ class CreateTenantRequestValidationTest {
                 "HQ", "Head Office",
                 "orgadmin", "OrgPass12345", "Org Admin",
                 "TZS", "TZS", List.of("TZS"),
-                priceListCode, priceListName, null, walkInName, tillName);
+                priceListCode, priceListName, null, walkInName, tillName, null, null, null);
     }
 }
