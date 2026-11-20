@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0F766E">
+  <title>Offline - Orbix App</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="splash.css">
+</head>
+<body>
+  <!-- Served by sw.js when there is no network AND the app itself is not
+       cached yet (or its cache was cleared). No scripts: it must always work. -->
+  <main id="orbix-splash">
+    <div class="orbix-tile" aria-hidden="true">O</div>
+    <h1 class="orbix-name">You are offline</h1>
+    <p class="orbix-msg">
+      Orbix App needs an internet connection to load sales, stock and till figures.
+      Nothing you had saved is lost - connect to Wi-Fi or mobile data and try again.
+    </p>
+    <a class="orbix-retry" href="./">Try again</a>
+  </main>
+</body>
+</html>

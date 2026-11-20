@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    Orbix App - OrbixHQ as an installable web app (PWA).
+    Served from https://app.orbixsystems.app (IIS, see WINDOWS_EC2_DEPLOYMENT.md).
+    No inline scripts: the Content-Security-Policy in web.config forbids them.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Orbix App - sales, stock and tills for owners and managers.">
+  <meta name="theme-color" content="#0F766E">
+  <meta name="color-scheme" content="light">
+
+  <!-- iOS: home-screen app name, icon and full-screen launch -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Orbix">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="splash.css">
+
+  <title>Orbix App</title>
+</head>
+<body>
+  <!-- Shown until Flutter draws its first frame; pwa.js swaps in a retry
+       message if loading stalls (e.g. first visit while offline). -->
+  <div id="orbix-splash" role="status" aria-live="polite">
+    <div class="orbix-tile" aria-hidden="true">O</div>
+    <div class="orbix-name">Orbix App</div>
+    <div class="orbix-spinner" aria-hidden="true"></div>
+    <div id="orbix-splash-msg" class="orbix-msg">Loading&hellip;</div>
+    <button id="orbix-splash-retry" class="orbix-retry" type="button" hidden>Try again</button>
+  </div>
+  <noscript>
+    <p style="font-family:sans-serif;padding:24px">Orbix App needs JavaScript turned on.</p>
+  </noscript>
+
+  <script src="pwa.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
