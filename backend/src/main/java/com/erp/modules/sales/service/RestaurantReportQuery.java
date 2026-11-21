@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -47,6 +48,24 @@ import org.springframework.transaction.annotation.Transactional;
  * till session's cashier, else whoever finalised the receipt. Money is the receipt's gross in the
  * company's base currency ({@link BaseCurrencySql}); a voided receipt is listed but never summed.
  * Scalar cross-module reads by native SQL, the same pattern as {@link SalesReportQuery}.
+ *
+ * <p><b>POS item returns (ADR-0072).</b> A returned item leaves its receipt FINALISED, so the reports
+ * net returns, on one of two bases:
+ * <ul>
+ *   <li><b>Bill grain</b> (waiter sales, bills, bills summary): a bill is shown <em>net of every
+ *       return made against it</em>, whenever the return was made - the bill's amount is its gross
+ *       less what was given back, and the bills list carries the returned part in
+ *       {@code returned}. The bill count does not change (a returned bill was still a bill). The
+ *       summary's CASH column falls by the same refunds (they are always paid in cash), so the
+ *       tenders still add up to the amount. With an item or department filter the bill keeps its
+ *       whole-bill meaning: the whole bill, net of all its returns.</li>
+ *   <li><b>Line grain</b> (waiter items, the dashboard's waiters): the returned lines come off by
+ *       the <em>date of the return</em>, quantity and amount, attributed to the waiter of the
+ *       returned bill, narrowed by the same item and department filter as the sold lines. This is
+ *       the basis of the GL and of the dashboard's sales, so the dashboard's waiters add up to its
+ *       sales.</li>
+ * </ul>
+ * The two differ only when a return is made in a different report window from its sale.
  */
 @Component
 @Transactional(readOnly = true)
@@ -54,6 +73,8 @@ public class RestaurantReportQuery {
 
     private static final String DEFAULT_TIME_ZONE = "Africa/Dar_es_Salaam";
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    /** The department of an item with no category, as the reports show and filter it. */
+    static final String NO_DEPARTMENT = "(no department)";
 
     /** Where the order was served: its table, or Takeaway. */
     private static final String SERVED_AT =
@@ -74,9 +95,45 @@ public class RestaurantReportQuery {
 
     public WaiterSalesReportDto waiterSales(Long companyId, LocalDate fromDate, LocalDate toDate,
                                             String waiterUid, String branchUid) {
-        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid);
-        String amount = BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate", w.baseScale);
-        List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
+        return waiterSales(companyId, fromDate, toDate, waiterUid, branchUid, ItemFilter.NONE);
+    }
+
+    /**
+     * Bill grain: with an item or department filter, the bills that hold a matching line, each at
+     * its whole amount.
+     */
+    public WaiterSalesReportDto waiterSales(Long companyId, LocalDate fromDate, LocalDate toDate,
+                                            String waiterUid, String branchUid, ItemFilter items) {
+        return waiterSales(companyId, fromDate, toDate, waiterUid, branchUid, items, false);
+    }
+
+    /**
+     * The dashboard's waiters: like {@link #waiterSales}, but with an item or department filter
+     * each bill counts only the matching lines' amount, so the waiters add up to the dashboard's
+     * line-level sales. Without a filter it is exactly {@link #waiterSales}.
+     */
+    public WaiterSalesReportDto waiterLineSales(Long companyId, LocalDate fromDate,
+                                                LocalDate toDate, String waiterUid,
+                                                String branchUid, ItemFilter items) {
+        return waiterSales(companyId, fromDate, toDate, waiterUid, branchUid, items, true);
+    }
+
+    private WaiterSalesReportDto waiterSales(Long companyId, LocalDate fromDate, LocalDate toDate,
+                                             String waiterUid, String branchUid, ItemFilter items,
+                                             boolean lineAmounts) {
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id", items);
+        boolean lines = lineAmounts && w.items.active();
+        String receiptGross = BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate",
+                w.baseScale);
+        // Bill grain is net of the bill's returns here; line grain is netted by return date below.
+        String amount = lines ? "m.gross" : lineAmounts ? receiptGross
+                : "(" + receiptGross + " - " + billReturned(w.baseScale) + ")";
+        String matched = lines ? w.items.matchedGrossJoin(w.baseScale) : "";
+        List<Object> params = new ArrayList<>();
+        if (lines) {
+            params.addAll(w.items.params());
+        }
+        params.addAll(List.of(companyId, w.from, w.to));
         params.addAll(w.params);
         List<WaiterSalesRowDto> rows = jdbc.query("""
                 SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,
@@ -87,6 +144,8 @@ public class RestaurantReportQuery {
                 FROM restaurant_orders o
                 JOIN sales_invoices i ON i.id = o.sales_invoice_id
                 JOIN app_users u      ON u.id = COALESCE(o.served_by, o.opened_by)
+                """ + matched + """
+
                 WHERE o.company_id = ?
                   AND o.status = 'PAID'
                   AND i.status = 'FINALISED'
@@ -99,6 +158,9 @@ public class RestaurantReportQuery {
                 (rs, i) -> waiterRow(rs.getString("waiter_uid"), rs.getString("waiter_name"),
                         rs.getLong("bills"), rs.getLong("guests"), rs.getBigDecimal("amount")),
                 params.toArray());
+        if (lineAmounts) {
+            rows = netOfReturnsByDate(rows, w, companyId);
+        }
 
         long bills = 0;
         long guests = 0;
@@ -113,6 +175,65 @@ public class RestaurantReportQuery {
                 waiterRow(null, "TOTAL", bills, guests, total), Instant.now().toString());
     }
 
+    /**
+     * What POS item returns gave back against receipt {@code i}, in base currency, whenever they were
+     * made - the scalar behind the bill-grain "net of returns" amount (ADR-0072). Needs the
+     * receipt aliased {@code i}; 0 for a bill with no return.
+     */
+    static String billReturned(int baseScale) {
+        return "COALESCE((SELECT SUM("
+                + BaseCurrencySql.grossToBase("br.net_amount", "br.vat_amount", "i.fx_rate",
+                        baseScale)
+                + ") FROM pos_sale_returns br WHERE br.sales_invoice_id = i.id"
+                + " AND br.company_id = i.company_id), 0)";
+    }
+
+    /**
+     * Line grain (ADR-0072): takes the lines returned in the window - by return date, attributed to
+     * the waiter of the returned bill, narrowed by the item and department filter - off each
+     * waiter's amount. A waiter whose only activity was a return shows a negative row with no bills.
+     */
+    private List<WaiterSalesRowDto> netOfReturnsByDate(List<WaiterSalesRowDto> rows, Window w,
+                                                       Long companyId) {
+        List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
+        params.addAll(w.params);
+        params.addAll(w.items.params());
+        Map<String, BigDecimal> returned = new LinkedHashMap<>();
+        Map<String, String> names = new HashMap<>();
+        jdbc.query("SELECT u.uid AS waiter_uid, u.display_name AS waiter_name, SUM("
+                + PosReturnSql.gross(w.baseScale) + ") AS amount "
+                + PosReturnSql.RETURNED_FROM
+                + " JOIN restaurant_orders o ON o.sales_invoice_id = i.id"
+                + " AND o.company_id = rt.company_id"
+                + " JOIN app_users u ON u.id = COALESCE(o.served_by, o.opened_by)"
+                + " LEFT JOIN products p ON p.id = l.product_id"
+                + " WHERE rt.company_id = ? AND o.status = 'PAID'"
+                + " AND rt.created_at >= ? AND rt.created_at < ? "
+                + w.filterSql + w.items.lineSql("l", "p")
+                + " GROUP BY u.uid, u.display_name",
+                rs -> {
+                    returned.put(rs.getString("waiter_uid"), rs.getBigDecimal("amount"));
+                    names.put(rs.getString("waiter_uid"), rs.getString("waiter_name"));
+                },
+                params.toArray());
+        if (returned.isEmpty()) {
+            return rows;
+        }
+        List<WaiterSalesRowDto> out = new ArrayList<>();
+        for (WaiterSalesRowDto r : rows) {
+            BigDecimal back = returned.remove(r.waiterUid());
+            out.add(back == null ? r : waiterRow(r.waiterUid(), r.waiterName(), r.bills(),
+                    r.guests(), r.amount().subtract(back)));
+        }
+        returned.forEach((uid, back) -> out.add(
+                waiterRow(uid, names.get(uid), 0, 0, back.negate())));
+        out.sort((a, b) -> {
+            int c = b.amount().compareTo(a.amount());
+            return c != 0 ? c : a.waiterName().compareToIgnoreCase(b.waiterName());
+        });
+        return out;
+    }
+
     private static WaiterSalesRowDto waiterRow(String uid, String name, long bills, long guests,
                                                BigDecimal amount) {
         BigDecimal avg = bills == 0 ? BigDecimal.ZERO
@@ -124,8 +245,17 @@ public class RestaurantReportQuery {
 
     public RestaurantBillsReportDto bills(Long companyId, LocalDate fromDate, LocalDate toDate,
                                           String waiterUid, String branchUid) {
-        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid);
-        String amount = BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate", w.baseScale);
+        return bills(companyId, fromDate, toDate, waiterUid, branchUid, ItemFilter.NONE);
+    }
+
+    /** Bill grain: with an item or department filter, the bills holding a matching line. */
+    public RestaurantBillsReportDto bills(Long companyId, LocalDate fromDate, LocalDate toDate,
+                                          String waiterUid, String branchUid, ItemFilter items) {
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id", items);
+        // ADR-0072: the bill is shown net of its POS item returns; the returned part is its own column.
+        String returned = billReturned(w.baseScale);
+        String amount = "(" + BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate",
+                w.baseScale) + " - " + returned + ")";
         List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
         params.addAll(w.params);
         ZoneId zone = w.zone;
@@ -138,6 +268,8 @@ public class RestaurantReportQuery {
                        o.opened_at, o.paid_at,
                        """ + amount + """
                  AS amount,
+                       """ + returned + """
+                 AS returned,
                        (SELECT string_agg(DISTINCT p.tender_type, ', ' ORDER BY p.tender_type)
                           FROM sales_invoice_payments p WHERE p.invoice_id = i.id) AS tenders
                 FROM restaurant_orders o
@@ -160,7 +292,8 @@ public class RestaurantReportQuery {
                         rs.getString("cashier_name"), rs.getString("invoice_number"),
                         rs.getString("invoice_status"), intOrNull(rs, "guest_count"),
                         when(rs, "opened_at", zone), when(rs, "paid_at", zone),
-                        rs.getBigDecimal("amount"), rs.getString("tenders")),
+                        rs.getBigDecimal("amount"), rs.getString("tenders"),
+                        rs.getBigDecimal("returned")),
                 params.toArray());
 
         long count = 0;
@@ -181,13 +314,24 @@ public class RestaurantReportQuery {
     /** Every order not yet paid, now: OPEN, or BILLED and waiting for payment. No date window. */
     public RestaurantPendingBillsReportDto pendingBills(Long companyId, String waiterUid,
                                                         String branchUid) {
+        return pendingBills(companyId, waiterUid, branchUid, ItemFilter.NONE);
+    }
+
+    /**
+     * Bill grain: with an item or department filter, the orders holding a matching item that is
+     * not voided; each still shows its whole bill.
+     */
+    public RestaurantPendingBillsReportDto pendingBills(Long companyId, String waiterUid,
+                                                        String branchUid, ItemFilter items) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
         Header header = loadHeader(companyId);
         ZoneId zone = header.zone();
         Filter f = filter(principal, companyId, waiterUid, branchUid, "o.branch_id");
+        ItemScope scope = itemScope(companyId, items);
         List<Object> params = new ArrayList<>(List.of(companyId));
         params.addAll(f.params);
+        params.addAll(scope.params());
         List<RestaurantPendingBillRowDto> rows = jdbc.query("""
                 SELECT o.uid, o.order_number, """ + SERVED_AT + """
                  AS served_at,
@@ -202,7 +346,7 @@ public class RestaurantReportQuery {
                 LEFT JOIN restaurant_tables t ON t.id = o.restaurant_table_id
                 WHERE o.company_id = ?
                   AND o.status IN ('OPEN', 'BILLED')
-                """ + f.sql + """
+                """ + f.sql + scope.orderExists("o.id", true) + """
 
                 ORDER BY o.opened_at, o.order_number
                 """,
@@ -236,13 +380,26 @@ public class RestaurantReportQuery {
     /** The items on each waiter's paid bills: sales by waiter in detail. */
     public WaiterItemsReportDto waiterItems(Long companyId, LocalDate fromDate, LocalDate toDate,
                                             String waiterUid, String branchUid) {
-        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid);
+        return waiterItems(companyId, fromDate, toDate, waiterUid, branchUid, ItemFilter.NONE);
+    }
+
+    /**
+     * Line grain: with an item or department filter, only the matching lines; a waiter's bills
+     * are the bills holding one.
+     */
+    public WaiterItemsReportDto waiterItems(Long companyId, LocalDate fromDate, LocalDate toDate,
+                                            String waiterUid, String branchUid, ItemFilter items) {
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id", items);
         String gross = BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", "i.fx_rate",
                 w.baseScale);
         List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
         params.addAll(w.params);
-        List<WaiterItemsReportDto.Row> lines = jdbc.query("""
+        List<Object> lineParams = new ArrayList<>(params);
+        lineParams.addAll(w.items.params());
+        Map<String, WaiterItemsReportDto.Row> byKey = new LinkedHashMap<>();
+        jdbc.query("""
                 SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,
+                       l.product_id AS product_id, l.unit_id AS unit_id,
                        COALESCE(p.code, MAX(l.product_code)) AS code,
                        COALESCE(p.name, MAX(l.product_name)) AS name,
                        MAX(l.unit_name) AS unit,
@@ -258,16 +415,62 @@ public class RestaurantReportQuery {
                   AND o.status = 'PAID'
                   AND i.status = 'FINALISED'
                   AND o.paid_at >= ? AND o.paid_at < ?
-                """ + w.filterSql + """
+                """ + w.filterSql + w.items.lineSql("l", "p") + """
 
                 GROUP BY u.uid, u.display_name, l.product_id, l.unit_id, p.code, p.name
                 ORDER BY amount DESC, name
                 """,
-                (rs, i) -> new WaiterItemsReportDto.Row(rs.getString("waiter_uid"),
-                        rs.getString("waiter_name"), rs.getString("code"), rs.getString("name"),
-                        rs.getString("unit"), rs.getBigDecimal("quantity"),
-                        rs.getBigDecimal("amount")),
-                params.toArray());
+                rs -> {
+                    byKey.put(waiterItemKey(rs.getString("waiter_uid"), rs.getObject("product_id"),
+                                    rs.getObject("unit_id")),
+                            new WaiterItemsReportDto.Row(rs.getString("waiter_uid"),
+                                    rs.getString("waiter_name"), rs.getString("code"),
+                                    rs.getString("name"), rs.getString("unit"),
+                                    rs.getBigDecimal("quantity"), rs.getBigDecimal("amount")));
+                },
+                lineParams.toArray());
+
+        // ADR-0072: the lines returned in the window come off by return date, per waiter, item and
+        // unit, under the same item and department filter; an item only returned shows negative.
+        List<Object> returnParams = new ArrayList<>(List.of(companyId, w.from, w.to));
+        returnParams.addAll(w.params);
+        returnParams.addAll(w.items.params());
+        jdbc.query("SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,"
+                + " l.product_id AS product_id, l.unit_id AS unit_id,"
+                + " COALESCE(p.code, MAX(l.product_code)) AS code,"
+                + " COALESCE(p.name, MAX(l.product_name)) AS name,"
+                + " MAX(l.unit_name) AS unit, SUM(rl.qty_returned) AS quantity,"
+                + " COALESCE(SUM(" + PosReturnSql.gross(w.baseScale) + "), 0) AS amount "
+                + PosReturnSql.RETURNED_FROM
+                + " JOIN restaurant_orders o ON o.sales_invoice_id = i.id"
+                + " AND o.company_id = rt.company_id"
+                + " JOIN app_users u ON u.id = COALESCE(o.served_by, o.opened_by)"
+                + " LEFT JOIN products p ON p.id = l.product_id"
+                + " WHERE rt.company_id = ? AND o.status = 'PAID'"
+                + " AND rt.created_at >= ? AND rt.created_at < ? "
+                + w.filterSql + w.items.lineSql("l", "p")
+                + " GROUP BY u.uid, u.display_name, l.product_id, l.unit_id, p.code, p.name",
+                rs -> {
+                    String key = waiterItemKey(rs.getString("waiter_uid"),
+                            rs.getObject("product_id"), rs.getObject("unit_id"));
+                    WaiterItemsReportDto.Row have = byKey.get(key);
+                    BigDecimal qty = rs.getBigDecimal("quantity");
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    byKey.put(key, have == null
+                            ? new WaiterItemsReportDto.Row(rs.getString("waiter_uid"),
+                                    rs.getString("waiter_name"), rs.getString("code"),
+                                    rs.getString("name"), rs.getString("unit"), qty.negate(),
+                                    amount.negate())
+                            : new WaiterItemsReportDto.Row(have.waiterUid(), have.waiterName(),
+                                    have.code(), have.name(), have.unit(),
+                                    have.quantity().subtract(qty), have.amount().subtract(amount)));
+                },
+                returnParams.toArray());
+        List<WaiterItemsReportDto.Row> lines = new ArrayList<>(byKey.values());
+        lines.sort((a, b) -> {
+            int c = b.amount().compareTo(a.amount());
+            return c != 0 ? c : String.valueOf(a.name()).compareToIgnoreCase(String.valueOf(b.name()));
+        });
 
         // Waiters biggest first, by the same lines; bills counted from the orders.
         Map<String, Long> bills = new HashMap<>();
@@ -317,14 +520,26 @@ public class RestaurantReportQuery {
                 Instant.now().toString());
     }
 
+    private static String waiterItemKey(String waiterUid, Object productId, Object unitId) {
+        return waiterUid + '|' + productId + '|' + unitId;
+    }
+
     // ---------------------------------------------------------------- bills (summary)
 
     /** Bills paid per waiter, the amount split by how it was paid. Voided receipts left out. */
     public RestaurantBillsSummaryDto billsSummary(Long companyId, LocalDate fromDate,
                                                   LocalDate toDate, String waiterUid,
                                                   String branchUid) {
-        WaiterSalesReportDto sales = waiterSales(companyId, fromDate, toDate, waiterUid, branchUid);
-        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid);
+        return billsSummary(companyId, fromDate, toDate, waiterUid, branchUid, ItemFilter.NONE);
+    }
+
+    /** Bill grain: with an item or department filter, the bills holding a matching line. */
+    public RestaurantBillsSummaryDto billsSummary(Long companyId, LocalDate fromDate,
+                                                  LocalDate toDate, String waiterUid,
+                                                  String branchUid, ItemFilter items) {
+        WaiterSalesReportDto sales =
+                waiterSales(companyId, fromDate, toDate, waiterUid, branchUid, items);
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id", items);
         String paid = BaseCurrencySql.toBase("(p.amount - COALESCE(p.change_amount, 0))",
                 "i.fx_rate", w.baseScale);
         List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
@@ -353,6 +568,34 @@ public class RestaurantReportQuery {
                     seen.add(tender);
                     byWaiter.computeIfAbsent(rs.getString("waiter_uid"),
                             k -> new HashMap<>()).put(tender, rs.getBigDecimal("amount"));
+                },
+                params.toArray());
+
+        // ADR-0072: item returns are refunded in CASH, so they come off the waiter's CASH column -
+        // the tenders then still add up to the (net-of-returns) amount. Same bills, same basis as
+        // the amount: every return against a bill in the window, whenever it was made.
+        jdbc.query("""
+                SELECT u.uid AS waiter_uid,
+                       COALESCE(SUM(""" + BaseCurrencySql.grossToBase("br.net_amount",
+                        "br.vat_amount", "i.fx_rate", w.baseScale) + """
+                ), 0) AS amount
+                FROM restaurant_orders o
+                JOIN sales_invoices i       ON i.id = o.sales_invoice_id
+                JOIN pos_sale_returns br    ON br.sales_invoice_id = i.id
+                                           AND br.company_id = i.company_id
+                JOIN app_users u            ON u.id = COALESCE(o.served_by, o.opened_by)
+                WHERE o.company_id = ?
+                  AND o.status = 'PAID'
+                  AND i.status = 'FINALISED'
+                  AND o.paid_at >= ? AND o.paid_at < ?
+                """ + w.filterSql + """
+
+                GROUP BY u.uid
+                """,
+                rs -> {
+                    seen.add("CASH");
+                    byWaiter.computeIfAbsent(rs.getString("waiter_uid"), k -> new HashMap<>())
+                            .merge("CASH", rs.getBigDecimal("amount").negate(), BigDecimal::add);
                 },
                 params.toArray());
 
@@ -394,13 +637,21 @@ public class RestaurantReportQuery {
     /** Pending bills right now, per waiter. No date window, like the detail. */
     public RestaurantPendingSummaryDto pendingSummary(Long companyId, String waiterUid,
                                                       String branchUid) {
+        return pendingSummary(companyId, waiterUid, branchUid, ItemFilter.NONE);
+    }
+
+    /** Bill grain, like {@link #pendingBills(Long, String, String, ItemFilter)}. */
+    public RestaurantPendingSummaryDto pendingSummary(Long companyId, String waiterUid,
+                                                      String branchUid, ItemFilter itemFilter) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
         Header header = loadHeader(companyId);
         ZoneId zone = header.zone();
         Filter f = filter(principal, companyId, waiterUid, branchUid, "o.branch_id");
+        ItemScope scope = itemScope(companyId, itemFilter);
         List<Object> params = new ArrayList<>(List.of(companyId));
         params.addAll(f.params);
+        params.addAll(scope.params());
         List<RestaurantPendingSummaryDto.Row> rows = jdbc.query("""
                 SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,
                        COUNT(*) FILTER (WHERE o.status = 'OPEN')   AS open_count,
@@ -418,7 +669,7 @@ public class RestaurantReportQuery {
                        AND l.parent_line_id IS NULL) li ON true
                 WHERE o.company_id = ?
                   AND o.status IN ('OPEN', 'BILLED')
-                """ + f.sql + """
+                """ + f.sql + scope.orderExists("o.id", true) + """
 
                 GROUP BY u.uid, u.display_name
                 ORDER BY billed_amount DESC, u.display_name
@@ -455,6 +706,15 @@ public class RestaurantReportQuery {
         return filter(RequestContext.get(), companyId, null, branchUid, branchColumn);
     }
 
+    /**
+     * The waiter and branch filters on {@code branchColumn}, for queries outside this class; the
+     * waiter test follows the table the column belongs to (see {@link #waiterSql}).
+     */
+    public Filter waiterBranchFilter(Long companyId, String waiterUid, String branchUid,
+                                     String branchColumn) {
+        return filter(RequestContext.get(), companyId, waiterUid, branchUid, branchColumn);
+    }
+
     // ---------------------------------------------------------------- shared
 
     record Header(String name, String legalName, String taxId, String vrn,
@@ -474,14 +734,15 @@ public class RestaurantReportQuery {
     /** The waiter and branch filters, as SQL with their parameters. */
     record Filter(String sql, List<Object> params, String waiterName, String branchName) {}
 
+    /**
+     * The date window and filters. {@code filterSql} (with {@code params}) holds the branch and
+     * waiter filters and, when an item or department filter is set, the bill-grain test that the
+     * receipt {@code i} holds a matching line; a line-grain query adds
+     * {@code items.lineSql(...)} on its own lines as well.
+     */
     record Window(Header header, ZoneId zone, OffsetDateTime from, OffsetDateTime to,
                   String filterSql, List<Object> params, String waiterName, String branchName,
-                  int baseScale) {}
-
-    private Window window(Long companyId, LocalDate fromDate, LocalDate toDate, String waiterUid,
-                          String branchUid) {
-        return window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id");
-    }
+                  int baseScale, ItemScope items) {}
 
     /**
      * The date window and filters; {@code branchColumn} is the branch column the SQL filters on.
@@ -490,6 +751,13 @@ public class RestaurantReportQuery {
      */
     public Window window(Long companyId, LocalDate fromDate, LocalDate toDate, String waiterUid,
                   String branchUid, String branchColumn) {
+        return window(companyId, fromDate, toDate, waiterUid, branchUid, branchColumn,
+                ItemFilter.NONE);
+    }
+
+    /** As above, with the optional item and department filters (see {@link Window}). */
+    public Window window(Long companyId, LocalDate fromDate, LocalDate toDate, String waiterUid,
+                  String branchUid, String branchColumn, ItemFilter items) {
         RequestContext.Principal principal = RequestContext.get();
         scopeGuard.assertCanActIn(principal, companyId);
         if (fromDate == null || toDate == null) {
@@ -501,10 +769,148 @@ public class RestaurantReportQuery {
         Header header = loadHeader(companyId);
         ZoneId zone = header.zone();
         Filter f = filter(principal, companyId, waiterUid, branchUid, branchColumn);
+        ItemScope scope = itemScope(companyId, items);
+        List<Object> params = new ArrayList<>(f.params);
+        params.addAll(scope.params());
         return new Window(header, zone,
                 fromDate.atStartOfDay(zone).toOffsetDateTime(),
                 toDate.plusDays(1).atStartOfDay(zone).toOffsetDateTime(),
-                f.sql, f.params, f.waiterName, f.branchName, BaseCurrencySql.baseScale(jdbc, companyId));
+                f.sql + scope.invoiceExists("i.id"), params, f.waiterName, f.branchName,
+                BaseCurrencySql.baseScale(jdbc, companyId), scope);
+    }
+
+    // ---------------------------------------------------------------- item / department filters
+
+    /**
+     * The item and department filters as the caller sent them; either or both may be null or
+     * blank. The department is the product's category, matched case-insensitively and trimmed,
+     * the way the reports group it; {@value #NO_DEPARTMENT} matches items with none.
+     */
+    public record ItemFilter(String productUid, String department) {
+        public static final ItemFilter NONE = new ItemFilter(null, null);
+    }
+
+    /**
+     * {@link ItemFilter} resolved: the product id (looked up in the caller's company, never taken
+     * from the caller) and the department, lower-cased for the match. Every value is bound as a
+     * parameter; {@link #params()} goes with each SQL fragment, in the fragment's place.
+     */
+    public record ItemScope(Long productId, String productName, String department) {
+        static final ItemScope NONE = new ItemScope(null, null, null);
+
+        public boolean active() {
+            return productId != null || department != null;
+        }
+
+        /** The bound values of any one fragment below: product id, then department. */
+        public List<Object> params() {
+            List<Object> p = new ArrayList<>(2);
+            if (productId != null) {
+                p.add(productId);
+            }
+            if (department != null) {
+                p.add(department.toLowerCase(Locale.ROOT));
+            }
+            return p;
+        }
+
+        /**
+         * {@code AND …} on one line ({@code line}: sales_invoice_lines or restaurant_order_lines)
+         * and its product ({@code product}, LEFT JOINed). Empty when no filter is set.
+         */
+        public String lineSql(String line, String product) {
+            StringBuilder sql = new StringBuilder();
+            if (productId != null) {
+                sql.append(" AND ").append(line).append(".product_id = ?");
+            }
+            if (department != null) {
+                sql.append(" AND LOWER(").append(departmentOf(product)).append(") = ?");
+            }
+            return sql.toString();
+        }
+
+        /** {@code AND} the receipt {@code invoiceId} holds a matching line. */
+        public String invoiceExists(String invoiceId) {
+            if (!active()) {
+                return "";
+            }
+            return " AND EXISTS (SELECT 1 FROM sales_invoice_lines xl" + productJoin("xl", "xp")
+                    + " WHERE xl.invoice_id = " + invoiceId + lineSql("xl", "xp") + ")";
+        }
+
+        /**
+         * {@code AND} the restaurant order {@code orderId} holds a matching item; {@code live}
+         * leaves voided items out (an order still on the floor).
+         */
+        public String orderExists(String orderId, boolean live) {
+            if (!active()) {
+                return "";
+            }
+            return " AND EXISTS (SELECT 1 FROM restaurant_order_lines xl" + productJoin("xl", "xp")
+                    + " WHERE xl.restaurant_order_id = " + orderId
+                    + (live ? " AND xl.status <> 'VOIDED'" : "") + lineSql("xl", "xp") + ")";
+        }
+
+        /**
+         * A LEFT JOIN LATERAL giving {@code m.gross}: the matching lines of receipt {@code i}, at
+         * gross in the base currency. Its {@link #params()} come before the WHERE clause's.
+         */
+        String matchedGrossJoin(int baseScale) {
+            return " LEFT JOIN LATERAL (SELECT SUM("
+                    + BaseCurrencySql.grossToBase("ml.net_amount", "ml.vat_amount", "i.fx_rate",
+                            baseScale)
+                    + ") AS gross FROM sales_invoice_lines ml" + productJoin("ml", "mp")
+                    + " WHERE ml.invoice_id = i.id" + lineSql("ml", "mp") + ") m ON true";
+        }
+
+        /** The product join a department match needs; none for the product filter alone. */
+        public String productJoin(String line, String product) {
+            return department == null ? ""
+                    : " LEFT JOIN products " + product + " ON " + product + ".id = " + line
+                            + ".product_id";
+        }
+    }
+
+    /** What the reports call a line's department: the product's category, or "(no department)". */
+    static String departmentOf(String product) {
+        return "COALESCE(NULLIF(TRIM(" + product + ".category), ''), '" + NO_DEPARTMENT + "')";
+    }
+
+    /** Resolves {@link ItemFilter}; an item not in this company is "not found". */
+    public ItemScope itemScope(Long companyId, ItemFilter filter) {
+        if (filter == null) {
+            return ItemScope.NONE;
+        }
+        Long productId = null;
+        String productName = null;
+        if (filter.productUid() != null && !filter.productUid().isBlank()) {
+            List<Object[]> found = jdbc.query(
+                    "SELECT id, name FROM products WHERE uid = ? AND company_id = ?",
+                    (rs, i) -> new Object[] {rs.getLong("id"), rs.getString("name")},
+                    filter.productUid().trim(), companyId);
+            if (found.isEmpty()) {
+                throw NotFoundException.of("Item", filter.productUid());
+            }
+            productId = (Long) found.get(0)[0];
+            productName = (String) found.get(0)[1];
+        }
+        String department = filter.department() == null || filter.department().isBlank() ? null
+                : filter.department().trim();
+        return productId == null && department == null ? ItemScope.NONE
+                : new ItemScope(productId, productName, department);
+    }
+
+    /** The item and department filters as report-header lines; none when not set. */
+    public List<String> itemFilterLines(Long companyId, ItemFilter filter) {
+        ItemScope scope = itemScope(companyId, filter);
+        List<String> lines = new ArrayList<>(2);
+        if (scope.productId() != null) {
+            lines.add("Item: " + scope.productName());
+        }
+        if (scope.department() != null) {
+            lines.add("Department: " + scope.department());
+        }
+        return lines;
     }
 
     private Filter filter(RequestContext.Principal principal, Long companyId, String waiterUid,
@@ -531,19 +937,64 @@ public class RestaurantReportQuery {
         }
         String waiterName = null;
         if (waiterUid != null && !waiterUid.isBlank()) {
-            // Any user of this company's orders; a uid that opened none simply matches nothing.
-            List<Object[]> found = jdbc.query(
-                    "SELECT id, display_name FROM app_users WHERE uid = ?",
-                    (rs, i) -> new Object[] {rs.getLong("id"), rs.getString("display_name")},
-                    waiterUid.trim());
-            if (found.isEmpty()) {
-                throw NotFoundException.of("Waiter", waiterUid);
-            }
-            sql.append(" AND COALESCE(o.served_by, o.opened_by) = ?");
-            params.add(found.get(0)[0]);
-            waiterName = (String) found.get(0)[1];
+            Object[] waiter = waiter(companyId, waiterUid);
+            sql.append(waiterSql(branchColumn));
+            params.add(waiter[0]);
+            waiterName = (String) waiter[1];
         }
         return new Filter(sql.toString(), params, waiterName, branchName);
+    }
+
+    /**
+     * {@code {id, display name}} of a waiter of this company: a user assigned to it or to one of
+     * its branches, or one who has held one of its orders (so a waiter who has left still reports).
+     * Another company's user is "not found", like an unknown uid.
+     */
+    private Object[] waiter(Long companyId, String waiterUid) {
+        List<Object[]> found = jdbc.query("""
+                SELECT u.id, u.display_name FROM app_users u
+                WHERE u.uid = ?
+                  AND (EXISTS (SELECT 1 FROM user_company uc
+                                WHERE uc.user_id = u.id AND uc.company_id = ?)
+                    OR EXISTS (SELECT 1 FROM user_branch ub JOIN branches b ON b.id = ub.branch_id
+                                WHERE ub.user_id = u.id AND b.company_id = ?)
+                    OR EXISTS (SELECT 1 FROM restaurant_orders ro
+                                WHERE ro.company_id = ?
+                                  AND (ro.served_by = u.id OR ro.opened_by = u.id)))
+                """,
+                (rs, i) -> new Object[] {rs.getLong("id"), rs.getString("display_name")},
+                waiterUid.trim(), companyId, companyId, companyId);
+        if (found.isEmpty()) {
+            throw NotFoundException.of("Waiter", waiterUid);
+        }
+        return found.get(0);
+    }
+
+    /**
+     * The waiter test for the table {@code branchColumn} belongs to — the waiter being whoever
+     * holds the restaurant order: an order ({@code o}) directly; a receipt ({@code i}) through the
+     * order it paid; a POS payout ({@code po}) through the receipt it refunded. A receipt or payout
+     * with no restaurant order (a counter sale) has no waiter, so it drops out.
+     */
+    static String waiterSql(String branchColumn) {
+        return switch (branchColumn) {
+            case "i.branch_id" -> " AND EXISTS (SELECT 1 FROM restaurant_orders wo"
+                    + " WHERE wo.sales_invoice_id = i.id"
+                    + " AND COALESCE(wo.served_by, wo.opened_by) = ?)";
+            case "po.branch_id" -> " AND EXISTS (SELECT 1 FROM sales_invoices wi"
+                    + " JOIN restaurant_orders wo ON wo.sales_invoice_id = wi.id"
+                    + " WHERE wi.uid = po.source_invoice_uid AND wi.company_id = po.company_id"
+                    + " AND COALESCE(wo.served_by, wo.opened_by) = ?)";
+            default -> " AND COALESCE(o.served_by, o.opened_by) = ?";
+        };
+    }
+
+    /** "Waiter: name" for a report header; none when no waiter is chosen. */
+    public List<String> waiterLines(Long companyId, String waiterUid) {
+        if (waiterUid == null || waiterUid.isBlank()) {
+            return List.of();
+        }
+        return List.of("Waiter: " + waiter(companyId, waiterUid)[1]);
     }
 
     Header loadHeader(Long companyId) {

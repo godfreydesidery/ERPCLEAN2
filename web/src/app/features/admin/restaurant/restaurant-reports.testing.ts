@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ReportFilterOptionsService } from '../reporting/report-filter-options.service';
+import { RestaurantItemFilterOptionsService } from './restaurant-item-filter-options.service';
 import {
   RestaurantBillsReportDto,
   RestaurantBillsSummaryDto,
@@ -162,13 +163,33 @@ export function stubReportService(): ReportServiceStub {
   };
 }
 
+/** The Item and Department picker options; plain functions (compiled with the app). */
+export function stubItemFilterOptions() {
+  return {
+    options: () =>
+      of({
+        companyId: '1',
+        items: [{ uid: 'P1', label: 'Tacos', hint: 'TAC' }],
+        departments: [
+          { uid: 'Food', label: 'Food' },
+          { uid: '(no department)', label: '(no department)' },
+        ],
+      }),
+    search: () => of([{ uid: 'P2', label: 'Latte', hint: 'LAT' }]),
+  };
+}
+
 export function reportsBed(perms: string[], svc: object): void {
   TestBed.configureTestingModule({
     imports: [RestaurantReportsComponent],
     providers: [
       provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
       { provide: RestaurantReportService, useValue: svc },
-      { provide: ReportFilterOptionsService, useValue: { branchOptions: () => of([]) } },
+      {
+        provide: ReportFilterOptionsService,
+        useValue: { company: () => of(null), branchOptions: () => of([]) },
+      },
+      { provide: RestaurantItemFilterOptionsService, useValue: stubItemFilterOptions() },
       {
         provide: SessionStore,
         useValue: {

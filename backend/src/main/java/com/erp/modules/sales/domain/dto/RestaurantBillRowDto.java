@@ -4,7 +4,8 @@ import java.math.BigDecimal;
 
 /**
  * One paid restaurant bill: the order, where it was served, the waiter who opened it, the cashier
- * who took the money, the receipt it became and how it was paid. {@code amount} is base currency.
+ * who took the money, the receipt it became and how it was paid. {@code amount} is base currency and
+ * <b>net of POS item returns</b> (ADR-0072); {@code returned} is the part given back (0 when none).
  */
 public record RestaurantBillRowDto(
         String     orderUid,
@@ -18,4 +19,5 @@ public record RestaurantBillRowDto(
         String     openedAt,
         String     paidAt,
         BigDecimal amount,
-        String     tenders) {}
+        String     tenders,
+        BigDecimal returned) {}

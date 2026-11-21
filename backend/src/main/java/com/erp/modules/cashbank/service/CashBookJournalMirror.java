@@ -115,6 +115,29 @@ public class CashBookJournalMirror {
     }
 
     /**
+     * {@code SALE_REFUND} rows for a POS item return (ADR-0072), mirroring the partial
+     * {@code SALES_REVERSAL} journal posted under the RETURN's uid (OUT on the Cash account). This
+     * is the ONLY place the refund reaches the cash book: the REFUND payout the return also writes
+     * posts no journal and raises no {@code POS.CASH.MOVED}, so the cash leaves the book exactly once.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int mirrorSaleReturn(Long companyId, Long branchId, String returnUid,
+                                String returnNumber) {
+        if (hasRows(companyId, returnUid, CashTxnType.SALE_REFUND)) {
+            return 0;
+        }
+        Optional<JournalEntryDto> journal = journals.findPostedBySource(
+                companyId, JournalSourceType.SALES_REVERSAL, returnUid);
+        if (journal.isEmpty()) {
+            log.warn("Cash book: item return {} has no GL entry in company {} — no cash row "
+                    + "written", returnUid, companyId);
+            return -1;
+        }
+        return mirror(companyId, branchId, journal.get(), CashTxnType.SALE_REFUND, returnUid,
+                "Item return " + label(returnNumber, returnUid), null);
+    }
+
+    /**
      * {@code POS_PAYOUT} (OUT) or {@code POS_VARIANCE} (IN over / OUT short) rows mirroring the
      * till journal identified by {@code journalUid}.
      */

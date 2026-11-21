@@ -36,6 +36,43 @@
                             [options]="branchOptions()"
                             placeholder="All branches" />
           </div>
+          @if (canFilterWaiter()) {
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="rd-waiter">
+                Waiter <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker [id]="'rd-waiter'" name="rd-waiter"
+                              [(ngModel)]="waiterUid"
+                              [options]="waiterOptions()"
+                              placeholder="All waiters" />
+            </div>
+          }
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="rd-item">
+              Item <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker [id]="'rd-item'" name="rd-item"
+                            [(ngModel)]="productUid"
+                            [options]="productOptions()"
+                            [search]="searchProducts"
+                            placeholder="All items" />
+          </div>
+          <div class="col-sm-6 col-lg-2">
+            <label class="form-label" for="rd-department">
+              Department <span class="text-muted small">(optional)</span>
+            </label>
+            <app-uid-picker [id]="'rd-department'" name="rd-department"
+                            [(ngModel)]="department"
+                            [options]="departmentOptions()"
+                            placeholder="All departments" />
+          </div>
+          @if (productUid() || department()) {
+            <div class="col-auto">
+              <button type="button" class="btn btn-link px-0" (click)="clearItemFilters()">
+                Clear item filters
+              </button>
+            </div>
+          }
           <div class="col-auto">
             <button type="button" class="btn btn-primary" (click)="load()"
                     [disabled]="state() === 'loading' || !fromDate() || !toDate()">

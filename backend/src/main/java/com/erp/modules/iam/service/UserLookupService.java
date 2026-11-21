@@ -72,4 +72,11 @@ public interface UserLookupService {
 
     /** The external uids of these users, in one read. Same scoping rule as {@link #displayNamesByIds}. */
     Map<Long, String> uidsByIds(Collection<Long> userIds);
+
+    /**
+     * The internal id of the user with this uid, or empty when there is none. For a caller that has
+     * just verified the uid through {@code StepUpAuthService} and must persist WHO approved, as the
+     * numeric FK its own table carries (ADR-0072 {@code pos_sale_returns.authorised_by}).
+     */
+    java.util.Optional<Long> idByUid(String userUid);
 }

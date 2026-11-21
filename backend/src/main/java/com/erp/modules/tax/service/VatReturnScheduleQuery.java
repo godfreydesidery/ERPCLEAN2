@@ -98,6 +98,23 @@ public class VatReturnScheduleQuery {
                     WHERE si.company_id = ? AND si.status = 'VOID' AND si.finalised_at IS NOT NULL
                       AND si.voided_at >= ? AND si.voided_at < ?
                     UNION ALL
+                    -- ADR-0072: POS item returns are partial voids, a negative in the month the
+                    -- refund was paid (the original invoice stays FINALISED above).
+                    SELECT (pr.created_at AT TIME ZONE ?)::date, 'RETURN',
+                           pr.return_no, si.invoice_number,
+                           c.display_name, c.tin, c.vrn,
+                           -(CASE WHEN si.fx_rate = 1 THEN pr.net_amount
+                                  ELSE ROUND(pr.net_amount * si.fx_rate, %1$d) END),
+                           -(CASE WHEN si.fx_rate = 1 THEN pr.vat_amount
+                                  ELSE ROUND(pr.vat_amount * si.fx_rate, %1$d) END),
+                           NULL
+                    FROM pos_sale_returns pr
+                    JOIN sales_invoices si ON si.id = pr.sales_invoice_id
+                         AND si.company_id = pr.company_id
+                    LEFT JOIN customers c ON c.id = si.customer_id AND c.company_id = si.company_id
+                    WHERE pr.company_id = ? AND pr.created_at >= ? AND pr.created_at < ?
+                      AND pr.created_at <= ?
+                    UNION ALL
                     SELECT cn.note_date, 'CREDIT_NOTE', cn.credit_note_number, NULL,
                            c.display_name, c.tin, c.vrn,
                            -ROUND(cn.net_amount * cn.fx_rate, %1$d),
@@ -115,6 +132,7 @@ public class VatReturnScheduleQuery {
                 VatReturnScheduleQuery::row,
                 zone, companyId, from, to,
                 zone, companyId, from, to,
+                zone, companyId, from, to, cutoff(r),
                 companyId, Date.valueOf(r.getPeriodStart()), Date.valueOf(r.getPeriodEnd()),
                 cutoff(r));
         return schedule(r, rows);

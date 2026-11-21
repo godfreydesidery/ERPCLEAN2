@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Observable } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -17,6 +18,7 @@ import {
   RestaurantDashboardFilter,
   tenderLabel,
 } from './models/restaurant-report.model';
+import { RestaurantItemFilterOptionsService } from './restaurant-item-filter-options.service';
 import { RestaurantReportService } from './restaurant-report.service';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
@@ -56,6 +58,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  * and where the sales came from (days, hours, weekdays, departments, items, waiters, payments).
  * The same figures download as the Flash Report. Gated SALES.INVOICE.VIEW like the reports;
  * the download needs REPORT.EXPORT.
+ *
+ * Optional Waiter filter (2026-11-21): that waiter's orders and the receipts and refunds tied to
+ * them; counter sales have no waiter and drop out. Offered with a restaurant permission, which the
+ * waiter list needs.
+ *
+ * Optional Item and Department filters (2026-11-21): sales, discounts, departments, items and
+ * waiters narrow to the matching lines; receipts, orders, guests, payments and the live counts are
+ * those holding a matching item.
  */
 @Component({
   selector: 'app-restaurant-dashboard',
@@ -65,6 +75,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 export class RestaurantDashboardComponent implements OnInit {
   private readonly reports = inject(RestaurantReportService);
   private readonly filterOptions = inject(ReportFilterOptionsService);
+  private readonly itemOptions = inject(RestaurantItemFilterOptionsService);
   protected readonly session = inject(SessionStore);
 
   readonly quickRanges: { key: QuickRange; label: string }[] = [
@@ -78,12 +89,30 @@ export class RestaurantDashboardComponent implements OnInit {
   readonly toDate = signal(todayLocal());
   readonly branchUid = signal('');
   readonly branchOptions = signal<UidOption[]>([]);
+  readonly waiterUid = signal('');
+  readonly waiterOptions = signal<UidOption[]>([]);
+  readonly productUid = signal('');
+  readonly department = signal('');
+  readonly productOptions = signal<UidOption[]>([]);
+  readonly departmentOptions = signal<UidOption[]>([]);
+  /** The company the item search runs against. */
+  private readonly companyId = signal('');
+
+  /** Server-side item search for the Item picker (arrow property so `this` survives binding). */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.itemOptions.search(this.companyId(), q);
   readonly data = signal<RestaurantDashboardDto | null>(null);
   readonly state = signal<LoadState>('idle');
   readonly exporting = signal(false);
 
   readonly canView = computed(() => this.session.hasPermission('SALES.INVOICE.VIEW'));
   readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+  /** The waiter list needs a restaurant permission; without it the filter is not offered. */
+  readonly canFilterWaiter = computed(
+    () =>
+      this.session.hasPermission('RESTAURANT.ORDER.MANAGE') ||
+      this.session.hasPermission('RESTAURANT.SETUP.MANAGE'),
+  );
 
   readonly tiles = computed<KpiTile[]>(() => {
     const d = this.data();
@@ -171,8 +200,24 @@ export class RestaurantDashboardComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.canView()) return;
-    this.filterOptions.branchOptions().subscribe({
+    const company$ = this.filterOptions.company();
+    this.filterOptions.branchOptions(company$).subscribe({
       next: (opts) => this.branchOptions.set(opts),
+      error: () => undefined,
+    });
+    if (this.canFilterWaiter()) {
+      this.reports.waiters().subscribe({
+        next: (list) =>
+          this.waiterOptions.set(list.map((w) => ({ uid: w.uid, label: w.name, hint: w.username }))),
+        error: () => undefined,
+      });
+    }
+    this.itemOptions.options(company$).subscribe({
+      next: (o) => {
+        this.companyId.set(o.companyId);
+        this.productOptions.set(o.items);
+        this.departmentOptions.set(o.departments);
+      },
       error: () => undefined,
     });
     this.load();
@@ -199,7 +244,21 @@ export class RestaurantDashboardComponent implements OnInit {
     const from = String(this.fromDate() ?? '').trim();
     const to = String(this.toDate() ?? '').trim();
     if (!from || !to) return null;
-    return { fromDate: from, toDate: to, branchUid: this.branchUid() || null };
+    return {
+      fromDate: from,
+      toDate: to,
+      waiterUid: this.waiterUid() || null,
+      branchUid: this.branchUid() || null,
+      productUid: this.productUid() || null,
+      department: this.department() || null,
+    };
+  }
+
+  /** Clears the item and department filters and reloads. */
+  clearItemFilters(): void {
+    this.productUid.set('');
+    this.department.set('');
+    this.load();
   }
 
   load(): void {

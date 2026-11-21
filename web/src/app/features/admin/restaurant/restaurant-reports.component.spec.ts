@@ -4,6 +4,8 @@
  * Covers: each report calls its endpoint with the form's filter (blank waiter/branch sent as null,
  * no dates for pending bills), the waiter filter is offered only with a restaurant permission,
  * a voided receipt is marked, a 403 reads as forbidden, and export passes the report kind.
+ * Item and department filters (2026-11-21): sent with the report and its export, named on the
+ * result, cleared together, and not offered on payments.
  */
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
@@ -65,6 +67,7 @@ describe('RestaurantReportsComponent', () => {
 
     expect(svc.waiterSales).toHaveBeenCalledWith({
       fromDate: '2026-10-01', toDate: '2026-10-30', waiterUid: null, branchUid: null,
+      productUid: null, department: null,
     });
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('Baraka Juma');
@@ -176,7 +179,7 @@ describe('RestaurantReportsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('2026-10-30 19:00');
   });
 
-  it('Sales by hour & day shows a column per department and hides the waiter filter', () => {
+  it('Sales by hour & day shows a column per department and offers the waiter filter', () => {
     const svc = makeReportsBed();
     const fixture = TestBed.createComponent(RestaurantReportsComponent);
     fixture.detectChanges();
@@ -184,7 +187,7 @@ describe('RestaurantReportsComponent', () => {
     comp.setTab('daypart');
     fixture.detectChanges();
     expect(comp.hasViews()).toBe(false);
-    expect(fixture.nativeElement.querySelector('#rr-waiter')).toBeNull();
+    expect(fixture.nativeElement.querySelector('select#rr-waiter')).not.toBeNull();
     comp.run();
     fixture.detectChanges();
 
@@ -213,6 +216,103 @@ describe('RestaurantReportsComponent', () => {
     expect(text).toContain('INV-0011');
     expect(text).toContain('Customer left');
     expect(text).toContain('Wrong order');
+  });
+
+  it('sends the item and department filters and names them on the result', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('select#rr-item, input#rr-item')).not.toBeNull();
+    expect(el.querySelector('select#rr-department')).not.toBeNull();
+    expect(el.querySelector('app-uid-picker[id]')).toBeNull();
+    expect(comp.departmentOptions().map((o) => o.uid)).toEqual(['Food', '(no department)']);
+
+    comp.productUid.set('P1');
+    comp.department.set('Food');
+    comp.run();
+    fixture.detectChanges();
+
+    expect(svc.waiterSales).toHaveBeenCalledWith(
+      expect.objectContaining({ productUid: 'P1', department: 'Food' }),
+    );
+    const note = el.querySelector('[data-testid="rr-item-filter"]')?.textContent ?? '';
+    expect(note).toContain('Item: Tacos');
+    expect(note).toContain('Department: Food');
+    expect(note).toContain('full amount');
+
+    comp.setView('detail');
+    comp.run();
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="rr-item-filter"]')?.textContent).toContain(
+      'Only the matching items are counted',
+    );
+  });
+
+  it('a searched item is named on the result too', () => {
+    makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.searchProducts('lat').subscribe();
+    comp.productUid.set('P2');
+    comp.run();
+    fixture.detectChanges();
+    expect(comp.appliedItemFilter()).toBe('Item: Latte');
+  });
+
+  it('clears the item and department filters together', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.productUid.set('P1');
+    comp.department.set('(no department)');
+    fixture.detectChanges();
+    const clear = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+    ).find((b) => b.textContent?.includes('Clear item filters'));
+    clear!.click();
+    fixture.detectChanges();
+    expect(comp.productUid()).toBe('');
+    expect(comp.department()).toBe('');
+    comp.run();
+    expect(svc.waiterSales).toHaveBeenCalledWith(
+      expect.objectContaining({ productUid: null, department: null }),
+    );
+    expect(comp.appliedItemFilter()).toBeNull();
+  });
+
+  it('Payments offers the waiter filter but not the item and department filters', () => {
+    const svc = makeReportsBed();
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.setTab('payments');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#rr-item')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#rr-department')).toBeNull();
+    expect(fixture.nativeElement.querySelector('select#rr-waiter')).not.toBeNull();
+    comp.waiterUid.set('W1');
+    comp.run();
+    expect(svc.payments).toHaveBeenCalledWith(expect.objectContaining({ waiterUid: 'W1' }));
+  });
+
+  it('export carries the item and department filters', () => {
+    const svc = makeReportsBed();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(RestaurantReportsComponent);
+    fixture.detectChanges();
+    const comp = fixture.componentInstance;
+    comp.department.set('Food');
+    comp.export('XLSX');
+    expect(svc.export).toHaveBeenCalledWith(
+      'waiter-sales',
+      expect.objectContaining({ department: 'Food', productUid: null }),
+      'XLSX',
+    );
   });
 
   it('export passes the report kind and format', () => {

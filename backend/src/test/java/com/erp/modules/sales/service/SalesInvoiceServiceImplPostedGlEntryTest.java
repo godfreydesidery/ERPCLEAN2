@@ -68,6 +68,8 @@ class SalesInvoiceServiceImplPostedGlEntryTest {
     // Business dates are the company's dates (owner ruling 2026-10-10); EAT for every test company.
     @Spy CompanyCalendar calendar =
             CompanyCalendar.fixed(BusinessZone.DEFAULT, java.time.Clock.systemUTC());
+    // ADR-0072: doVoidInvoice asks whether the sale has item returns; null would NPE every void.
+    @Mock com.erp.modules.sales.repository.PosSaleReturnRepository posReturns;
     @InjectMocks SalesInvoiceServiceImpl service;
 
     private static final Long COMPANY_ID = 1L;

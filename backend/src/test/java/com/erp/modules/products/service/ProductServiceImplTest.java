@@ -527,6 +527,42 @@ class ProductServiceImplTest {
         assertThat(product.isExpiryTracked()).isTrue();
     }
 
+    private UpdateProductRequest withStockable(boolean stockable) {
+        return new UpdateProductRequest("Test Product", null, ProductType.GOODS, true, stockable,
+                baseUnit.getUid(), null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    @Test
+    void update_markNonStockWithStockOnHand_isRefused() {
+        when(stock.hasStockOnHand(COMPANY_ID, product.getId())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateByUid(product.getUid(), withStockable(false)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("This item still has stock on hand. Adjust its stock to zero before "
+                        + "marking it non-stock.");
+        assertThat(product.isStockable()).isTrue();
+    }
+
+    @Test
+    void update_markNonStockWithoutStock_isApplied() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+        when(stock.hasStockOnHand(COMPANY_ID, product.getId())).thenReturn(false);
+
+        service.updateByUid(product.getUid(), withStockable(false));
+
+        assertThat(product.isStockable()).isFalse();
+    }
+
+    @Test
+    void update_keepStockableWithStock_doesNotCheckOnHand() {
+        when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));
+
+        service.updateByUid(product.getUid(), withStockable(true));
+
+        verify(stock, never()).hasStockOnHand(any(), any());
+        assertThat(product.isStockable()).isTrue();
+    }
+
     @Test
     void update_lotAndSerialTogether_isRejectedWithFriendlyMessage() {
         when(units.findByCompanyIdAndUid(COMPANY_ID, baseUnit.getUid())).thenReturn(Optional.of(baseUnit));

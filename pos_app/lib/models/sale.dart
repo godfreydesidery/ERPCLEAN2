@@ -98,6 +98,8 @@ class SalesInvoice {
     this.createdByName,
     this.soldOffline = false,
     this.offlineNumber,
+    this.hasReturns = false,
+    this.returnedGross = 0,
   });
 
   final String id;
@@ -135,6 +137,15 @@ class SalesInvoice {
   /// True while the server has not yet posted this offline sale.
   bool get awaitingSync => soldOffline && invoiceNumber == offlineNumber;
 
+  /// ERP ADR-0072: true once any item of this sale has been returned. The
+  /// whole-sale *Refund / reverse* is then refused by the server, so the till
+  /// hides it and offers only *Return items*.
+  final bool hasReturns;
+
+  /// Cash refunded by item returns so far (0 when none). [grossTotalAmount] is
+  /// unchanged by a return; net of returns is `grossTotalAmount - returnedGross`.
+  final double returnedGross;
+
   factory SalesInvoice.fromJson(Map<String, dynamic> j) => SalesInvoice(
         id: asStrOr(j['id']),
         uid: asStrOr(j['uid']),
@@ -154,6 +165,8 @@ class SalesInvoice {
         createdByName: asStr(j['createdByName']),
         soldOffline: asBool(j['soldOffline']),
         offlineNumber: asStr(j['offlineNumber']),
+        hasReturns: asBool(j['hasReturns']),
+        returnedGross: asNumOr(j['returnedGross']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -175,6 +188,8 @@ class SalesInvoice {
         'createdByName': createdByName,
         'soldOffline': soldOffline,
         'offlineNumber': offlineNumber,
+        'hasReturns': hasReturns,
+        'returnedGross': returnedGross,
       };
 }
 
@@ -193,6 +208,7 @@ class InvoiceLine {
     required this.grossAmount,
     required this.vatRate,
     this.vatStatus = VatStatus.unknown,
+    this.qtyReturned = 0,
   });
 
   final int lineNo;
@@ -208,6 +224,9 @@ class InvoiceLine {
   final double vatRate;
   final VatStatus vatStatus;
 
+  /// ERP ADR-0072: how much of this line has been returned (0 when none).
+  final double qtyReturned;
+
   factory InvoiceLine.fromJson(Map<String, dynamic> j) => InvoiceLine(
         lineNo: asIntOr(j['lineNo']),
         productCode: asStrOr(j['productCode']),
@@ -221,6 +240,7 @@ class InvoiceLine {
         grossAmount: asNumOr(j['grossAmount']),
         vatRate: asNumOr(j['vatRate']),
         vatStatus: VatStatus.fromWire(asStr(j['vatStatus'])),
+        qtyReturned: asNumOr(j['qtyReturned']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -236,6 +256,7 @@ class InvoiceLine {
         'grossAmount': grossAmount,
         'vatRate': vatRate,
         'vatStatus': vatStatus.wire,
+        'qtyReturned': qtyReturned,
       };
 }
 

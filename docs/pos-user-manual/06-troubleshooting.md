@@ -320,7 +320,7 @@ A reprint prints the name of the cashier who **rang** the sale on its **CASHIER:
 
 **Why it matters.** Customers ask for a second copy; a receipt jams; you need to confirm a sale posted. Reprinting only re-shows or re-prints an existing receipt. It can **never** post a new sale or charge anyone again.
 
-> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open; a cashier needs a manager's approval). A cashier sees the button only on sales rung on their own open shift — on a colleague's sale it is not shown, so ask a supervisor. It does not do partial or single-line refunds. To return one item from a multi-item sale, reverse the whole sale and ring the rest again. There is no cash refund payout at the till; anything the till cannot reverse goes to the back office as a sales return. See Chapter 6.
+> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open; a cashier needs a manager's approval). A cashier sees the button only on sales rung on their own open shift — on a colleague's sale it is not shown, so ask a supervisor. To give back only some items, use **Return items** on the receipt (chosen items and quantities, refunded in cash, same manager approval); after an item return, **Refund / reverse** is no longer offered for that sale. There is no cash refund payout at the till; anything the till cannot reverse goes to the back office as a sales return. See Chapter 6.
 
 ---
 

@@ -15,7 +15,7 @@ the returns/refunds specifics and references the shared contract instead of repe
 > **commit `f08fb08` (ADR-0042 D-2)**. Preconditions: the invoice must be **POS-origin** and its
 > originating **session still OPEN** (and the invoice FINALISED), else **409** — a sale whose session has
 > already been closed/reconciled is handled by the back-office invoice void on `/sales-invoices`.
-> **Partial / line-level refunds are deferred** (ADR-0042) — only whole-sale reversal exists today.
+> **Partial / line-level refunds ship in §1b** (`POST /pos/sales/uid/{uid}/returns`, ADR-0072): cash from the drawer, same authorisation; after one the whole-sale reverse is refused.
 > The order-to-cash `POST /api/v1/sales-returns` (stock-in + COGS reversal + AR credit note) still exists
 > for **delivery-backed** invoices, but a pure POS cash sale has no delivery, so use the POS `/reverse`
 > endpoint for those. A cash-drawer **payout** of type `REFUND`
@@ -39,8 +39,8 @@ The backend has four distinct, non-overlapping concepts. A POS client developer 
 So the POS surface **does** now have a first-class reversal: a POS `SalesInvoiceDto` (by its uid) can be
 reversed via `POST /api/v1/pos/sales/uid/{uid}/reverse` (Section 1a). What is **still** missing:
 
-- a **partial / line-level** POS refund — explicitly **deferred** by ADR-0042 (it needs a
-  credit-note-by-line path); only whole-sale reversal exists today;
+- (closed by §1b — a partial / line-level POS refund now exists; it was deferred by ADR-0042 until it needed a
+  credit-note-by-line path);
 - a reversal of a POS sale whose **session has already closed/reconciled** — that is a back-office invoice
   void on `/sales-invoices`, where the cash difference is a reconciled-variance matter (see Section 1a
   preconditions).
@@ -130,6 +130,164 @@ curl -i -X POST \
 | **404** | `uid` does not resolve to a `SalesInvoice` — `NotFoundException.of("SalesInvoice", uid)`. |
 | **409** | Invoice is not POS-origin; or its originating session is not `OPEN`; or the invoice is not `FINALISED`. |
 | **415** | Wrong `Content-Type`. Always send `application/json`. |
+
+---
+
+## 1b. Returning items of a POS sale (refund by item)
+
+Shipped by [ADR-0072](../../decisions/0072-pos-item-returns.md) (owner-approved 2026-11-21, migration V117).
+A **partial** return of chosen lines / quantities of a finalised POS sale. The **refund is always CASH from the
+till drawer**, whatever the original tender. The original invoice stays `FINALISED` and unchanged; the return is
+its own document (`PRT-0001`, per company). The refund slip is **non-fiscal**. **Online only** — there is no
+offline path.
+
+All ids are JSON **strings**; decimals are JSON **numbers**; every response is wrapped in the usual
+`{ "data": …, "errors": [], "meta": … }` envelope (shown below as the `data` part only).
+
+### 1b.1 `POST /api/v1/pos/sales/uid/{invoiceUid}/returns` — return items
+
+- **Gate:** `POS.SALE.VOID` **or** `SALES.INVOICE.VOID`, scoped to the sale's company (the reverse endpoint's
+  gate; no new permission code).
+- **Headers:** `Idempotency-Key: <uuid>` (**send it**, and reuse the SAME value when retrying an ambiguous
+  POST — the original return is answered, the cash is not refunded twice). A key used for a different sale is a 409.
+- **Success:** **201 Created** with the return.
+
+Request (`PosSaleReturnRequest`):
+
+```json
+{
+  "reason": "Customer returned the damaged bottle",
+  "authorisedByUid": "01J9Z3K2M4N5P6Q7R8S9T0V1W2",
+  "lines": [
+    { "invoiceLineUid": "01J9Z3A1B2C3D4E5F6G7H8J9K0", "qty": 1 },
+    { "invoiceLineUid": "01J9Z3A1B2C3D4E5F6G7H8J9K1", "qty": 0.5 }
+  ]
+}
+```
+
+| Field | Rules |
+|---|---|
+| `reason` | required, 3-255 chars; recorded on the return, the refund payout and the audit row |
+| `authorisedByUid` | the uid returned by a manager step-up (`POST /api/v1/auth/verify-authority`, permission `SALES.INVOICE.VOID`). **Required unless the caller themselves hold `SALES.INVOICE.VOID`**; omitted/ignored for a supervisor. Re-verified server-side (real, active, different user who holds the code in the sale's company) |
+| `lines[]` | required, non-empty; each **sold** line at most once; `invoiceLineUid` comes from `GET /api/v1/sales-invoices/uid/{uid}/lines` |
+| `lines[].qty` | > 0, at most 6 decimals, in the **sold line's own unit**, and at most the quantity not yet returned (`quantity - qtyReturned`) |
+
+Response `data` (`PosSaleReturnDto`):
+
+```json
+{
+  "id": "812",
+  "uid": "01JA0R3T4U5V6W7X8Y9Z0A1B2C",
+  "returnNo": "PRT-0001",
+  "companyId": "1",
+  "branchId": "2",
+  "sessionUid": "01J9Z0S1E2S3S4I5O6N7U8I9D0",
+  "invoiceUid": "01J9Z2I1N2V3O4I5C6E7U8I9D0",
+  "invoiceNumber": "INV-0042",
+  "reason": "Customer returned the damaged bottle",
+  "netAmount": 1000,
+  "discountAmount": 0,
+  "vatAmount": 180,
+  "grossAmount": 1180,
+  "currency": "TZS",
+  "refundTender": "CASH",
+  "payoutUid": "01JA0P1A2Y3O4U5T6U7I8D9Z0A",
+  "authorisedBy": "Jane Manager",
+  "createdByName": "Asha Cashier",
+  "createdAt": "2026-11-21T09:14:03.512Z",
+  "lines": [
+    {
+      "id": "1530",
+      "uid": "01JA0L1I2N3E4U5I6D7Z8Z9A0B",
+      "lineNo": 1,
+      "invoiceLineUid": "01J9Z3A1B2C3D4E5F6G7H8J9K0",
+      "productId": "30",
+      "productCode": "SKU-001",
+      "productName": "Widget",
+      "unitName": "Pieces",
+      "qtyReturned": 1,
+      "netAmount": 1000,
+      "discountAmount": 0,
+      "vatAmount": 180,
+      "grossAmount": 1180
+    }
+  ]
+}
+```
+
+`grossAmount` is **the cash to hand the customer**. `authorisedBy` is null when a supervisor acted on their own
+authority. Amounts are pro-rated from the sold line (net, discount, VAT); the return that takes a line's last unit
+takes the exact remainder, so several partial returns always add up to what was paid.
+
+### 1b.2 `GET /api/v1/pos/sales/uid/{invoiceUid}/returns` — the "Return items" screen and the receipt
+
+Gate: `POS.SALE.CREATE`, `POS.SALE.VOID` or `SALES.INVOICE.VOID`, scoped to the sale's company.
+
+```json
+{
+  "invoiceUid": "01J9Z2I1N2V3O4I5C6E7U8I9D0",
+  "invoiceNumber": "INV-0042",
+  "hasReturns": true,
+  "returnedGross": 1180,
+  "returnable": true,
+  "returnBlockedReason": null,
+  "lines": [
+    {
+      "invoiceLineUid": "01J9Z3A1B2C3D4E5F6G7H8J9K0",
+      "lineNo": 1,
+      "productId": "30",
+      "productCode": "SKU-001",
+      "productName": "Widget",
+      "unitName": "Pieces",
+      "qtySold": 3,
+      "qtyReturned": 1,
+      "qtyRemaining": 2,
+      "grossAmount": 3540,
+      "grossReturned": 1180
+    }
+  ],
+  "returns": [ { "...": "PosSaleReturnDto, as above (payoutUid is null in this list)" } ]
+}
+```
+
+`returnable=false` carries a friendly `returnBlockedReason` ("This sale was already reversed…", "…till session is
+closed…", "Every item on this sale has already been returned."). It is advisory — the POST re-checks everything.
+
+### 1b.3 `GET /api/v1/pos/returns/uid/{returnUid}` — reprint a refund slip
+
+Same gate as 1b.2 (no invoice scope; resolved inside the caller's active company). Returns the `PosSaleReturnDto`
+of 1b.1 (including `payoutUid`).
+
+### 1b.4 What the sale / receipt DTOs now carry (for hiding *Reverse*)
+
+`GET /api/v1/sales-invoices/uid/{uid}` and the till's list (`GET /api/v1/sales-invoices?finalisedFrom=…`) return
+the usual `SalesInvoiceDto` plus two additive fields:
+
+| Field | Meaning |
+|---|---|
+| `hasReturns` | `true` once **any** item return exists on the sale. **Hide *Reverse*** (the server refuses it) and offer *Return items* |
+| `returnedGross` | cash refunded by item returns so far (0 when none) |
+
+`GET /api/v1/sales-invoices/uid/{uid}/lines` returns each `SalesInvoiceLineDto` plus `qtyReturned` (0 when none);
+remaining returnable = `quantity - qtyReturned`. `grossTotalAmount` is **unchanged** — net of returns is
+`grossTotalAmount - returnedGross`.
+
+### 1b.5 Errors (the message is user-safe: show `errors[0]`)
+
+| Status | When |
+|---|---|
+| **400** | malformed body; `reason` shorter than 3; empty `lines`; the same sold line twice; qty <= 0 or > 6 decimals |
+| **403** | a cashier returning items of **another cashier's** session without supervisor authority; or `authorisedByUid` missing / not a genuine supervisor ("This refund needs a supervisor's approval…"). Refusals are audited |
+| **404** | unknown invoice uid |
+| **409** | not a POS sale · sale already reversed · **session not OPEN** · a selected line not on this sale · "Only 2 of Widget can still be returned." / "Widget has already been fully returned." · AR allocations exist · sale not paid in full at the till (credit sale) · complimentary sale (nothing paid) · "There is nothing to refund for the selected items." · idempotency key in flight / used for another sale |
+
+### 1b.6 Side effects (for the back office, all in one transaction + the outbox)
+
+A REFUND `pos_session_payouts` row (expected cash at cash-up drops by the refund; X/Z-read shows it as a refund
+payout and turnover nets it), then `POS.SALE.RETURNED` → stock put back at the original issue cost (Dr Inventory /
+Cr COGS), a `SALES_REVERSAL` journal under the **return's** uid (Dr Revenue, Dr VAT, Cr Cash) and the matching
+cash-book `SALE_REFUND` row. After any item return, `POST …/reverse` and the back-office void of that sale answer
+**409** "Some items on this sale were already returned. Return the remaining items with Return items."
 
 ---
 

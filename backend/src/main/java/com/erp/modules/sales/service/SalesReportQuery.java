@@ -35,6 +35,12 @@ import org.springframework.transaction.annotation.Transactional;
  * scalar cross-module reads (same pattern as {@code StockValuationQuery}; ADR boundary rule: no
  * entity/service import across modules).
  *
+ * <p><b>POS item returns (ADR-0072)</b> are netted: the returned lines come off quantity, discount,
+ * VAT, net and gross in the window the return was made (the date the GL, the VAT return and the till
+ * dashboard use), converted at the original invoice's rate; the cost put back by the return's
+ * SALE_REVERSAL stock movement (original issue cost) comes off cost of sale. Back-office credit
+ * notes and whole-sale voids are unchanged (a void drops the invoice itself).
+ *
  * <p>Cost-of-sale is computed with a SEPARATE query rather than joining {@code stock_movements}
  * directly onto {@code sales_invoice_lines} in the main aggregate: {@code StockPostingService}'s
  * idempotency key is {@code (source_event_uid, product_id)}, so at most one {@code SALE_ISSUE} row
@@ -161,16 +167,22 @@ public class SalesReportQuery {
     private List<SalesReportRowDto> queryRows(Long companyId, OffsetDateTime from, OffsetDateTime to,
                                                String filterSql, List<Object> filterParams,
                                                Long stockBranchId, String stockScopeSql) {
+        // Parameter order follows the SQL text: the sold lines, then the POS item returns (ADR-0072)
+        // - same company/window/filters - then the stock_on_hand subquery.
         List<Object> mainParams = new ArrayList<>();
+        mainParams.add(companyId); // i.company_id
+        mainParams.add(from);
+        mainParams.add(to);
+        mainParams.addAll(filterParams);
+        mainParams.add(companyId); // rt.company_id
+        mainParams.add(from);
+        mainParams.add(to);
+        mainParams.addAll(filterParams);
         mainParams.add(companyId); // stock_on_hand subquery
         // Bound twice by design: the predicate is "this branch, or every branch when none was
         // asked for", so the same id is compared and null-checked in one pass.
         mainParams.add(stockBranchId);
         mainParams.add(stockBranchId);
-        mainParams.add(companyId); // i.company_id
-        mainParams.add(from);
-        mainParams.add(to);
-        mainParams.addAll(filterParams);
 
         // Money columns are converted to BASE at the rate stamped on each invoice (BaseCurrencySql):
         // the header says the report is in the company's base currency, and cost of sales below is
@@ -184,26 +196,56 @@ public class SalesReportQuery {
         // sales was counted twice. A deleted product falls back to the latest line snapshot.
         // RPT-01 / LSF-11: quantity is summed in the BASE unit (qty_in_base) and the base unit is
         // named, so 7 bottles + 5 crates of 24 reads 127 bottles, not "12".
+        // ADR-0072: the register is net of POS item returns, dated by the return (see PosReturnSql).
+        // The sold lines and the returned lines are one UNION ALL (returns as negatives) so a product
+        // that was only returned in this window still gets its row, and every figure is one SUM.
         String mainSql = """
-                SELECT l.product_id                              AS product_id,
-                       COALESCE(p.code, MAX(l.product_code))      AS product_code,
-                       COALESCE(p.name, MAX(l.product_name))      AS product_name,
+                SELECT t.product_id                              AS product_id,
+                       COALESCE(p.code, MAX(t.product_code))      AS product_code,
+                       COALESCE(p.name, MAX(t.product_name))      AS product_name,
                        COALESCE(NULLIF(TRIM(u.symbol), ''), u.code) AS base_unit,
-                       SUM(l.qty_in_base)                         AS qty_sold,
-                """
-                + "       SUM(" + BaseCurrencySql.lineDiscountToBase(rate, baseScale)
-                + ") AS discount,\n"
-                + "       SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
-                + ") AS vat,\n"
-                + "       SUM(" + BaseCurrencySql.toBase("l.net_amount", rate, baseScale)
-                + ") AS net_sales,\n"
-                + "       SUM(" + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", rate,
-                        baseScale) + ") AS amount,\n"
-                + """
+                       SUM(t.qty)                                 AS qty_sold,
+                       SUM(t.discount)                            AS discount,
+                       SUM(t.vat)                                 AS vat,
+                       SUM(t.net)                                 AS net_sales,
+                       SUM(t.gross)                               AS amount,
                        COALESCE(soh.qty, 0)                       AS current_stock
-                FROM sales_invoice_lines l
-                JOIN sales_invoices i ON i.id = l.invoice_id
-                LEFT JOIN products p ON p.id = l.product_id
+                FROM (
+                    SELECT l.product_id AS product_id, l.product_code AS product_code,
+                           l.product_name AS product_name, l.qty_in_base AS qty,
+                """
+                + "           " + BaseCurrencySql.lineDiscountToBase(rate, baseScale) + " AS discount,\n"
+                + "           " + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale) + " AS vat,\n"
+                + "           " + BaseCurrencySql.toBase("l.net_amount", rate, baseScale) + " AS net,\n"
+                + "           " + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", rate,
+                        baseScale) + " AS gross\n"
+                + """
+                    FROM sales_invoice_lines l
+                    JOIN sales_invoices i ON i.id = l.invoice_id
+                    LEFT JOIN products p ON p.id = l.product_id
+                    WHERE i.company_id = ?
+                      AND i.status = 'FINALISED'
+                      AND i.finalised_at >= ?
+                      AND i.finalised_at <  ?
+                """ + filterSql + """
+
+                    UNION ALL
+                    SELECT l.product_id, l.product_code, l.product_name, -rl.qty_returned_base,
+                """
+                + "           -" + PosReturnSql.discount(baseScale) + ",\n"
+                + "           -" + PosReturnSql.vat(baseScale) + ",\n"
+                + "           -" + PosReturnSql.net(baseScale) + ",\n"
+                + "           -" + PosReturnSql.gross(baseScale) + "\n"
+                + PosReturnSql.RETURNED_FROM
+                + """
+                    LEFT JOIN products p ON p.id = l.product_id
+                    WHERE rt.company_id = ?
+                      AND rt.created_at >= ?
+                      AND rt.created_at <  ?
+                """ + filterSql + """
+
+                ) t
+                LEFT JOIN products p ON p.id = t.product_id
                 LEFT JOIN units_of_measure u ON u.id = p.base_unit_id
                 LEFT JOIN (
                     SELECT product_id, SUM(quantity) AS qty
@@ -212,14 +254,8 @@ public class SalesReportQuery {
                       AND (CAST(? AS BIGINT) IS NULL OR branch_id = CAST(? AS BIGINT))
                       /*branch-scope*/
                     GROUP BY product_id
-                ) soh ON soh.product_id = l.product_id
-                WHERE i.company_id = ?
-                  AND i.status = 'FINALISED'
-                  AND i.finalised_at >= ?
-                  AND i.finalised_at <  ?
-                """ + filterSql + """
-
-                GROUP BY l.product_id, p.code, p.name, u.symbol, u.code, soh.qty
+                ) soh ON soh.product_id = t.product_id
+                GROUP BY t.product_id, p.code, p.name, u.symbol, u.code, soh.qty
                 ORDER BY 2 NULLS LAST
                 """;
         mainSql = mainSql.replace("/*branch-scope*/", stockScopeSql);
@@ -279,7 +315,7 @@ public class SalesReportQuery {
 
     /**
      * Cost-of-sale per product = SUM of the matching SALE_ISSUE movement value across every
-     * invoice in the filtered window. Unmatched lines (unvalued/service/kit) contribute 0 — margin
+     * invoice in the filtered window, less the SALE_REVERSAL value of POS item returns made in it. Unmatched lines (unvalued/service/kit) contribute 0 — margin
      * then equals net for that portion (no fabricated cost, D-2 edge).
      */
     /**
@@ -323,6 +359,34 @@ public class SalesReportQuery {
                 rs -> {
                     result.put(rs.getLong("product_id"),
                             new Cogs(rs.getBigDecimal("cogs"), rs.getLong("unvalued")));
+                },
+                params.toArray());
+
+        // ADR-0072: the cost of goods put back by POS item returns - the SALE_REVERSAL movements
+        // PosSaleReturnStockHandler posts at the ORIGINAL issue cost - comes off the product's cost
+        // in the month of the return, like its revenue. (Posted when the outbox event is
+        // dispatched, a moment after the return.) A reversal with no value means the issue had no
+        // cost either, so that product's cost is unknown here too.
+        String reversalSql = "SELECT sm.product_id AS product_id,\n"
+                + "       COALESCE(SUM(ABS(sm.value_amount)), 0) AS cogs,\n"
+                + "       COUNT(*) FILTER (WHERE sm.value_amount IS NULL) AS unvalued\n"
+                + PosReturnSql.COST_REVERSAL_FROM
+                + "LEFT JOIN products p ON p.id = sm.product_id\n"
+                + "WHERE sm.company_id = ?\n"
+                + "  AND " + PosReturnSql.COST_REVERSAL_WHERE + "\n"
+                + "  AND rt.created_at >= ?\n"
+                + "  AND rt.created_at <  ?\n"
+                + filterSql + "\n"
+                + "GROUP BY sm.product_id";
+        jdbc.query(reversalSql,
+                rs -> {
+                    Long productId = rs.getLong("product_id");
+                    Cogs sold = result.get(productId);
+                    BigDecimal soldValue = sold == null || sold.value() == null
+                            ? BigDecimal.ZERO : sold.value();
+                    long soldUnvalued = sold == null ? 0L : sold.unvaluedMovements();
+                    result.put(productId, new Cogs(soldValue.subtract(rs.getBigDecimal("cogs")),
+                            soldUnvalued + rs.getLong("unvalued")));
                 },
                 params.toArray());
         return result;

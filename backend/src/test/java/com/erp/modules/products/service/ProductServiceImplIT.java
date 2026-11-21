@@ -33,6 +33,7 @@ import com.erp.platform.common.money.MoneyDto;
 import com.erp.platform.security.RequestContext;
 import com.erp.support.IamTestData;
 import com.erp.support.PostgresIntegrationTest;
+import com.erp.support.ReportSeed;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -64,6 +66,7 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    @Autowired private JdbcTemplate jdbc;
 
     private Organisation org;
     private Company companyA;
@@ -729,6 +732,31 @@ class ProductServiceImplIT extends PostgresIntegrationTest {
                 null, null, null, null, null, null, null, null, null, null, null);
         assertThatThrownBy(() -> productService.updateByUid(beta.uid(), req))
                 .isInstanceOf(com.erp.platform.common.api.ConflictException.class);
+    }
+
+    // -----------------------------------------------------------------------
+    // Stockable -> non-stock is refused while stock is on hand (owner ruling 2026-11-21)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void updateByUid_markNonStockWithStockOnHand_throwsConflictAndKeepsStockable() {
+        ProductDto prod = productService.create(goodsRequest(companyA.getUid(), "Held Stock Item"));
+        ReportSeed seed = new ReportSeed(jdbc);
+        long loc = seed.location(companyA.getId(), branchA.getId(), "NS-LOC");
+        seed.onHand(companyA.getId(), branchA.getId(), loc, prod.id(),
+                new BigDecimal("3"), null, null, null, null);
+
+        var req = new com.erp.modules.products.domain.dto.UpdateProductRequest(
+                "Held Stock Item", null, ProductType.GOODS, true, false, pcsUid,
+                null, null, null, null, null, null, null, null, null, null, null);
+        assertThatThrownBy(() -> productService.updateByUid(prod.uid(), req))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("still has stock on hand");
+        assertThat(productService.getByUid(prod.uid()).stockable()).isTrue();
+
+        // Counted to zero: the switch is now allowed.
+        jdbc.update("UPDATE stock_on_hand SET quantity = 0 WHERE product_id = ?", prod.id());
+        assertThat(productService.updateByUid(prod.uid(), req).stockable()).isFalse();
     }
 
     // -----------------------------------------------------------------------

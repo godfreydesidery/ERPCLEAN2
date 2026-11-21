@@ -15,6 +15,9 @@ public interface PosSessionPayoutRepository extends JpaRepository<PosSessionPayo
 
     Optional<PosSessionPayout> findByUid(String uid);
 
+    /** Company-scoped by-id lookup (tenant rule: never a bare findById in a service). */
+    Optional<PosSessionPayout> findByCompanyIdAndId(Long companyId, Long id);
+
     @Query("SELECT p.companyId FROM PosSessionPayout p WHERE p.uid = :uid")
     Optional<Long> findCompanyIdByUid(@Param("uid") String uid);
 
