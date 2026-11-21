@@ -1,7 +1,7 @@
 /**
  * RestaurantDashboardComponent (2026-11-03): loads on open, KPI tiles with the change against the
  * period before (coloured by whether the move is good), counter sales named, the quick ranges,
- * the flash report download, and the permission gates.
+ * the flash report download, and the permission gates. Item and department filters (2026-11-21).
  */
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
@@ -16,12 +16,13 @@ import {
 
 function makeBed(
   perms: string[] = DASHBOARD_PERMS,
-  overrides: Partial<Record<'dashboard' | 'exportFlashReport', ReturnType<typeof vi.fn>>> = {},
+  overrides: Partial<Record<'dashboard' | 'exportFlashReport' | 'waiters', ReturnType<typeof vi.fn>>> = {},
 ) {
   const stub = stubDashboardService();
   const svc = {
     dashboard: overrides.dashboard ?? vi.fn(stub.dashboard),
     exportFlashReport: overrides.exportFlashReport ?? vi.fn(stub.exportFlashReport),
+    waiters: overrides.waiters ?? vi.fn(stub.waiters),
   };
   dashboardBed(perms, svc);
   return svc;
@@ -39,7 +40,10 @@ describe('RestaurantDashboardComponent', () => {
     fixture.detectChanges();
 
     const today = todayLocal();
-    expect(svc.dashboard).toHaveBeenCalledWith({ fromDate: today, toDate: today, branchUid: null });
+    expect(svc.dashboard).toHaveBeenCalledWith({
+      fromDate: today, toDate: today, waiterUid: null, branchUid: null, productUid: null,
+      department: null,
+    });
     const text: string = fixture.nativeElement.textContent;
     expect(text).toContain('Sales');
     expect(text).toContain('120,000.00');
@@ -104,6 +108,65 @@ describe('RestaurantDashboardComponent', () => {
       expect.objectContaining({ branchUid: null }),
       'XLSX',
     );
+  });
+
+  it('sends the item and department filters to the dashboard and the flash report', () => {
+    const svc = makeBed();
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(RestaurantDashboardComponent);
+    fixture.detectChanges();
+    const c = fixture.componentInstance;
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('select#rd-item, input#rd-item')).not.toBeNull();
+    expect(el.querySelector('select#rd-department')).not.toBeNull();
+
+    c.productUid.set('P1');
+    c.department.set('Food');
+    c.load();
+    expect(svc.dashboard).toHaveBeenLastCalledWith(
+      expect.objectContaining({ productUid: 'P1', department: 'Food' }),
+    );
+    c.exportFlash('PDF');
+    expect(svc.exportFlashReport).toHaveBeenCalledWith(
+      expect.objectContaining({ productUid: 'P1', department: 'Food' }),
+      'PDF',
+    );
+
+    c.clearItemFilters();
+    expect(svc.dashboard).toHaveBeenLastCalledWith(
+      expect.objectContaining({ productUid: null, department: null }),
+    );
+  });
+
+  it('offers the waiter filter with a restaurant permission and sends it with the flash report', () => {
+    const svc = makeBed([...DASHBOARD_PERMS, 'RESTAURANT.ORDER.MANAGE']);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const fixture = TestBed.createComponent(RestaurantDashboardComponent);
+    fixture.detectChanges();
+    const c = fixture.componentInstance;
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('select#rd-waiter')).not.toBeNull();
+    expect(el.querySelector('label[for="rd-waiter"]')).not.toBeNull();
+    expect(c.waiterOptions()).toEqual([{ uid: 'W1', label: 'Baraka Juma', hint: 'baraka' }]);
+
+    c.waiterUid.set('W1');
+    c.load();
+    expect(svc.dashboard).toHaveBeenLastCalledWith(expect.objectContaining({ waiterUid: 'W1' }));
+    c.exportFlash('PDF');
+    expect(svc.exportFlashReport).toHaveBeenCalledWith(
+      expect.objectContaining({ waiterUid: 'W1' }),
+      'PDF',
+    );
+  });
+
+  it('offers no waiter filter without a restaurant permission', () => {
+    const svc = makeBed();
+    const fixture = TestBed.createComponent(RestaurantDashboardComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#rd-waiter')).toBeNull();
+    expect(svc.waiters).not.toHaveBeenCalled();
   });
 
   it('offers no download without REPORT.EXPORT', () => {

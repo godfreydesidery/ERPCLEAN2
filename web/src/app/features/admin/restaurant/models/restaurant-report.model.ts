@@ -357,6 +357,12 @@ export interface RestaurantDashboardFilter {
   fromDate: string;
   toDate: string;
   branchUid: string | null;
+  /** Optional waiter (whoever holds the order); counter sales, having none, drop out. */
+  waiterUid?: string | null;
+  /** Optional item filter (a product uid): sales narrow to its lines. */
+  productUid?: string | null;
+  /** Optional department (product category); "(no department)" for items with none. */
+  department?: string | null;
 }
 
 /** Each kind is also its endpoint's path segment under /reports/restaurant. */
@@ -397,4 +403,11 @@ export interface RestaurantReportFilter {
   toDate: string;
   waiterUid: string | null;
   branchUid: string | null;
+  /**
+   * Optional item filter (a product uid). Bill reports keep the bills holding the item, at their
+   * whole amount; the items and hours reports count only its lines. Not sent for payments.
+   */
+  productUid?: string | null;
+  /** Optional department (product category), the same way; "(no department)" for none. */
+  department?: string | null;
 }

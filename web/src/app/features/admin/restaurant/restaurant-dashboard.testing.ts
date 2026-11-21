@@ -9,6 +9,8 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ReportFilterOptionsService } from '../reporting/report-filter-options.service';
+import { RestaurantItemFilterOptionsService } from './restaurant-item-filter-options.service';
+import { stubItemFilterOptions } from './restaurant-reports.testing';
 import { DashboardKpisDto, RestaurantDashboardDto } from './models/restaurant-report.model';
 import { RestaurantDashboardComponent } from './restaurant-dashboard.component';
 import { RestaurantReportService } from './restaurant-report.service';
@@ -66,6 +68,7 @@ export const DASHBOARD_PERMS = ['SALES.INVOICE.VIEW', 'REPORT.EXPORT'];
 export interface DashboardServiceStub {
   dashboard: (...a: unknown[]) => unknown;
   exportFlashReport: (...a: unknown[]) => unknown;
+  waiters: (...a: unknown[]) => unknown;
 }
 
 /** Plain functions: this file is compiled with the app, so no test-runner globals here. */
@@ -73,6 +76,7 @@ export function stubDashboardService(): DashboardServiceStub {
   return {
     dashboard: () => of(DASHBOARD),
     exportFlashReport: () => of(new Blob()),
+    waiters: () => of([{ uid: 'W1', name: 'Baraka Juma', username: 'baraka' }]),
   };
 }
 
@@ -82,7 +86,11 @@ export function dashboardBed(perms: string[], svc: object): void {
     providers: [
       provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
       { provide: RestaurantReportService, useValue: svc },
-      { provide: ReportFilterOptionsService, useValue: { branchOptions: () => of([]) } },
+      {
+        provide: ReportFilterOptionsService,
+        useValue: { company: () => of(null), branchOptions: () => of([]) },
+      },
+      { provide: RestaurantItemFilterOptionsService, useValue: stubItemFilterOptions() },
       {
         provide: SessionStore,
         useValue: {
