@@ -94,4 +94,12 @@ public class UserLookupServiceImpl implements UserLookupService {
         return users.findAllById(ids).stream()
                 .collect(Collectors.toMap(AppUser::getId, AppUser::getUid));
     }
+
+    @Override
+    public java.util.Optional<Long> idByUid(String userUid) {
+        if (userUid == null || userUid.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        return users.findByUid(userUid.strip()).map(AppUser::getId);
+    }
 }

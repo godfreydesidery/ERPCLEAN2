@@ -92,6 +92,11 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
 
     private static final Logger log = LoggerFactory.getLogger(SalesInvoiceServiceImpl.class);
 
+    /** Shown when a sale that already has item returns is reversed or voided whole (ADR-0072). */
+    static final String POS_RETURNS_BLOCK_VOID_MESSAGE =
+            "Some items on this sale were already returned. Return the remaining items with "
+                    + "Return items.";
+
     private final SalesInvoiceRepository invoices;
     private final SalesInvoiceLineRepository lines;
     private final SalesInvoicePaymentRepository payments;
@@ -140,6 +145,8 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
     /** SAL-02: a POS sale whose till session is still OPEN is reversed at the till, not here. */
     private final com.erp.modules.sales.repository.PosSessionRepository posSessions;
     private final CompanyCalendar calendar;
+    /** ADR-0072: a sale with item returns is not voided whole — that would refund the goods twice. */
+    private final com.erp.modules.sales.repository.PosSaleReturnRepository posReturns;
 
     public SalesInvoiceServiceImpl(SalesInvoiceRepository invoices,
                                    SalesInvoiceLineRepository lines,
@@ -174,7 +181,9 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                                    CounterAgentProvisioner counterAgents,
                                    DeliveryService deliveryService,
                                    com.erp.modules.sales.repository.PosSessionRepository posSessions,
-                                   CompanyCalendar calendar) {
+                                   CompanyCalendar calendar,
+                                   com.erp.modules.sales.repository.PosSaleReturnRepository posReturns) {
+        this.posReturns = posReturns;
         this.counterAgents = counterAgents;
         this.invoices = invoices;
         this.lines = lines;
@@ -612,6 +621,13 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         if (inv.getStatus() != InvoiceStatus.FINALISED) {
             throw new IllegalStateException(
                     "Only FINALISED invoices can be voided; current status: " + inv.getStatus());
+        }
+        // ADR-0072 (owner ruling 2026-11-21): once any item has been returned and refunded, the
+        // whole sale can no longer be voided — the void reverses ALL revenue, VAT, cash and stock and
+        // would hand the returned goods' money back a second time. Covers the till reverse and the
+        // back-office void alike (both land here).
+        if (posReturns.existsByCompanyIdAndSalesInvoiceId(inv.getCompanyId(), inv.getId())) {
+            throw new com.erp.platform.common.api.ConflictException(POS_RETURNS_BLOCK_VOID_MESSAGE);
         }
         // FLOW-ORDER-TO-CASH-027 (AR path): block void when AR receipts/allocations have been
         // posted against this invoice (settled or partially settled). A void on a settled invoice
@@ -1397,7 +1413,38 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
         final int baseScale = minorUnits.of(companies.findScopedById(companyId)
                 .map(c -> c.getBaseCurrency())
                 .orElse(null));
-        return summariseOutputVat(voidedInPeriod, baseScale);
+        var voided = summariseOutputVat(voidedInPeriod, baseScale);
+
+        // ADR-0072: POS item returns are partial voids — a negative in the month the refund was
+        // paid, by band (their SALES_REVERSAL journal debits VAT Payable that day). The original
+        // invoice stays FINALISED and is counted in findVatSummaryForPeriod, so without this the
+        // return would overstate output VAT by exactly the VAT refunded.
+        var returned = posReturns.vatRowsByCompanyIdBetween(companyId,
+                calendar.startOfDay(companyId, start), calendar.endOfDayExclusive(companyId, end));
+        if (returned.isEmpty()) {
+            return voided;
+        }
+        java.util.Map<String, BigDecimal> bandBase = new java.util.LinkedHashMap<>();
+        java.util.Map<String, BigDecimal> bandVat  = new java.util.LinkedHashMap<>();
+        voided.byBand().forEach((band, b) -> {
+            bandBase.put(band, b.taxableBase());
+            bandVat.put(band, b.outputVat());
+        });
+        BigDecimal total = voided.totalOutputVat();
+        for (var row : returned) {
+            BigDecimal rate = row.fxRate() != null ? row.fxRate() : BigDecimal.ONE;
+            BigDecimal vat = toBaseAtRate(row.vat(), rate, baseScale);
+            bandBase.merge(row.vatStatus().name(), toBaseAtRate(row.net(), rate, baseScale),
+                    BigDecimal::add);
+            bandVat.merge(row.vatStatus().name(), vat, BigDecimal::add);
+            total = total.add(vat);
+        }
+        java.util.Map<String, com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto> byBand
+                = new java.util.LinkedHashMap<>();
+        bandVat.forEach((band, vat) -> byBand.put(band,
+                new com.erp.modules.sales.domain.dto.VatOutputSummaryDto.BandTotalsDto(
+                        bandBase.getOrDefault(band, BigDecimal.ZERO), vat)));
+        return new com.erp.modules.sales.domain.dto.VatOutputSummaryDto(byBand, total);
     }
 
     /**

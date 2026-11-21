@@ -480,6 +480,8 @@ public final class AuditActions {
     public static final String POS_SALE_RING             = "POS.SALE.RING";
     public static final String POS_SALE_FINALISE         = "POS.SALE.FINALISE";
     public static final String POS_SALE_REVERSE          = "POS.SALE.REVERSE";
+    /** Some items of a POS sale were returned and refunded in cash from the till (ADR-0072). */
+    public static final String POS_SALE_RETURN           = "POS.SALE.RETURN";
     /** A sale (or part of one) settled as COMPLIMENTARY, with who approved it (V110). */
     public static final String POS_SALE_COMPLIMENTARY    = "POS.SALE.COMPLIMENTARY";
     /** A waiter's POS PIN set or changed (V111); never the PIN itself. */

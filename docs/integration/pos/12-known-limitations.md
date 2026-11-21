@@ -10,8 +10,8 @@ reality falls short of what a full retail POS typically needs.
 > on this page — **sale idempotency**, **whole-sale reversal/refund/void**, and **multi-tender /
 > non-cash payments** — are **CLOSED** and ship in the current API. They are documented below as the
 > shipped mechanism (kept on this page for the historical record and the integration notes that come
-> with them). The only items that remain genuinely open are **partial / line-level POS refunds**
-> (explicitly deferred by ADR-0042) and **client-side offline ingest**. Server-authoritative pricing
+> with them). Partial / line-level POS refunds were closed by [ADR-0072](../../decisions/0072-pos-item-returns.md)
+> Server-authoritative pricing is **by design**, not a limitation.
 > is **by design**, not a limitation.
 
 | # | Item | Status | Affects |
@@ -20,7 +20,7 @@ reality falls short of what a full retail POS typically needs.
 | 2 | Whole-sale POS reversal / refund / void | **CLOSED** (`POST /pos/sales/uid/{uid}/reverse`) | returns, mistake correction |
 | 3 | Multi-tender / non-cash payments | **CLOSED** (optional `tenders[]` list) | payments (card, mobile money, split, change) |
 | 4 | Server-authoritative pricing; `unitPrice`/`agentId` informational | **By design** (not a gap) | price integrity, agent attribution |
-| 5 | Partial / line-level POS refunds | **Open** (deferred by ADR-0042) | per-line returns |
+| 5 | Partial / line-level POS refunds | **CLOSED** (`POST /pos/sales/uid/{uid}/returns`, ADR-0072, V117) | per-line returns |
 | 6 | Client-side offline ingest | **Open** | disconnected operation |
 
 > **Beyond transaction integrity:** for **supermarket / grocery** readiness — embedded-weight
@@ -171,16 +171,19 @@ agent is not supported — a deliberate constraint, not a posting bug.)
 
 ---
 
-## 5. Partial / line-level POS refunds — DEFERRED
+## 5. Partial / line-level POS refunds — CLOSED (`/returns` endpoint)
 
-> **Status: Open** — explicitly **deferred** by ADR-0042.
+> **Status: Closed** — shipped by [ADR-0072](../../decisions/0072-pos-item-returns.md) (owner-approved
+> 2026-11-21, migration V117). Previously deferred by ADR-0042.
 
-The `/reverse` endpoint ([§2](#2-whole-sale-pos-reversal--refund--void--closed-reverse-endpoint))
-reverses the **whole** sale only. **Partial** refunds (return some lines, or a partial quantity of a
-line) are **not supported**: they require a credit-note-by-line path that ADR-0042 deferred. Until
-that ships, a partial return must be handled in the back office (a per-line credit note against the
-originating invoice), not at the till.
+`POST /api/v1/pos/sales/uid/{invoiceUid}/returns` returns chosen lines / quantities of a finalised POS sale and
+refunds them in **cash from the till drawer** (always CASH, whatever the original tender). Same authorisation as
+the reverse; the sale's session must be OPEN; online only. After **any** item return the whole-sale `/reverse`
+(and the back-office void) is refused with 409 — return the remaining items instead. The refund slip is
+non-fiscal. Full contract: [10 — Returns & Refunds §1b](./10-returns-refunds.md#1b-returning-items-of-a-pos-sale-refund-by-item).
 
+Still not covered: a sale whose session has closed (back-office void / credit note), credit sales and
+complimentary sales (no cash to refund), and the management reports listed in ADR-0072 ("Not yet netted").
 ---
 
 ## 6. Client-side offline ingest — OPEN
@@ -214,7 +217,7 @@ this is the client-facing summary.
 | **Age-restricted item gate** (alcohol / tobacco verification) | **Absent** | **Critical** | D-3a |
 | **POS-applied promotions** (multi-buy / 3-for-2 / BOGO / threshold) | **Absent** — a `Promotion` engine exists but is **not applied on the sale path** and can't express multi-buy | **Critical** | D-2 |
 | **First-class weighed goods** (sell-by-weight, tare, scale rounding) | **Partial** — math works via a WEIGHT unit; no weighed-product type | **Critical** | D-1b |
-| **Partial / line-level refund** | **Deferred** (= §5 above) | **High** | D-4 |
+| **Partial / line-level refund** | **Closed** (= §5 above, ADR-0072) | **High** | D-4 |
 | **PLU codes** (ring-by-number for loose produce) | **Absent** (workaround: type the SKU code) | **High** | D-1c |
 | **Manual price override** at the till (supervisor) | **Absent** on POS (exists in the back-office invoice flow) | **High** | (D-2 note) |
 | **Markdown / clearance** (reduced-to-clear) | **Absent** (only lever is a line discount) | **High** | D-2 |
@@ -235,6 +238,6 @@ The three highest-impact gaps that previously blocked production use — **idemp
 **reversal/refund (#2)**, and **multi-tender (#3)** — are now **CLOSED** in commit `f08fb08`
 (ADR-0042), so an attended, multi-tender POS with safe retries and at-till whole-sale refunds is
 viable on the shipped API. **Server-authoritative pricing (#4)** is a deliberate by-design guarantee,
-not a gap. The only genuinely open items are **partial / line-level refunds (#5)**, deferred by
-ADR-0042 pending a credit-note-by-line path, and **client-side offline ingest (#6)**, where the
+not a gap. **Partial / line-level refunds (#5)** shipped with ADR-0072. The only genuinely open item is
+**client-side offline ingest (#6)**, where the
 queue-and-replay logic lives on the client (now safe to build on top of the shipped idempotency key).

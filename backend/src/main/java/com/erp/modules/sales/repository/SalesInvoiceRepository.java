@@ -90,15 +90,35 @@ public interface SalesInvoiceRepository extends JpaRepository<SalesInvoice, Long
      */
     Optional<SalesInvoice> findByUidAndCompanyId(String uid, Long companyId);
 
+    /** Company-scoped by-id lookup (tenant rule: never a bare findById in a service). */
+    Optional<SalesInvoice> findByCompanyIdAndId(Long companyId, Long id);
+
+    /**
+     * ADR-0072: the sale row taken under a write lock that ALSO bumps its version. Serialises two
+     * concurrent item returns of the same sale (so neither can over-return), and makes a whole-sale
+     * reverse that loaded the invoice before the return committed fail its optimistic check instead
+     * of refunding the same goods twice. Company-scoped like every finder on this table.
+     */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_FORCE_INCREMENT)
+    @Query("SELECT i FROM SalesInvoice i WHERE i.id = :id AND i.companyId = :companyId")
+    Optional<SalesInvoice> lockByCompanyIdAndId(@Param("companyId") Long companyId,
+                                                @Param("id") Long id);
+
     /**
      * Gross turnover of all FINALISED POS invoices for a session, across every tender type
      * (ADR-0029 D-5). Reporting/turnover figure only — do NOT use this for the expected-cash
      * drawer arithmetic (card/mobile-money/cheque tenders never enter the till). Use
      * {@link com.erp.modules.sales.repository.SalesInvoicePaymentRepository#sumCashTenderByPosSession}
      * for that.
+     *
+     * <p>ADR-0072: net of the session's POS item returns (their cash left the drawer as REFUND
+     * payouts, which expected cash already subtracts) — the turnover is what was kept, not what was
+     * rung and then handed back.
      */
     @Query("""
             SELECT COALESCE(SUM(i.grossTotalAmount), 0)
+                   - COALESCE((SELECT SUM(r.grossAmount) FROM PosSaleReturn r
+                               WHERE r.posSessionId = :sessionId), 0)
             FROM SalesInvoice i
             WHERE i.posSessionId = :sessionId
               AND i.status = 'FINALISED'

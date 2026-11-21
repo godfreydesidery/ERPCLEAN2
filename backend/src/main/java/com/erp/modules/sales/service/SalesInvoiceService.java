@@ -128,6 +128,9 @@ public interface SalesInvoiceService {
      * grouped by tax band, in base currency at each invoice's stamped rate — the amounts the GL
      * void reversal debits back off VAT Payable. Returned as POSITIVE figures; the tax module
      * subtracts them in the void month. Company-scoped.
+     *
+     * <p>ADR-0072: also includes POS item returns paid in the window (a partial void — the net and
+     * VAT refunded, by band), so a return lowers output VAT in the month it was refunded.
      */
     VatOutputSummaryDto findVatVoidSummaryForPeriod(Long companyId, LocalDate start, LocalDate end);
 

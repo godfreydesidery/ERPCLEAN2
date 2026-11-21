@@ -22,6 +22,7 @@ public class OrderToCashNumberGenerator {
     private static final String KIND_SALES_ORDER  = "SALES_ORDER";
     private static final String KIND_DELIVERY     = "DELIVERY";
     private static final String KIND_SALES_RETURN = "SALES_RETURN";
+    private static final String KIND_POS_RETURN   = "POS_RETURN";
 
     private final CodeSequenceRepository sequences;
 
@@ -51,6 +52,12 @@ public class OrderToCashNumberGenerator {
     @Transactional(propagation = Propagation.REQUIRED)
     public String nextSalesReturn(Long companyId) {
         return format("RET", allocate(companyId, KIND_SALES_RETURN));
+    }
+
+    /** Allocates the next POS item-return number: {@code PRT-0001} (ADR-0072). Called at return. */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public String nextPosReturn(Long companyId) {
+        return format("PRT", allocate(companyId, KIND_POS_RETURN));
     }
 
     private long allocate(Long companyId, String kind) {

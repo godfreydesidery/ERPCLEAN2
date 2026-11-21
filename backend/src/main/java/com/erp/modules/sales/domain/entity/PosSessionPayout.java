@@ -50,6 +50,13 @@ public class PosSessionPayout extends UidEntity {
     @Column(name = "category", length = 40)
     private String category;
 
+    /**
+     * The POS sale this payout refunds (V37 column, previously unmapped). Set only by an item return
+     * ({@link #refundForSale}); null on every other payout.
+     */
+    @Column(name = "source_invoice_uid", updatable = false, length = 26)
+    private String sourceInvoiceUid;
+
     @Column(name = "reason", length = 255)
     @Setter
     private String reason;
@@ -102,6 +109,21 @@ public class PosSessionPayout extends UidEntity {
         PosSessionPayout payout = new PosSessionPayout(companyId, branchId, posSessionId,
                 PosPayoutType.EXPENSE, amount, reason, createdBy);
         payout.category = category;
+        return payout;
+    }
+
+    /**
+     * The cash REFUND an item return (ADR-0072) takes out of the drawer. It is a REFUND payout so it
+     * lowers the session's expected cash like any other, but it raises NO journal of its own: the
+     * {@code SALES_REVERSAL} journal the return's event produces already credits Cash, and posting it
+     * here as well would credit cash twice.
+     */
+    public static PosSessionPayout refundForSale(Long companyId, Long branchId, Long posSessionId,
+                                                 BigDecimal amount, String reason,
+                                                 String sourceInvoiceUid, Long createdBy) {
+        PosSessionPayout payout = new PosSessionPayout(companyId, branchId, posSessionId,
+                PosPayoutType.REFUND, amount, reason, createdBy);
+        payout.sourceInvoiceUid = sourceInvoiceUid;
         return payout;
     }
 

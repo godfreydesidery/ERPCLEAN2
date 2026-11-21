@@ -159,7 +159,60 @@ public class PaymentSummaryReportQuery {
                             rs.getLong("payments"));
         }, params.toArray());
 
-        return lines.values().stream().map(Acc::toRow).toList();
+        // ADR-0072: POS item returns are refunded in CASH from the drawer, so they come off the CASH
+        // column of the day, cashier (who rang the return) and currency they were paid on — the
+        // cash-up identity this report is checked against. The refunded sale stays FINALISED, so its
+        // takings above are still the full amounts.
+        List<Object> refundParams = new ArrayList<>();
+        refundParams.add(zone.getId());
+        refundParams.add(companyId);
+        refundParams.add(from);
+        refundParams.add(to);
+        StringBuilder refundFilter = new StringBuilder(scope.sql("r.branch_id"));
+        if (branch != null) {
+            refundFilter.append(" AND r.branch_id = ?");
+            refundParams.add(branch.id());
+        }
+        if (cashier != null) {
+            refundFilter.append(" AND r.created_by = ?");
+            refundParams.add(cashier.id());
+        }
+        boolean[] anyRefund = {false};
+        jdbc.query("""
+                SELECT to_char(r.created_at AT TIME ZONE ?, 'YYYY-MM-DD') AS day,
+                       u.uid AS cashier_uid, u.display_name AS cashier_name,
+                       r.currency AS currency, SUM(r.gross_amount) AS amount
+                FROM pos_sale_returns r
+                LEFT JOIN app_users u ON u.id = r.created_by
+                WHERE r.company_id = ?
+                  AND r.created_at >= ?
+                  AND r.created_at <  ?
+                """ + refundFilter + """
+
+                GROUP BY 1, 2, 3, 4
+                """, rs -> {
+                    anyRefund[0] = true;
+                    String day = rs.getString("day");
+                    String cashierUid = rs.getString("cashier_uid");
+                    String currency = rs.getString("currency");
+                    String key = day + '|' + Objects.toString(cashierUid, "") + '|' + currency;
+                    String cashierName = nameOrUnknown(rs.getString("cashier_name"));
+                    BigDecimal refunded = rs.getBigDecimal("amount");
+                    lines.computeIfAbsent(key, k -> new Acc(day, cashierUid, cashierName, currency))
+                            .add("CASH", refunded.negate(), 0);
+                }, refundParams.toArray());
+
+        var accs = new ArrayList<>(lines.values());
+        if (anyRefund[0]) {
+            // A day or cashier that only refunded was appended out of order; restore the printed order.
+            accs.sort(java.util.Comparator
+                    .comparing((Acc a) -> a.date)
+                    .thenComparing(a -> "(not recorded)".equals(a.cashierName))
+                    .thenComparing(a -> a.cashierName)
+                    .thenComparing(a -> Objects.toString(a.cashierUid, ""))
+                    .thenComparing(a -> a.currency));
+        }
+        return accs.stream().map(Acc::toRow).toList();
     }
 
     /** Everyone who took a payment in the window (and branch), whatever the cashier filter says. */

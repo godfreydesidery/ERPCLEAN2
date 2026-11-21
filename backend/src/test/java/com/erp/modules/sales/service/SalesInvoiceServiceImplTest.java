@@ -92,6 +92,8 @@ class SalesInvoiceServiceImplTest {
     // Business dates are the company's dates (owner ruling 2026-10-10); EAT for every test company.
     @Spy CompanyCalendar calendar =
             CompanyCalendar.fixed(BusinessZone.DEFAULT, java.time.Clock.systemUTC());
+    // ADR-0072: doVoidInvoice asks whether the sale has item returns; null would NPE every void.
+    @Mock com.erp.modules.sales.repository.PosSaleReturnRepository posReturns;
     @InjectMocks SalesInvoiceServiceImpl service;
 
     private static final Long COMPANY_ID = 1L;
@@ -597,6 +599,38 @@ class SalesInvoiceServiceImplTest {
         when(lines.findMaxLineNo(invoiceId)).thenReturn(0);
         when(lines.save(any())).thenAnswer(a -> a.getArgument(0));
         return inv;
+    }
+
+    // ADR-0072 (owner ruling 2026-11-21): a sale with item returns can no longer be voided whole —
+    // the till reverse and the back-office void both land in doVoidInvoice, so one guard covers both.
+    @Test
+    void voidPosInvoice_afterAnItemReturn_isRefusedWithTheFriendlyMessage() {
+        SalesInvoice inv = invoiceWithId(500L, "INVUID0000000000000000077");
+        inv.setStatus(com.erp.modules.sales.domain.enums.InvoiceStatus.FINALISED);
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+        when(posReturns.existsByCompanyIdAndSalesInvoiceId(COMPANY_ID, 500L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.voidPosInvoice(inv.getUid(),
+                new com.erp.modules.sales.domain.dto.VoidInvoiceRequest("wrong sale")))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessage("Some items on this sale were already returned. Return the remaining "
+                        + "items with Return items.");
+        assertThat(inv.getStatus())
+                .as("the sale must be untouched")
+                .isEqualTo(com.erp.modules.sales.domain.enums.InvoiceStatus.FINALISED);
+    }
+
+    @Test
+    void voidInvoice_afterAnItemReturn_isRefusedToo_noDoubleRefundFromBackOffice() {
+        SalesInvoice inv = invoiceWithId(501L, "INVUID0000000000000000078");
+        inv.setStatus(com.erp.modules.sales.domain.enums.InvoiceStatus.FINALISED);
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+        when(posReturns.existsByCompanyIdAndSalesInvoiceId(COMPANY_ID, 501L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.voidInvoice(inv.getUid(),
+                new com.erp.modules.sales.domain.dto.VoidInvoiceRequest("wrong sale")))
+                .isInstanceOf(com.erp.platform.common.api.ConflictException.class)
+                .hasMessageContaining("already returned");
     }
 
     private static SalesInvoice invoiceWithId(Long id, String uid) {
