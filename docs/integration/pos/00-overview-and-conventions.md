@@ -608,7 +608,8 @@ curl -sS -X POST "$BASE/api/v1/pos/sales" \
 - **Preconditions:** the invoice must be POS-origin, **FINALISED**, and its originating session still
   **OPEN**; otherwise **409** (use the back-office invoice void instead).
 - **Notable errors:** 401; 403 (lacks `POS.SALE.VOID`); 404 (unknown invoice uid); 409 (precondition not met).
-- **Scope:** whole-invoice only — **partial / line-level POS refunds are deferred** (ADR-0042). See
+- **Scope:** whole-invoice only. Item-level refunds are §10.13a below (ADR-0072); once a sale has any item return this
+  endpoint answers **409** ("Some items on this sale were already returned…"). See
   [10](./10-returns-refunds.md).
 
 ```bash
@@ -617,6 +618,23 @@ curl -sS -X POST "$BASE/api/v1/pos/sales/uid/inv_8b1f/reverse" \
   -H "Content-Type: application/json" \
   -d '{"reason":"Customer changed mind"}'
 ```
+
+### 10.13a `POST /api/v1/pos/sales/uid/{uid}/returns` — return items of a POS sale (cash refund)
+
+- **Permission:** `POS.SALE.VOID` or `SALES.INVOICE.VOID`, scoped to the **invoice** uid (same gate and same
+  own-drawer / manager step-up rules as the reverse; ADR-0072, V117). No new permission code.
+- **Headers:** `Idempotency-Key` (reuse the same value on a retry — the original return is answered).
+- **Body:** `{ "reason": "…", "authorisedByUid": "<step-up uid, unless caller holds SALES.INVOICE.VOID>",
+  "lines": [ { "invoiceLineUid": "…", "qty": 1 } ] }` — qty is in the sold line's own unit.
+- **Success:** **201** with the return (`returnNo` `PRT-####`, amounts, lines, `payoutUid`, `sessionUid`,
+  `authorisedBy`, `createdAt`). The refund is always **CASH from the drawer**; non-fiscal slip.
+- **Also:** `GET /api/v1/pos/sales/uid/{uid}/returns` (returns made + sold / returned / remaining per line) and
+  `GET /api/v1/pos/returns/uid/{returnUid}` (reprint). The sale DTO gains `hasReturns` / `returnedGross`, the line DTO
+  `qtyReturned`.
+- **Notable errors:** 400 (malformed / duplicate line / qty ≤ 0); 403 (not own session without supervisor, or no
+  valid step-up); 404; 409 (session not OPEN, already reversed, more than remains, credit/complimentary sale, AR
+  allocations).
+- Full contract and JSON examples: [10 — Returns & Refunds §1b](./10-returns-refunds.md#1b-returning-items-of-a-pos-sale-refund-by-item).
 
 ---
 

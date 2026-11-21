@@ -2,6 +2,7 @@ import '../core/api/api_client.dart';
 import '../core/json.dart';
 import '../models/dashboard.dart';
 import '../models/sale.dart';
+import '../models/sale_return.dart';
 
 /// The POS sale path (§09): ring (with idempotency), whole-sale reverse, and the
 /// invoice reads used to assemble/reprint a receipt without re-posting (G-8).
@@ -49,6 +50,34 @@ class SaleService {
       'authorisedByUid': ?authorisedByUid,
     });
   }
+
+  // ----------------------------------------------------------------- item returns
+
+  /// What can still be returned on [invoiceUid] and the returns already made
+  /// (ERP ADR-0072). `returnable=false` comes with a friendly reason to show.
+  Future<PosSaleReturns> getReturns(String invoiceUid) async =>
+      PosSaleReturns.fromJson(
+          asMap(await _api.get('/pos/sales/uid/$invoiceUid/returns')));
+
+  /// Returns chosen items of a finalised POS sale and refunds them in CASH from
+  /// the drawer. [body] is built by `buildReturnRequest`.
+  ///
+  /// [idempotencyKey] is generated once per attempt and resent verbatim when the
+  /// outcome of an attempt is unknown (no answer / 5xx): the server then answers
+  /// with the original return instead of refunding twice.
+  Future<PosSaleReturn> returnItems(
+    String invoiceUid,
+    Map<String, dynamic> body, {
+    required String idempotencyKey,
+  }) async {
+    final data = await _api.post('/pos/sales/uid/$invoiceUid/returns',
+        body: body, idempotencyKey: idempotencyKey, xRequestId: idempotencyKey);
+    return PosSaleReturn.fromJson(asMap(data));
+  }
+
+  /// One return, for reprinting its refund slip.
+  Future<PosSaleReturn> getReturn(String returnUid) async =>
+      PosSaleReturn.fromJson(asMap(await _api.get('/pos/returns/uid/$returnUid')));
 
   // ----------------------------------------------------------------- receipt reads
 

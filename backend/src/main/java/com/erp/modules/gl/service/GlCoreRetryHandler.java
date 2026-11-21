@@ -27,6 +27,7 @@ public class GlCoreRetryHandler implements GlPostingRetryHandler {
 
     private static final Set<GlPostingFailureKind> KINDS = EnumSet.of(
             GlPostingFailureKind.SALE,
+            GlPostingFailureKind.SALE_RETURN,
             GlPostingFailureKind.JOURNAL_DRAFT,
             GlPostingFailureKind.REVERSAL,
             GlPostingFailureKind.SALE_VOID);
@@ -60,6 +61,11 @@ public class GlCoreRetryHandler implements GlPostingRetryHandler {
                     r.postingDate(), longValue(a, "costCentreValueId"),
                     longValue(a, "departmentValueId"), longValue(a, "projectId"),
                     longValue(a, "projectTaskId"));
+            case SALE_RETURN -> invoker.postSaleReturnInNewTx(r.companyId(), r.branchId(),
+                    r.sourceRef(), text(a, "returnNumber"), text(a, "currency"),
+                    decimal(a, "gross"), decimal(a, "net"), decimal(a, "vat"), r.postingDate(),
+                    longValue(a, "costCentreValueId"), longValue(a, "departmentValueId"),
+                    longValue(a, "projectId"), longValue(a, "projectTaskId"));
             case JOURNAL_DRAFT -> {
                 JournalEntryDraft d = mapper.convertValue(a.path("draft"), JournalEntryDraft.class);
                 yield invoker.postInNewTx(new JournalEntryDraft(d.companyId(), d.branchId(),

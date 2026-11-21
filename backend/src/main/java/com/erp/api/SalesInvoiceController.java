@@ -10,6 +10,7 @@ import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.SalesInvoicePaymentDto;
 import com.erp.modules.sales.domain.dto.UpdateInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.VoidInvoiceRequest;
+import com.erp.modules.sales.service.PosSaleReturnService;
 import com.erp.modules.sales.service.SalesInvoiceService;
 import com.erp.platform.common.api.ApiResponse;
 import com.erp.platform.common.api.PageMeta;
@@ -46,9 +47,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class SalesInvoiceController {
 
     private final SalesInvoiceService salesInvoiceService;
+    /** ADR-0072: fills the item-return summary onto what the till reads back. */
+    private final PosSaleReturnService posReturns;
 
-    public SalesInvoiceController(SalesInvoiceService salesInvoiceService) {
+    public SalesInvoiceController(SalesInvoiceService salesInvoiceService,
+                                  PosSaleReturnService posReturns) {
         this.salesInvoiceService = salesInvoiceService;
+        this.posReturns = posReturns;
     }
 
     // -------------------------------------------------------------------------
@@ -65,7 +70,7 @@ public class SalesInvoiceController {
     @GetMapping("/uid/{uid}")
     @PreAuthorize("@perm.scoped(#uid,'invoice','SALES.INVOICE.VIEW')")
     public SalesInvoiceDto getByUid(@PathVariable String uid) {
-        return salesInvoiceService.getByUid(uid);
+        return posReturns.annotate(salesInvoiceService.getByUid(uid));
     }
 
     @GetMapping
@@ -92,7 +97,7 @@ public class SalesInvoiceController {
             // SAL-10: status used to be accepted and ignored; q now also matches customer names.
             page = salesInvoiceService.list(companyId, q, status, dateFrom, dateTo, pageable);
         }
-        return ApiResponse.ok(page.getContent(), PageMeta.from(page));
+        return ApiResponse.ok(posReturns.annotate(page.getContent()), PageMeta.from(page));
     }
 
     @PutMapping("/uid/{uid}/finalize")
@@ -131,7 +136,7 @@ public class SalesInvoiceController {
     @GetMapping("/uid/{uid}/lines")
     @PreAuthorize("@perm.scoped(#uid,'invoice','SALES.INVOICE.VIEW')")
     public List<SalesInvoiceLineDto> listLines(@PathVariable String uid) {
-        return salesInvoiceService.listLines(uid);
+        return posReturns.annotateLines(salesInvoiceService.listLines(uid));
     }
 
     @PostMapping("/uid/{uid}/lines")

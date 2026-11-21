@@ -1,6 +1,7 @@
 package com.erp.modules.cashbank.events;
 
 import com.erp.modules.cashbank.service.CashBookJournalMirror;
+import com.erp.modules.sales.domain.dto.PosSaleReturnedPayload;
 import com.erp.modules.sales.domain.dto.SaleFinalisedPayload;
 import com.erp.modules.sales.domain.dto.SaleVoidedPayload;
 import com.erp.platform.events.DomainEvent;
@@ -118,6 +119,55 @@ public final class SaleCashBookHandler {
                 log.warn("SaleCashBookHandler: cash-book rows for void event uid={} company={} "
                         + "not written — error={}", event.getUid(), event.getCompanyId(),
                         ex.getMessage());
+            } finally {
+                restore(previous);
+            }
+            guard.markProcessed(CONSUMER, event.getUid());
+        }
+    }
+
+    /**
+     * {@code POS.SALE.RETURNED} → {@code SALE_REFUND} rows mirroring the item return's partial
+     * {@code SALES_REVERSAL} journal (ADR-0072). Runs after {@code SaleReturnPostingHandler}.
+     */
+    @Component
+    public static class Returned implements DomainEventHandler {
+
+        static final String CONSUMER = "CASHBANK.POS_SALE_RETURN";
+
+        private final IdempotencyGuard guard;
+        private final CashBookJournalMirror mirror;
+        private final ObjectMapper objectMapper;
+
+        public Returned(IdempotencyGuard guard, CashBookJournalMirror mirror,
+                        ObjectMapper objectMapper) {
+            this.guard = guard;
+            this.mirror = mirror;
+            this.objectMapper = objectMapper;
+        }
+
+        @Override
+        public String eventType() {
+            return DomainEventType.POS_SALE_RETURNED;
+        }
+
+        @Override
+        @Transactional(propagation = Propagation.MANDATORY)
+        public void handle(DomainEvent event) {
+            if (guard.alreadyProcessed(CONSUMER, event.getUid())) {
+                return;
+            }
+            RequestContext.Principal previous = RequestContext.get();
+            RequestContext.set(RequestContext.Principal.system(event.getCompanyId(), event.getBranchId()));
+            try {
+                PosSaleReturnedPayload p = objectMapper.readValue(event.getPayload(),
+                        PosSaleReturnedPayload.class);
+                mirror.mirrorSaleReturn(event.getCompanyId(), event.getBranchId(), p.returnUid(),
+                        p.returnNumber());
+            } catch (Exception ex) {
+                log.warn("SaleCashBookHandler: cash-book rows for item-return event uid={} "
+                        + "company={} not written — error={}", event.getUid(),
+                        event.getCompanyId(), ex.getMessage());
             } finally {
                 restore(previous);
             }

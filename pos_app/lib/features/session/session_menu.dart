@@ -1459,7 +1459,9 @@ class _TodaysSalesDialogState extends ConsumerState<_TodaysSalesDialog> {
                       return ListTile(
                         title: Text(inv.status.isVoid
                             ? '${inv.invoiceNumber}  ·  Reversed'
-                            : inv.invoiceNumber),
+                            : inv.hasReturns
+                                ? '${inv.invoiceNumber}  ·  Items returned'
+                                : inv.invoiceNumber),
                         subtitle: Text(who.isEmpty ? when : '$when  ·  $who'),
                         trailing: Text(
                             formatMoneyParts(

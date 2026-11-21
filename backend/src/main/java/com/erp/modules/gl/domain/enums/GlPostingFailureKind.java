@@ -9,6 +9,8 @@ package com.erp.modules.gl.domain.enums;
 public enum GlPostingFailureKind {
     /** GLPostingSafeInvoker#postSaleInNewTx — DR Cash/AR, CR Revenue, CR VAT. */
     SALE,
+    /** GLPostingSafeInvoker#postSaleReturnInNewTx — POS item return: Dr Revenue, Dr VAT, Cr Cash. */
+    SALE_RETURN,
     /** GLPostingSafeInvoker#postInNewTx — a fully built draft from any module. */
     JOURNAL_DRAFT,
     /** GLPostingSafeInvoker#postReversalInNewTx — reversal of a known journal entry. */

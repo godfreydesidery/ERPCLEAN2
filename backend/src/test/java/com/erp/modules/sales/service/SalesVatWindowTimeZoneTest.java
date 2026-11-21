@@ -37,6 +37,8 @@ class SalesVatWindowTimeZoneTest {
     @Mock CurrencyMinorUnits minorUnits;
     @Mock ScopeGuard scopeGuard;
     @Spy CompanyCalendar calendar = CompanyCalendar.fixed(BusinessZone.DEFAULT, Clock.systemUTC());
+    // ADR-0072: doVoidInvoice asks whether the sale has item returns; null would NPE every void.
+    @Mock com.erp.modules.sales.repository.PosSaleReturnRepository posReturns;
     @InjectMocks SalesInvoiceServiceImpl service;
 
     @Test

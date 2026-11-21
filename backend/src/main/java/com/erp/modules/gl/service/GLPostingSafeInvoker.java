@@ -215,6 +215,83 @@ public class GLPostingSafeInvoker {
         }
     }
 
+    /**
+     * ADR-0072: the journal for a POS item return — a PARTIAL reversal of the sale, so it cannot reuse
+     * {@link #postReversalInNewTx} (which mirrors a whole entry). Posted as {@code SALES_REVERSAL}
+     * with {@code source_ref} = the RETURN's uid, never the invoice's, so the partial unique index
+     * {@code uq_journal_entry_sales_source (company_id, source_type, source_ref)} can never collide with
+     * a later invoice-level reversal.
+     *
+     * <p>Dr Sales revenue (net, carrying the sale's dimension/project tags so the P&amp;L roll-ups
+     * net out) · Dr VAT payable (vat, omitted when zero) · Cr Cash (net + vat). The refund is always
+     * CASH out of the till drawer (owner ruling), so the credit goes to the company's {@code CASH}
+     * mapping — the same account a till payout posts to — whatever the original tender was. Each
+     * debit is converted to base independently, so the entry balances by construction.
+     *
+     * <p>Own REQUIRES_NEW transaction and never propagates, like every poster here; a failure is
+     * recorded for re-post (ACC-02, kind {@code SALE_RETURN}) and returns null.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public JournalEntryDto postSaleReturnInNewTx(Long companyId, Long branchId, String returnUid,
+                                                 String returnNumber, String currency,
+                                                 BigDecimal gross, BigDecimal net, BigDecimal vat,
+                                                 LocalDate postingDate, Long costCentreValueId,
+                                                 Long departmentValueId, Long projectId,
+                                                 Long projectTaskId) {
+        try {
+            String baseCurrency = companies.findScopedById(companyId)
+                    .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
+                    .orElse("TZS");
+            BigDecimal baseNet = fxConverter.toBase(net, currency, companyId, postingDate)
+                    .baseAmount();
+            BigDecimal baseVat = BigDecimal.ZERO;
+            if (vat != null && vat.signum() > 0) {
+                baseVat = fxConverter.toBase(vat, currency, companyId, postingDate).baseAmount();
+            }
+            ChartOfAccount cashAcct       = configResolver.resolve(companyId, GlConfigKey.CASH);
+            ChartOfAccount revenueAcct    = configResolver.resolve(companyId, GlConfigKey.SALES_REVENUE);
+            ChartOfAccount vatPayableAcct = configResolver.resolve(companyId, GlConfigKey.VAT_PAYABLE);
+
+            String label = returnNumber != null ? returnNumber : returnUid;
+            List<LineDraft> lines = new ArrayList<>();
+            if (baseNet.signum() > 0) {
+                lines.add(new LineDraft(revenueAcct.getId(), baseNet, BigDecimal.ZERO,
+                        baseCurrency, "Sales return revenue — " + label, costCentreValueId,
+                        departmentValueId, null, null, projectId, projectTaskId, null));
+            }
+            if (baseVat.signum() > 0) {
+                lines.add(new LineDraft(vatPayableAcct.getId(), baseVat, BigDecimal.ZERO,
+                        baseCurrency, "Sales return VAT — " + label));
+            }
+            lines.add(new LineDraft(cashAcct.getId(), BigDecimal.ZERO, baseNet.add(baseVat),
+                    baseCurrency, "Cash refunded — " + label));
+
+            return postingService.post(new JournalEntryDraft(
+                    companyId, branchId, postingDate, "Item return " + label,
+                    JournalSourceType.SALES_REVERSAL, returnUid, null, null, lines));
+        } catch (Exception ex) {
+            log.warn("GLPostingSafeInvoker: item-return GL post failed for company={} return={} — "
+                            + "GL not configured or period closed. error={}",
+                    companyId, returnUid, ex.getMessage());
+            if (failures != null) {
+                failures.record(GlPostingFailure.of(GlPostingFailureKind.SALE_RETURN, companyId,
+                                branchId, JournalSourceType.SALES_REVERSAL, returnUid,
+                                returnNumber, postingDate)
+                        .amount(gross)
+                        .arg("returnNumber", returnNumber)
+                        .arg("currency", currency)
+                        .arg("gross", gross)
+                        .arg("net", net)
+                        .arg("vat", vat)
+                        .arg("costCentreValueId", costCentreValueId)
+                        .arg("departmentValueId", departmentValueId)
+                        .arg("projectId", projectId)
+                        .arg("projectTaskId", projectTaskId), ex);
+            }
+            return null;
+        }
+    }
+
     /** Builds and posts the sale entry (shared by both sale entry points; runs in their TX). */
     private JournalEntryDto postSale(Long companyId, Long branchId, String invoiceUid,
                                      String currency, BigDecimal gross, BigDecimal net,

@@ -38,8 +38,21 @@ public record SalesInvoiceLineDto(
         boolean priceInclusive,
         String currency,
         String createdAt,
-        Long createdBy
+        Long createdBy,
+        // ADR-0072: quantity of this sold line already returned (in this line's unit); 0 when none.
+        // Remaining returnable = quantity - qtyReturned. Additive.
+        BigDecimal qtyReturned
 ) {
+
+    /** ADR-0072: this line with how much of it has been returned filled in. */
+    public SalesInvoiceLineDto withQtyReturned(BigDecimal returned) {
+        return new SalesInvoiceLineDto(id, uid, invoiceId, companyId, branchId, lineNo, productId,
+                productCode, productName, unitId, unitName, quantity, qtyInBase, requestedQuantity,
+                listPriceAmount, unitPriceAmount, priceOverridden, overriddenBy, lineDiscountAmount,
+                lineDiscountPercent, vatStatus, vatRate, netAmount, vatAmount, grossAmount,
+                priceInclusive, currency, createdAt, createdBy,
+                returned == null ? BigDecimal.ZERO : returned);
+    }
 
     public static SalesInvoiceLineDto from(SalesInvoiceLine l) {
         return new SalesInvoiceLineDto(
@@ -71,7 +84,8 @@ public record SalesInvoiceLineDto(
                 l.isPriceInclusive(),
                 l.getCurrency().value(),
                 l.getCreatedAt() != null ? l.getCreatedAt().toString() : null,
-                l.getCreatedBy()
+                l.getCreatedBy(),
+                BigDecimal.ZERO
         );
     }
 }

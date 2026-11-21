@@ -67,8 +67,26 @@ public record SalesInvoiceDto(
         // ADR-0068: rung on a till while offline; the offline receipt number it printed. Additive —
         // lets a reprint from the server keep the OFFLINE mark and the number the customer holds.
         boolean soldOffline,
-        String offlineNumber
+        String offlineNumber,
+        // ADR-0072: true once any item return exists against this sale — the till then hides
+        // "Reverse" (the server refuses it) and offers "Return items" for what is left. Additive.
+        boolean hasReturns,
+        // Cash refunded by item returns against this sale so far (0 when none). Additive.
+        BigDecimal returnedGross
 ) {
+
+    /** ADR-0072: this DTO with the item-return summary filled in (the entity build leaves it empty). */
+    public SalesInvoiceDto withReturns(boolean returned, BigDecimal refundedGross) {
+        return new SalesInvoiceDto(id, uid, companyId, branchId, documentType, invoiceNumber, status,
+                postedGlEntryUid, customerId, customerName, agentId, agentName, currency,
+                customerPoNumber, paymentTermsId, docDiscountAmount, docDiscountPercent,
+                netTotalAmount, vatTotalAmount, grossTotalAmount, taxSummary, finalisedAt,
+                finalisedBy, voidedAt, voidedBy, voidReason, notes, shipToAddressId, billToAddressId,
+                shipToAddressText, billToAddressText, routeId, routeUid, routeCode, routeName,
+                posSessionId, createdByName, version, createdAt, createdBy, updatedAt, updatedBy,
+                customerUid, soldOffline, offlineNumber, returned,
+                refundedGross == null ? BigDecimal.ZERO : refundedGross);
+    }
 
     /** Build from entity with enriched customer, agent, and optional route fields. */
     public static SalesInvoiceDto from(SalesInvoice inv, String customerName, String agentName,
@@ -144,7 +162,9 @@ public record SalesInvoiceDto(
                 inv.getUpdatedBy(),
                 customerUid,
                 inv.isSoldOffline(),
-                inv.getOfflineNumber()
+                inv.getOfflineNumber(),
+                false,
+                BigDecimal.ZERO
         );
     }
 }

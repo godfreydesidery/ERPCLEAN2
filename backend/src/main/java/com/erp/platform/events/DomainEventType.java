@@ -19,6 +19,11 @@ public final class DomainEventType {
 
     /** Sales invoice voided — compensating reversal trigger (ADR-0008 D-9, ADR-0009 D-3). */
     public static final String SALE_VOIDED            = "SALE.VOIDED";
+    /**
+     * A POS sale had some of its items returned and refunded in cash from the till (ADR-0072). Stock
+     * puts the goods back, GL reverses the returned revenue/VAT against Cash, the cash book mirrors it.
+     */
+    public static final String POS_SALE_RETURNED      = "POS.SALE.RETURNED";
 
     /** Goods receipt received — stock receipt trigger (ADR-0009 D-3; built by ADR-0011). */
     public static final String STOCK_RECEIVED         = "STOCK.RECEIVED";
@@ -48,6 +53,7 @@ public final class DomainEventType {
     public static final String AGG_GOODS_RECEIPT  = "GOODS_RECEIPT";
     public static final String AGG_DELIVERY       = "DELIVERY";
     public static final String AGG_SALES_RETURN   = "SALES_RETURN";
+    public static final String AGG_POS_SALE_RETURN = "POS_SALE_RETURN";
 
     // --- approvals (ADR-0022) ---
     public static final String AGG_APPROVAL_REQUEST = "APPROVAL_REQUEST";

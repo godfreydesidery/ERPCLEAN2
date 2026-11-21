@@ -66,6 +66,9 @@ enum GatedAction {
   /// Reversing / refunding a finalised sale.
   saleReverse,
 
+  /// Returning chosen items of a finalised sale for cash (ERP ADR-0072).
+  saleReturn,
+
   /// A line discount the server has refused as above the company's ceiling.
   discountOverride,
 
@@ -172,6 +175,14 @@ const Map<GatedAction, StepUpRule> kStepUpPolicy = {
     permissionCode: 'SALES.INVOICE.VOID',
     title: 'Manager approval — refund',
     purpose: 'Reverse this sale and return the money to the customer.',
+  ),
+  GatedAction.saleReturn: StepUpRule(
+    requiresApproval: true,
+    // ADR-0072: the same authority as the reversal — PosSaleReturnServiceImpl re-checks the
+    // approver's uid against PosSaleServiceImpl.REVERSAL_AUTHORITY_PERMISSION, which is this code.
+    permissionCode: 'SALES.INVOICE.VOID',
+    title: 'Manager approval — item return',
+    purpose: 'Take back the chosen items and give their money back in cash from the drawer.',
   ),
   GatedAction.discountOverride: StepUpRule(
     requiresApproval: true,

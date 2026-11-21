@@ -73,6 +73,7 @@ The rules the ERP enforces every time:
 | Action at the till | Box title | The approver needs | Standard roles that can approve |
 |---|---|---|---|
 | **Refund / reverse** a sale (when a cashier starts it) | **Manager approval — refund** | the invoice-void permission | Sales Manager, Branch Manager |
+| **Return items** from a sale (when a cashier starts it) | **Manager approval — item return** | the invoice-void permission | Sales Manager, Branch Manager |
 | A line discount above the company's limit | **Manager approval — discount** | the discount-override permission | Sales Manager, Branch Manager |
 | Opening the **X-read** for a cashier whose role has no report rights | **Manager approval — X-read** | the session-reconcile permission | Branch Manager |
 | Opening the **Z-read (reprint)** for a cashier whose role has no report rights | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
