@@ -70,6 +70,27 @@ class ReceiptJournal {
     }
     if (changed) await p.setStringList(_key, list);
   }
+
+  /// Record on a journalled receipt that items of its sale were returned
+  /// (ERP ADR-0072), so a later reprint from this device hides *Refund /
+  /// reverse* — the server refuses a whole-sale reverse once any item is back.
+  Future<void> markReturned(String invoiceUid, double returnedGross) async {
+    final p = await SharedPreferences.getInstance();
+    final list = p.getStringList(_key) ?? <String>[];
+    var changed = false;
+    for (var i = 0; i < list.length; i++) {
+      final m = (jsonDecode(list[i]) as Map).cast<String, dynamic>();
+      final inv = (m['invoice'] as Map?)?.cast<String, dynamic>();
+      if (inv != null && inv['uid'] == invoiceUid) {
+        inv['hasReturns'] = true;
+        inv['returnedGross'] = returnedGross;
+        m['invoice'] = inv;
+        list[i] = jsonEncode(m);
+        changed = true;
+      }
+    }
+    if (changed) await p.setStringList(_key, list);
+  }
 }
 
 final receiptJournalProvider = Provider<ReceiptJournal>((ref) => ReceiptJournal());
