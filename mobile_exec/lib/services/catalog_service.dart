@@ -91,6 +91,10 @@ class ProductFull {
 
   bool get isActive => status.toUpperCase() == 'ACTIVE';
   bool get isVatable => vatStatus.toUpperCase() != 'EXEMPT';
+
+  /// Whether sales and receipts move this item's stock. A SERVICE never is.
+  bool get isStockable => asBool(raw['stockable'], true);
+  bool get isService => asStrOr(raw['type'], 'GOODS').toUpperCase() == 'SERVICE';
 }
 
 /// A unit of measure the company has configured (`UnitOfMeasureDto`).
@@ -495,6 +499,7 @@ class CatalogService {
     String currency = 'TZS',
     String? preferredSupplierId,
     bool clearSupplier = false,
+    bool? stockable,
   }) async {
     final res = await session.api.put(
       '/products/uid/${current.uid}',
@@ -508,6 +513,7 @@ class CatalogService {
         currency: currency,
         preferredSupplierId: preferredSupplierId,
         clearSupplier: clearSupplier,
+        stockable: stockable,
       ),
     );
     return ProductFull.fromJson(asMap(res));
@@ -575,6 +581,8 @@ class CatalogService {
 /// - [preferredSupplierId]: null leaves it; [clearSupplier] removes it (the
 ///   server clears a planning field only when it is named in clearFields).
 /// - VAT on keeps a non-standard taxed rate (e.g. ZERO) as it was.
+/// - [stockable]: null keeps the stored value. The server refuses turning it
+///   off while the item still has stock on hand.
 Map<String, dynamic> productUpdateBody(
   ProductFull current, {
   required String name,
@@ -585,6 +593,7 @@ Map<String, dynamic> productUpdateBody(
   String currency = 'TZS',
   String? preferredSupplierId,
   bool clearSupplier = false,
+  bool? stockable,
 }) {
   final r = current.raw;
   return {
@@ -592,7 +601,7 @@ Map<String, dynamic> productUpdateBody(
     'description': description,
     'type': asStrOr(r['type'], 'GOODS'),
     'sellable': asBool(r['sellable'], true),
-    'stockable': asBool(r['stockable'], true),
+    'stockable': stockable ?? asBool(r['stockable'], true),
     'baseUnitUid': current.baseUnitUid,
     if (cost != null)
       'cost': {'amount': cost.toStringAsFixed(2), 'currency': currency}
