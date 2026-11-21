@@ -62,7 +62,7 @@ _ERPCLEAN2 — modular-monolith ERP (Spring Boot + Angular + PostgreSQL). Genera
     - [3. Gift receipts (hiding prices)](#3-gift-receipts-hiding-prices)
     - [4. Reprinting an earlier receipt](#4-reprinting-an-earlier-receipt)
     - [5. Refunding (reversing) a whole sale](#5-refunding-reversing-a-whole-sale)
-    - [6. What OrbixPOS does *not* do — partial and single-line refunds](#6-what-orbixpos-does-not-do--partial-and-single-line-refunds)
+    - [6. Returning some items (refund by item)](#6-returning-some-items-refund-by-item)
     - [7. There is no cash-drawer refund payout](#7-there-is-no-cash-drawer-refund-payout)
     - [8. Quick reference and troubleshooting](#8-quick-reference-and-troubleshooting)
 7. [Troubleshooting and Good Practice](#troubleshooting-and-good-practice)
@@ -1753,7 +1753,7 @@ If you have not yet read the chapters on ringing a sale and taking payment, read
 
 **When it happens.** Automatically after a successful payment. It also appears whenever you reprint an earlier sale (section 4).
 
-**How it works.** Nothing on this screen changes the money. **Print**, **Gift receipt** and reprinting only read the sale. The only button that changes anything is **Refund / reverse** (section 5), and that one needs a manager.
+**How it works.** Nothing on this screen changes the money. **Print**, **Gift receipt** and reprinting only read the sale. The only buttons that change anything are **Return items** (section 6) and **Refund / reverse** (section 5), and both need a manager.
 
 ### 1.1 Reading the receipt
 
@@ -1957,6 +1957,7 @@ The **Refund / reverse** button only shows when **all** of these are true:
 | The shift on **this till** is still **open** | The refund comes out of the open drawer. Once the shift is closed, the cash is settled. |
 | **For a cashier:** the sale was rung on **your own** open shift. (A supervisor with the invoice-void right skips this check.) | A cashier may only reverse their own sales. On a colleague's sale the button is simply not shown, so nobody calls a manager over for a refund that would be refused. |
 | The sale has **not already** been reversed | A sale can only be reversed once. |
+| **No item** of the sale has been returned yet (section 6) | After an item return the ERP refuses a whole-sale reverse, so the button is hidden. Use **Return items** for the rest. |
 
 Even when the button shows, the ERP checks again when you confirm:
 
@@ -1973,18 +1974,43 @@ In every refused case the sale is left untouched.
 
 ---
 
-## 6. What OrbixPOS does *not* do — partial and single-line refunds
+## 6. Returning some items (refund by item)
 
-**OrbixPOS cannot refund part of a sale.** There is **no** way to refund a single line, one item out of five, or part of a quantity. **Refund / reverse** is all-or-nothing.
+**What it is.** **Return items** takes back **chosen items** from a sale — one bottle out of a crate, two of five shirts, half a kilo of a weighed item — and gives the customer **their value back in cash** from your drawer. The rest of the sale stands. The stock goes back on the shelf and the ERP corrects the sales, VAT and ledger for just the returned items.
 
-When a customer wants to return just one item out of a larger basket, you have two correct options, depending on your store's policy:
+**Why it exists.** Most returns are not a whole basket. Reversing everything and ringing the kept items again worked, but it was slow and confusing at a busy till. **Return items** does it in one step, with the same manager approval as a reversal.
 
-| Situation | What to do |
-|---|---|
-| Customer returns **one item** from a multi-item sale, and the sale's shift is still open | **Reverse the whole sale** (section 5), then **ring a fresh sale** for the items the customer is keeping. The net effect is that only the returned item is refunded. |
-| You must **hand cash back** that is not tied to a reversible sale (a goodwill cash-back, or a return for a sale from an already-closed shift) | Send the customer to the back office for a sales return — the till has no cash refund payout any more (section 7). |
+**The rules.**
 
-> **Tip.** "Reverse the whole sale, then re-ring the rest" keeps the books accurate, because each step is a complete, properly-accounted transaction. It takes a few more steps, but it is the right way. The re-rung sale gets a new receipt number.
+- The refund is **always cash from the drawer**, whatever the customer paid with (cash, card, mobile money). Your drawer's expected cash drops by the refund automatically — do **not** record a cash payout for it.
+- **Who can do it** is exactly as for **Refund / reverse** (section 5): a cashier on a sale from **their own** open shift, with a manager's approval at the till; a supervisor with the invoice-void right on any sale while their own shift is open, with no second approval.
+- It needs the **network** — there is no item return while the till is selling offline.
+- **Once any item has been returned, Refund / reverse disappears** from that sale. Return the remaining items with **Return items** instead.
+- The refund slip is **not a fiscal receipt**.
+
+### 6.1 How to return items
+
+1. Open the sale's receipt — straight after the sale, or from **Today's sales** or **Recent receipts** (section 4). For a restaurant, open the paid bill from **Paid today**.
+2. Press **Return items** (beside **Refund / reverse**). It shows under the same conditions (section 5.2), plus the till must be online.
+3. The **Return items** box lists every item on the sale with how many were **sold**, **returned** and **left**. An item that has already gone back completely shows **Fully returned** and cannot be ticked.
+4. **Tick** each item coming back. The quantity starts at everything that is left; use **−** / **+** or type the number. You cannot enter more than is left. Items sold by weight or measure (sold in a fraction, e.g. 1.5 kg) take a fraction; items sold in whole units are returned in whole units.
+5. Type the **Reason** (for example "damaged bottle"). It is required.
+6. Check the **Estimated cash refund**. It is an estimate — the ERP works out the exact amount (to the cent, including any discount and VAT on the line).
+7. Press **Return & refund**.
+   - **A cashier:** a **Manager approval — item return** box opens. The manager types their username and password and presses **Approve**. If they cancel, you see *Not approved — nothing was returned.*
+   - **A supervisor:** confirm with **Return & refund**.
+8. On success the box shows, in large type, **Give the customer TZS … in cash from the drawer**, with the refund number (for example **PRT-0001**) and who approved it. **Give the customer exactly that amount** — it is the ERP's figure, not the estimate.
+9. A **refund slip** prints automatically (titled `*** REFUND ***`: refund number, original receipt number, items and quantities, amounts, total refunded, reason, cashier, approver, date and time, and a line for the customer's signature). Press **Print slip** for another copy (marked `REFUND - COPY`), then **Done**.
+
+Back on the receipt, a yellow strip shows **Returned: TZS …** with each refund (number, time, amount) and a printer button to **reprint its slip**. **Today's sales** marks the sale **Items returned**.
+
+> **If the till loses the connection while you press Return & refund.** The box says the ERP did not answer and asks you **not to hand over any cash yet**. Press **Retry**: the same request is sent again, and the ERP never refunds it twice. If you close the box instead, reopen the sale from **Today's sales** — a refund that did go through is listed on the receipt.
+
+### 6.2 When items cannot be returned
+
+The box shows the reason instead of the item list, for example when the sale was already reversed, every item has already been returned, the shift that rang the sale is closed, the sale was complimentary, or it was not paid in full at the till (a credit sale). The ERP also re-checks when you press **Return & refund** and may refuse with a message such as *Only 2 of Widget can still be returned.* or *This refund needs a supervisor's approval…* — nothing is refunded in that case.
+
+> **A return for a sale from a shift that has already closed** cannot be done at the till; send the customer to the back office for a sales return.
 
 ---
 
@@ -1992,7 +2018,7 @@ When a customer wants to return just one item out of a larger basket, you have t
 
 Earlier versions of OrbixPOS let a cashier hand cash back as a **Refund** *cash payout*. That is gone. A refund payout took money out of the drawer on a typed reason alone: the goods stayed "sold", stock was not returned, VAT and revenue were not reversed, and the drawer still balanced — so nobody could see it.
 
-**What to do instead.** Refund the sale with **Refund / reverse** (section 5). It needs a manager's approval, and it puts the stock back and corrects the sales, VAT and ledger in one step. If the sale cannot be reversed at the till (for example it was rung on a shift that is already closed, or only some items are coming back), send the customer to the back office for a sales return.
+**What to do instead.** Refund the whole sale with **Refund / reverse** (section 5), or only the items coming back with **Return items** (section 6). Both need a manager's approval, and both put the stock back and correct the sales, VAT and ledger. If the sale was rung on a shift that is already closed, send the customer to the back office for a sales return.
 
 > A till that has not been updated yet may still show **Refund** in the **Cash payout** dialog. The server now refuses it with *"A cash refund needs a supervisor. To give a customer their money back, reverse the sale from Today's sales instead."* A supervisor who is allowed to reverse sales can still record one from their own login, and it is recorded with their name.
 
@@ -2011,10 +2037,12 @@ Earlier versions of OrbixPOS let a cashier hand cash back as a **Refund** *cash 
 | *No receipt printer set — configure one in Setup.* | A printer has not been chosen for this till. Set it in **Server setup** on the sign-in screen — tap the version text at the bottom seven times (usually an administrator's job). |
 | The company address, TIN or VRN is missing from the receipt | It has not been filled in on the company record in the ERP. Ask your administrator. |
 | You need to undo a whole sale and the shift is still open | On the receipt, press **Refund / reverse**, enter a reason, press **Continue**, and have a manager approve it. |
-| **Refund / reverse** is missing | The shift on this till is already closed (the back office must handle it), the sale was already reversed, the sale was rung on a colleague's shift (a cashier can only reverse their own — ask a supervisor), or your account has no refund rights (ask a supervisor). |
+| **Refund / reverse** is missing | Items of the sale were already returned (use **Return items**), the shift on this till is already closed (the back office must handle it), the sale was already reversed, the sale was rung on a colleague's shift (a cashier can only reverse their own — ask a supervisor), or your account has no refund rights (ask a supervisor). |
 | *You can only reverse sales rung on your own till session.* | It is a colleague's sale. Ask a supervisor to reverse it. (Rare — normally the button is not shown on a colleague's sale.) |
 | *Not approved — the sale stands.* | The approval was cancelled. Nothing changed. |
-| Customer wants to return just one item from a bigger sale | Reverse the whole sale, then re-ring the items they are keeping (section 6). |
+| Customer wants to return just one item from a bigger sale | On the receipt press **Return items**, tick the item and quantity, enter a reason, have a manager approve, and give the cash shown (section 6). |
+| *The ERP did not answer…* after **Return & refund** | Do not hand over cash yet. Press **Retry** — it never refunds twice (section 6.1). |
+| You need another copy of a refund slip | Open the sale's receipt; in the **Returned** strip press the printer button beside the refund. |
 | You must hand cash back but there is no reversible sale | Ask the back office for a sales return — there is no till refund payout (section 7). |
 | The item area shows `(line detail not loaded)` | Totals are still correct. Reprint from **Today's sales** to pull the full breakdown. |
 
@@ -2348,7 +2376,7 @@ A reprint prints the name of the cashier who **rang** the sale on its **CASHIER:
 
 **Why it matters.** Customers ask for a second copy; a receipt jams; you need to confirm a sale posted. Reprinting only re-shows or re-prints an existing receipt. It can **never** post a new sale or charge anyone again.
 
-> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open; a cashier needs a manager's approval). A cashier sees the button only on sales rung on their own open shift — on a colleague's sale it is not shown, so ask a supervisor. It does not do partial or single-line refunds. To return one item from a multi-item sale, reverse the whole sale and ring the rest again. There is no cash refund payout at the till; anything the till cannot reverse goes to the back office as a sales return. See Chapter 6.
+> **Refunds.** OrbixPOS reverses a **whole** sale (the **Refund / reverse** button on a receipt, while the session is open; a cashier needs a manager's approval). A cashier sees the button only on sales rung on their own open shift — on a colleague's sale it is not shown, so ask a supervisor. To give back only some items, use **Return items** on the receipt (chosen items and quantities, refunded in cash, same manager approval); after an item return, **Refund / reverse** is no longer offered for that sale. There is no cash refund payout at the till; anything the till cannot reverse goes to the back office as a sales return. See Chapter 6.
 
 ---
 
@@ -2505,6 +2533,7 @@ The rules the ERP enforces every time:
 | Action at the till | Box title | The approver needs | Standard roles that can approve |
 |---|---|---|---|
 | **Refund / reverse** a sale (when a cashier starts it) | **Manager approval — refund** | the invoice-void permission | Sales Manager, Branch Manager |
+| **Return items** from a sale (when a cashier starts it) | **Manager approval — item return** | the invoice-void permission | Sales Manager, Branch Manager |
 | A line discount above the company's limit | **Manager approval — discount** | the discount-override permission | Sales Manager, Branch Manager |
 | Opening the **X-read** for a cashier whose role has no report rights | **Manager approval — X-read** | the session-reconcile permission | Branch Manager |
 | Opening the **Z-read (reprint)** for a cashier whose role has no report rights | **Manager approval — Z-read** | the session-reconcile permission | Branch Manager |
