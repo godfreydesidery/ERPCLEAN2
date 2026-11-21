@@ -1,10 +1,12 @@
 package com.erp.modules.stock.domain.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -51,10 +53,18 @@ public record CreateStockTransferRequest(
      *                existing callers keep working unchanged. Otherwise it must be one of the
      *                product's configured bulk packs; anything else is refused rather than
      *                guessed at, because a silent mis-conversion moves the wrong amount of stock.
+     * @param enteredUnitCost optional cost of ONE {@code unitUid} as the user typed it (V116).
+     *                REFERENCE ONLY — stored on the line and printed, never used for valuation,
+     *                stock movements or GL (ADR-0028 D-2/D-5 keep the company moving average).
+     *                NULL = not entered. Rounded HALF_UP to 4 dp on save, like every other amount
+     *                in the stock module; the cap keeps it inside NUMERIC(19,4).
      */
     public record LineRequest(
             @NotBlank String productUid,
             @NotNull @Positive BigDecimal qty,
-            String unitUid
+            String unitUid,
+            @PositiveOrZero(message = "Unit cost can't be negative.")
+            @DecimalMax(value = "999999999999999.9999", message = "Unit cost is too large.")
+            BigDecimal enteredUnitCost
     ) {}
 }

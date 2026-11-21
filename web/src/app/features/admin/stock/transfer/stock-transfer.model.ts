@@ -45,6 +45,14 @@ export interface StockTransferLineDto {
    */
   valueAmount: string | number | null;
   currency: string | null;
+  /**
+   * Cost of ONE `unitName` as the user typed it when raising the transfer (V116). REFERENCE ONLY —
+   * stock is still valued at the system cost above. Null = nobody entered one (not "free").
+   * BigDecimal on the wire, so a JSON number; optional because an older server omits it.
+   */
+  enteredUnitCost?: string | number | null;
+  /** `enteredUnitCost × qtyTransferred`, derived by the backend. Null when no cost was entered. */
+  enteredValue?: string | number | null;
 }
 
 export interface StockTransferDto {
@@ -96,6 +104,11 @@ export interface StockTransferLineRequest {
    * than guessing, since a silent mis-conversion moves the wrong amount of stock.
    */
   unitUid?: string;
+  /**
+   * Optional cost of ONE `unitUid` (V116), for reference on the transfer and its printout only —
+   * it never changes how the stock is valued. Omit when blank; the backend rounds to 4 dp.
+   */
+  enteredUnitCost?: string;
 }
 
 export interface CreateStockTransferRequest {

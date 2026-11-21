@@ -108,6 +108,27 @@ export class StockTransferDetailComponent {
     (this.entity()?.lines ?? []).filter((l) => l.valueAmount === null || l.valueAmount === undefined)
       .length);
 
+  // ── Entered (reference) cost, V116 ───────────────────────────────────────────
+
+  /**
+   * True when any line carries a cost the user typed at create. Only then does the table grow the
+   * Entered columns — and only then are the system columns relabelled "System …", because that is
+   * when "Price" on its own would be ambiguous. Same rule as the printed document.
+   */
+  readonly hasEnteredCost = computed(() =>
+    (this.entity()?.lines ?? []).some(
+      (l) => l.enteredUnitCost !== null && l.enteredUnitCost !== undefined,
+    ));
+
+  /** Σ entered value over the lines that have one; null when none does. */
+  readonly totalEnteredValue = computed(() => {
+    const entered = (this.entity()?.lines ?? []).filter(
+      (l) => l.enteredValue !== null && l.enteredValue !== undefined,
+    );
+    if (entered.length === 0) return null;
+    return entered.reduce((sum, l) => sum + (+(l.enteredValue ?? 0) || 0), 0);
+  });
+
   /** Σ quantity, always answerable — every line has a qty. */
   readonly totalQty = computed(() =>
     (this.entity()?.lines ?? []).reduce((sum, l) => sum + (+l.qtyTransferred || 0), 0));
