@@ -86,8 +86,26 @@ rulings; flagged for the owner) · nothing to refund (zero-value items).
 ### Reports (the original invoice stays FINALISED, so each report that sums invoices must net returns)
 Netted by the **return's date** (the month/day the cash left), matching the GL. Fixed: VAT return (computation
 and schedule) and the GL sales tie-out, X/Z-read turnover, BI branch sales, till dashboard, payment summary.
-**Not yet netted** (follow-up): Sales Register, Sales Summary, Profitability, Restaurant reports/insights — they
-read invoices and stock-issue cost directly and still show a returned item as sold.
+**Also netted (follow-up, done):** Sales Register, Sales Summary, Profitability and the restaurant reports and
+insights. Same convention: the returned lines come off by the **return's date**, at the original invoice's stamped
+rate, shared SQL in `PosReturnSql`.
+- *Sales Register / Sales Summary / Profitability*: returned lines are the second half of a `UNION ALL` (negatives), so
+  quantity, discount, VAT, net, gross and the tax split net out and a product/group only returned in the window shows a
+  negative row; the invoice count is unchanged. **Cost** comes off from the return's `SALE_REVERSAL` stock movements
+  (source type `POS_SALE_RETURN`, source = return uid, original issue cost) - what the ledger and GL carry, exact for kits
+  - not pro-rated from the sold line. The movement posts when the outbox event is dispatched, a moment after the return.
+- *Restaurant dashboard / Flash, hours (daypart), payments*: sales, spend per guest, discounts, days, hours, weekdays,
+  departments and items (top ten re-ranked after returns) subtract returned lines by return date, under the same item
+  and department filter at line grain. Receipt/order/guest counts are not reduced. Payments by type fall by the item
+  returns' cash refunds (as a voided receipt's payments leave); "Refunds" (KPI and list) already includes item returns
+  because each is a REFUND payout, so nothing is counted twice.
+- *Restaurant waiter reports*: **bill grain** (waiter sales, bills, bills summary) shows a bill net of every return made
+  against it, whenever made, bill count unchanged; the bills list adds an optional `returned` field
+  (`RestaurantBillRowDto`), the summary's CASH column falls by the refunds. **Line grain** (waiter items, the
+  dashboard's waiters) nets by return date, so the dashboard's waiters add up to its sales. The two bases differ only when
+  a return falls in a different report window from its sale.
+- *Still not netted, by design*: AR credit notes (a separate document, as before); report items that count receipts,
+  orders or guests.
 
 ## Consequences
 - Partial returns are possible at the till with the same controls as a reverse.

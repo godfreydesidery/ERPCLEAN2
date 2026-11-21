@@ -56,6 +56,8 @@ import com.erp.modules.sales.domain.dto.PosSaleReturnsDto;
 import com.erp.modules.sales.domain.dto.PosSessionDto;
 import com.erp.modules.sales.domain.dto.PosTillDto;
 import com.erp.modules.sales.domain.dto.SalesInvoiceDto;
+import com.erp.modules.sales.domain.dto.SalesReportRowDto;
+import com.erp.modules.sales.domain.enums.SalesSummaryGroupBy;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.dto.VatOutputSummaryDto;
 import com.erp.modules.sales.domain.dto.XReadDto;
@@ -131,6 +133,10 @@ class PosSaleReturnServiceIT extends PostgresIntegrationTest {
     @Autowired private DomainEventDispatcher   dispatcher;
     @Autowired private OutboxPublisher         outboxPublisher;
     @Autowired private TransactionTemplate     txTemplate;
+    @Autowired private SalesReportQuery        salesRegister;
+    @Autowired private SalesSummaryReportQuery salesSummary;
+    @Autowired private ProfitabilityReportQuery profitability;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     private Company company;
     private Branch  branch;
@@ -379,6 +385,94 @@ class PosSaleReturnServiceIT extends PostgresIntegrationTest {
         assertThat(negatives.totalOutputVat())
                 .as("the VAT return's negative: all 540 of the sale's VAT was refunded")
                 .isEqualByComparingTo("540");
+    }
+
+    /**
+     * ADR-0072 follow-up: the Sales Register, Sales Summary and Profitability report net a POS item
+     * return - revenue by the return's date, cost from the SALE_REVERSAL movement - instead of
+     * counting the returned unit as sold. Sale of 3 at 1000 + 18% VAT (cost 500 each), 1 returned.
+     */
+    @Test
+    void salesRegisterSummaryAndProfitability_netAPartialReturn_byTheReturnDate() {
+        setRootCtx();
+        ProductDto product = productService.create(new CreateProductRequest(
+                company.getUid(), null, "Netted Widget", null,
+                ProductType.GOODS, true, true, pcsUid, null, VatStatus.STANDARD,
+                null, null, null, null, null, null, null, null, null));
+        productService.setPrice(product.uid(),
+                new SetProductPriceRequest(priceListUid, new MoneyDto("1000", "TZS")));
+        receiveStock(product, new BigDecimal("50"), new BigDecimal("500"));
+        setCashierCtx();
+        SalesInvoiceDto sale = saleService.processSale(null, cashSaleRequest(product.id(),
+                new BigDecimal("3")));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.SALE_FINALISED, sale.uid()));
+        String lineUid = invoiceService.listLines(sale.uid()).get(0).uid();
+
+        setRootCtx();
+        PosSaleReturnDto ret = returnService.returnItems(sale.uid(), null, request(lineUid, "1", null));
+        dispatcher.dispatchOne(pendingEvent(DomainEventType.POS_SALE_RETURNED, ret.uid()));
+
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Dar_es_Salaam"));
+        Long co = company.getId();
+
+        // ---- same day: 3 sold - 1 returned = 2; cost 3x500 - 1x500 = 1000 --------------------
+        SalesReportRowDto reg = salesRegister.report(co, today, today, null, null, null, null)
+                .rows().stream().filter(r -> "Netted Widget".equals(r.productName()))
+                .findFirst().orElseThrow();
+        assertThat(reg.qtySold()).isEqualByComparingTo("2");
+        assertThat(reg.vat()).isEqualByComparingTo("360");
+        assertThat(reg.amount()).as("gross 3540 - 1180").isEqualByComparingTo("2360");
+        assertThat(reg.margin()).as("net 2000 - cost 1000").isEqualByComparingTo("1000");
+
+        var prof = profitability.report(co, today, today, null);
+        var profRow = prof.rows().stream().filter(r -> "Netted Widget".equals(r.productName()))
+                .findFirst().orElseThrow();
+        assertThat(profRow.qtySold()).isEqualByComparingTo("2");
+        assertThat(profRow.grossSales()).isEqualByComparingTo("2360");
+        assertThat(profRow.vatAmount()).isEqualByComparingTo("360");
+        assertThat(profRow.netAmount()).isEqualByComparingTo("2000");
+        assertThat(profRow.costOfSales()).isEqualByComparingTo("1000");
+        assertThat(profRow.profit()).isEqualByComparingTo("1000");
+        assertThat(prof.totals().netAmount()).isEqualByComparingTo("2000");
+        assertThat(prof.totals().profit()).isEqualByComparingTo("1000");
+
+        for (SalesSummaryGroupBy by : SalesSummaryGroupBy.values()) {
+            var sum = salesSummary.report(co, today, today, by, null);
+            assertThat(sum.totals().grossAmount()).as(by + " gross").isEqualByComparingTo("2360");
+            assertThat(sum.totals().qty()).as(by + " qty").isEqualByComparingTo("2");
+            assertThat(sum.totals().netAmount()).as(by + " net").isEqualByComparingTo("2000");
+            assertThat(sum.totals().costOfSales()).as(by + " cost").isEqualByComparingTo("1000");
+            assertThat(sum.totals().margin()).as(by + " margin").isEqualByComparingTo("1000");
+            assertThat(sum.totals().invoiceCount()).as(by + " invoices: a return is not a sale")
+                    .isEqualTo(1);
+        }
+
+        // ---- the sale was in an earlier window: the return is a negative on ITS day ------------
+        jdbc.update("UPDATE sales_invoices SET finalised_at = finalised_at - INTERVAL '3 days'"
+                + " WHERE uid = ?", sale.uid());
+        SalesReportRowDto earlier = salesRegister.report(co, today.minusDays(4), today.minusDays(2),
+                null, null, null, null).rows().stream()
+                .filter(r -> "Netted Widget".equals(r.productName())).findFirst().orElseThrow();
+        assertThat(earlier.qtySold()).as("the sale's own day still shows all 3").isEqualByComparingTo("3");
+        assertThat(earlier.amount()).isEqualByComparingTo("3540");
+        assertThat(earlier.margin()).isEqualByComparingTo("1500");
+
+        SalesReportRowDto returnDay = salesRegister.report(co, today, today, null, null, null, null)
+                .rows().stream().filter(r -> "Netted Widget".equals(r.productName()))
+                .findFirst().orElseThrow();
+        assertThat(returnDay.qtySold()).as("a product only returned today shows negative")
+                .isEqualByComparingTo("-1");
+        assertThat(returnDay.amount()).isEqualByComparingTo("-1180");
+        assertThat(returnDay.margin()).as("net -1000 less cost -500").isEqualByComparingTo("-500");
+        var daily = salesSummary.report(co, today, today, SalesSummaryGroupBy.DAY, null);
+        assertThat(daily.rows()).singleElement().satisfies(r -> {
+            assertThat(r.groupKey()).isEqualTo(today.toString());
+            assertThat(r.grossAmount()).isEqualByComparingTo("-1180");
+            assertThat(r.costOfSales()).isEqualByComparingTo("-500");
+            assertThat(r.invoiceCount()).isZero();
+        });
+        assertThat(profitability.report(co, today, today, null).totals().profit())
+                .isEqualByComparingTo("-500");
     }
 
     // ------------------------------------------------------------------------- helpers

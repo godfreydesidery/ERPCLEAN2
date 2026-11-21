@@ -48,6 +48,24 @@ import org.springframework.transaction.annotation.Transactional;
  * till session's cashier, else whoever finalised the receipt. Money is the receipt's gross in the
  * company's base currency ({@link BaseCurrencySql}); a voided receipt is listed but never summed.
  * Scalar cross-module reads by native SQL, the same pattern as {@link SalesReportQuery}.
+ *
+ * <p><b>POS item returns (ADR-0072).</b> A returned item leaves its receipt FINALISED, so the reports
+ * net returns, on one of two bases:
+ * <ul>
+ *   <li><b>Bill grain</b> (waiter sales, bills, bills summary): a bill is shown <em>net of every
+ *       return made against it</em>, whenever the return was made - the bill's amount is its gross
+ *       less what was given back, and the bills list carries the returned part in
+ *       {@code returned}. The bill count does not change (a returned bill was still a bill). The
+ *       summary's CASH column falls by the same refunds (they are always paid in cash), so the
+ *       tenders still add up to the amount. With an item or department filter the bill keeps its
+ *       whole-bill meaning: the whole bill, net of all its returns.</li>
+ *   <li><b>Line grain</b> (waiter items, the dashboard's waiters): the returned lines come off by
+ *       the <em>date of the return</em>, quantity and amount, attributed to the waiter of the
+ *       returned bill, narrowed by the same item and department filter as the sold lines. This is
+ *       the basis of the GL and of the dashboard's sales, so the dashboard's waiters add up to its
+ *       sales.</li>
+ * </ul>
+ * The two differ only when a return is made in a different report window from its sale.
  */
 @Component
 @Transactional(readOnly = true)
@@ -105,8 +123,11 @@ public class RestaurantReportQuery {
                                              boolean lineAmounts) {
         Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id", items);
         boolean lines = lineAmounts && w.items.active();
-        String amount = lines ? "m.gross"
-                : BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate", w.baseScale);
+        String receiptGross = BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate",
+                w.baseScale);
+        // Bill grain is net of the bill's returns here; line grain is netted by return date below.
+        String amount = lines ? "m.gross" : lineAmounts ? receiptGross
+                : "(" + receiptGross + " - " + billReturned(w.baseScale) + ")";
         String matched = lines ? w.items.matchedGrossJoin(w.baseScale) : "";
         List<Object> params = new ArrayList<>();
         if (lines) {
@@ -137,6 +158,9 @@ public class RestaurantReportQuery {
                 (rs, i) -> waiterRow(rs.getString("waiter_uid"), rs.getString("waiter_name"),
                         rs.getLong("bills"), rs.getLong("guests"), rs.getBigDecimal("amount")),
                 params.toArray());
+        if (lineAmounts) {
+            rows = netOfReturnsByDate(rows, w, companyId);
+        }
 
         long bills = 0;
         long guests = 0;
@@ -149,6 +173,65 @@ public class RestaurantReportQuery {
         return new WaiterSalesReportDto(w.header.dto(), fromDate.toString(), toDate.toString(),
                 w.waiterName, w.header.baseCurrency, rows,
                 waiterRow(null, "TOTAL", bills, guests, total), Instant.now().toString());
+    }
+
+    /**
+     * What POS item returns gave back against receipt {@code i}, in base currency, whenever they were
+     * made - the scalar behind the bill-grain "net of returns" amount (ADR-0072). Needs the
+     * receipt aliased {@code i}; 0 for a bill with no return.
+     */
+    static String billReturned(int baseScale) {
+        return "COALESCE((SELECT SUM("
+                + BaseCurrencySql.grossToBase("br.net_amount", "br.vat_amount", "i.fx_rate",
+                        baseScale)
+                + ") FROM pos_sale_returns br WHERE br.sales_invoice_id = i.id"
+                + " AND br.company_id = i.company_id), 0)";
+    }
+
+    /**
+     * Line grain (ADR-0072): takes the lines returned in the window - by return date, attributed to
+     * the waiter of the returned bill, narrowed by the item and department filter - off each
+     * waiter's amount. A waiter whose only activity was a return shows a negative row with no bills.
+     */
+    private List<WaiterSalesRowDto> netOfReturnsByDate(List<WaiterSalesRowDto> rows, Window w,
+                                                       Long companyId) {
+        List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
+        params.addAll(w.params);
+        params.addAll(w.items.params());
+        Map<String, BigDecimal> returned = new LinkedHashMap<>();
+        Map<String, String> names = new HashMap<>();
+        jdbc.query("SELECT u.uid AS waiter_uid, u.display_name AS waiter_name, SUM("
+                + PosReturnSql.gross(w.baseScale) + ") AS amount "
+                + PosReturnSql.RETURNED_FROM
+                + " JOIN restaurant_orders o ON o.sales_invoice_id = i.id"
+                + " AND o.company_id = rt.company_id"
+                + " JOIN app_users u ON u.id = COALESCE(o.served_by, o.opened_by)"
+                + " LEFT JOIN products p ON p.id = l.product_id"
+                + " WHERE rt.company_id = ? AND o.status = 'PAID'"
+                + " AND rt.created_at >= ? AND rt.created_at < ? "
+                + w.filterSql + w.items.lineSql("l", "p")
+                + " GROUP BY u.uid, u.display_name",
+                rs -> {
+                    returned.put(rs.getString("waiter_uid"), rs.getBigDecimal("amount"));
+                    names.put(rs.getString("waiter_uid"), rs.getString("waiter_name"));
+                },
+                params.toArray());
+        if (returned.isEmpty()) {
+            return rows;
+        }
+        List<WaiterSalesRowDto> out = new ArrayList<>();
+        for (WaiterSalesRowDto r : rows) {
+            BigDecimal back = returned.remove(r.waiterUid());
+            out.add(back == null ? r : waiterRow(r.waiterUid(), r.waiterName(), r.bills(),
+                    r.guests(), r.amount().subtract(back)));
+        }
+        returned.forEach((uid, back) -> out.add(
+                waiterRow(uid, names.get(uid), 0, 0, back.negate())));
+        out.sort((a, b) -> {
+            int c = b.amount().compareTo(a.amount());
+            return c != 0 ? c : a.waiterName().compareToIgnoreCase(b.waiterName());
+        });
+        return out;
     }
 
     private static WaiterSalesRowDto waiterRow(String uid, String name, long bills, long guests,
@@ -169,7 +252,10 @@ public class RestaurantReportQuery {
     public RestaurantBillsReportDto bills(Long companyId, LocalDate fromDate, LocalDate toDate,
                                           String waiterUid, String branchUid, ItemFilter items) {
         Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, "o.branch_id", items);
-        String amount = BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate", w.baseScale);
+        // ADR-0072: the bill is shown net of its POS item returns; the returned part is its own column.
+        String returned = billReturned(w.baseScale);
+        String amount = "(" + BaseCurrencySql.toBase("i.gross_total_amount", "i.fx_rate",
+                w.baseScale) + " - " + returned + ")";
         List<Object> params = new ArrayList<>(List.of(companyId, w.from, w.to));
         params.addAll(w.params);
         ZoneId zone = w.zone;
@@ -182,6 +268,8 @@ public class RestaurantReportQuery {
                        o.opened_at, o.paid_at,
                        """ + amount + """
                  AS amount,
+                       """ + returned + """
+                 AS returned,
                        (SELECT string_agg(DISTINCT p.tender_type, ', ' ORDER BY p.tender_type)
                           FROM sales_invoice_payments p WHERE p.invoice_id = i.id) AS tenders
                 FROM restaurant_orders o
@@ -204,7 +292,8 @@ public class RestaurantReportQuery {
                         rs.getString("cashier_name"), rs.getString("invoice_number"),
                         rs.getString("invoice_status"), intOrNull(rs, "guest_count"),
                         when(rs, "opened_at", zone), when(rs, "paid_at", zone),
-                        rs.getBigDecimal("amount"), rs.getString("tenders")),
+                        rs.getBigDecimal("amount"), rs.getString("tenders"),
+                        rs.getBigDecimal("returned")),
                 params.toArray());
 
         long count = 0;
@@ -307,8 +396,10 @@ public class RestaurantReportQuery {
         params.addAll(w.params);
         List<Object> lineParams = new ArrayList<>(params);
         lineParams.addAll(w.items.params());
-        List<WaiterItemsReportDto.Row> lines = jdbc.query("""
+        Map<String, WaiterItemsReportDto.Row> byKey = new LinkedHashMap<>();
+        jdbc.query("""
                 SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,
+                       l.product_id AS product_id, l.unit_id AS unit_id,
                        COALESCE(p.code, MAX(l.product_code)) AS code,
                        COALESCE(p.name, MAX(l.product_name)) AS name,
                        MAX(l.unit_name) AS unit,
@@ -329,11 +420,57 @@ public class RestaurantReportQuery {
                 GROUP BY u.uid, u.display_name, l.product_id, l.unit_id, p.code, p.name
                 ORDER BY amount DESC, name
                 """,
-                (rs, i) -> new WaiterItemsReportDto.Row(rs.getString("waiter_uid"),
-                        rs.getString("waiter_name"), rs.getString("code"), rs.getString("name"),
-                        rs.getString("unit"), rs.getBigDecimal("quantity"),
-                        rs.getBigDecimal("amount")),
+                rs -> {
+                    byKey.put(waiterItemKey(rs.getString("waiter_uid"), rs.getObject("product_id"),
+                                    rs.getObject("unit_id")),
+                            new WaiterItemsReportDto.Row(rs.getString("waiter_uid"),
+                                    rs.getString("waiter_name"), rs.getString("code"),
+                                    rs.getString("name"), rs.getString("unit"),
+                                    rs.getBigDecimal("quantity"), rs.getBigDecimal("amount")));
+                },
                 lineParams.toArray());
+
+        // ADR-0072: the lines returned in the window come off by return date, per waiter, item and
+        // unit, under the same item and department filter; an item only returned shows negative.
+        List<Object> returnParams = new ArrayList<>(List.of(companyId, w.from, w.to));
+        returnParams.addAll(w.params);
+        returnParams.addAll(w.items.params());
+        jdbc.query("SELECT u.uid AS waiter_uid, u.display_name AS waiter_name,"
+                + " l.product_id AS product_id, l.unit_id AS unit_id,"
+                + " COALESCE(p.code, MAX(l.product_code)) AS code,"
+                + " COALESCE(p.name, MAX(l.product_name)) AS name,"
+                + " MAX(l.unit_name) AS unit, SUM(rl.qty_returned) AS quantity,"
+                + " COALESCE(SUM(" + PosReturnSql.gross(w.baseScale) + "), 0) AS amount "
+                + PosReturnSql.RETURNED_FROM
+                + " JOIN restaurant_orders o ON o.sales_invoice_id = i.id"
+                + " AND o.company_id = rt.company_id"
+                + " JOIN app_users u ON u.id = COALESCE(o.served_by, o.opened_by)"
+                + " LEFT JOIN products p ON p.id = l.product_id"
+                + " WHERE rt.company_id = ? AND o.status = 'PAID'"
+                + " AND rt.created_at >= ? AND rt.created_at < ? "
+                + w.filterSql + w.items.lineSql("l", "p")
+                + " GROUP BY u.uid, u.display_name, l.product_id, l.unit_id, p.code, p.name",
+                rs -> {
+                    String key = waiterItemKey(rs.getString("waiter_uid"),
+                            rs.getObject("product_id"), rs.getObject("unit_id"));
+                    WaiterItemsReportDto.Row have = byKey.get(key);
+                    BigDecimal qty = rs.getBigDecimal("quantity");
+                    BigDecimal amount = rs.getBigDecimal("amount");
+                    byKey.put(key, have == null
+                            ? new WaiterItemsReportDto.Row(rs.getString("waiter_uid"),
+                                    rs.getString("waiter_name"), rs.getString("code"),
+                                    rs.getString("name"), rs.getString("unit"), qty.negate(),
+                                    amount.negate())
+                            : new WaiterItemsReportDto.Row(have.waiterUid(), have.waiterName(),
+                                    have.code(), have.name(), have.unit(),
+                                    have.quantity().subtract(qty), have.amount().subtract(amount)));
+                },
+                returnParams.toArray());
+        List<WaiterItemsReportDto.Row> lines = new ArrayList<>(byKey.values());
+        lines.sort((a, b) -> {
+            int c = b.amount().compareTo(a.amount());
+            return c != 0 ? c : String.valueOf(a.name()).compareToIgnoreCase(String.valueOf(b.name()));
+        });
 
         // Waiters biggest first, by the same lines; bills counted from the orders.
         Map<String, Long> bills = new HashMap<>();
@@ -383,6 +520,10 @@ public class RestaurantReportQuery {
                 Instant.now().toString());
     }
 
+    private static String waiterItemKey(String waiterUid, Object productId, Object unitId) {
+        return waiterUid + '|' + productId + '|' + unitId;
+    }
+
     // ---------------------------------------------------------------- bills (summary)
 
     /** Bills paid per waiter, the amount split by how it was paid. Voided receipts left out. */
@@ -427,6 +568,34 @@ public class RestaurantReportQuery {
                     seen.add(tender);
                     byWaiter.computeIfAbsent(rs.getString("waiter_uid"),
                             k -> new HashMap<>()).put(tender, rs.getBigDecimal("amount"));
+                },
+                params.toArray());
+
+        // ADR-0072: item returns are refunded in CASH, so they come off the waiter's CASH column -
+        // the tenders then still add up to the (net-of-returns) amount. Same bills, same basis as
+        // the amount: every return against a bill in the window, whenever it was made.
+        jdbc.query("""
+                SELECT u.uid AS waiter_uid,
+                       COALESCE(SUM(""" + BaseCurrencySql.grossToBase("br.net_amount",
+                        "br.vat_amount", "i.fx_rate", w.baseScale) + """
+                ), 0) AS amount
+                FROM restaurant_orders o
+                JOIN sales_invoices i       ON i.id = o.sales_invoice_id
+                JOIN pos_sale_returns br    ON br.sales_invoice_id = i.id
+                                           AND br.company_id = i.company_id
+                JOIN app_users u            ON u.id = COALESCE(o.served_by, o.opened_by)
+                WHERE o.company_id = ?
+                  AND o.status = 'PAID'
+                  AND i.status = 'FINALISED'
+                  AND o.paid_at >= ? AND o.paid_at < ?
+                """ + w.filterSql + """
+
+                GROUP BY u.uid
+                """,
+                rs -> {
+                    seen.add("CASH");
+                    byWaiter.computeIfAbsent(rs.getString("waiter_uid"), k -> new HashMap<>())
+                            .merge("CASH", rs.getBigDecimal("amount").negate(), BigDecimal::add);
                 },
                 params.toArray());
 
