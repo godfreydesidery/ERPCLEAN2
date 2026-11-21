@@ -9,6 +9,8 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ReportFilterOptionsService } from '../reporting/report-filter-options.service';
+import { RestaurantItemFilterOptionsService } from './restaurant-item-filter-options.service';
+import { stubItemFilterOptions } from './restaurant-reports.testing';
 import { DashboardKpisDto, RestaurantDashboardDto } from './models/restaurant-report.model';
 import { RestaurantDashboardComponent } from './restaurant-dashboard.component';
 import { RestaurantReportService } from './restaurant-report.service';
@@ -82,7 +84,11 @@ export function dashboardBed(perms: string[], svc: object): void {
     providers: [
       provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
       { provide: RestaurantReportService, useValue: svc },
-      { provide: ReportFilterOptionsService, useValue: { branchOptions: () => of([]) } },
+      {
+        provide: ReportFilterOptionsService,
+        useValue: { company: () => of(null), branchOptions: () => of([]) },
+      },
+      { provide: RestaurantItemFilterOptionsService, useValue: stubItemFilterOptions() },
       {
         provide: SessionStore,
         useValue: {
