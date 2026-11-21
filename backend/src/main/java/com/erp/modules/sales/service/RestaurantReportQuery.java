@@ -113,9 +113,9 @@ public class RestaurantReportQuery {
      * line-level sales. Without a filter it is exactly {@link #waiterSales}.
      */
     public WaiterSalesReportDto waiterLineSales(Long companyId, LocalDate fromDate,
-                                                LocalDate toDate, String branchUid,
-                                                ItemFilter items) {
-        return waiterSales(companyId, fromDate, toDate, null, branchUid, items, true);
+                                                LocalDate toDate, String waiterUid,
+                                                String branchUid, ItemFilter items) {
+        return waiterSales(companyId, fromDate, toDate, waiterUid, branchUid, items, true);
     }
 
     private WaiterSalesReportDto waiterSales(Long companyId, LocalDate fromDate, LocalDate toDate,
@@ -706,6 +706,15 @@ public class RestaurantReportQuery {
         return filter(RequestContext.get(), companyId, null, branchUid, branchColumn);
     }
 
+    /**
+     * The waiter and branch filters on {@code branchColumn}, for queries outside this class; the
+     * waiter test follows the table the column belongs to (see {@link #waiterSql}).
+     */
+    public Filter waiterBranchFilter(Long companyId, String waiterUid, String branchUid,
+                                     String branchColumn) {
+        return filter(RequestContext.get(), companyId, waiterUid, branchUid, branchColumn);
+    }
+
     // ---------------------------------------------------------------- shared
 
     record Header(String name, String legalName, String taxId, String vrn,
@@ -928,19 +937,64 @@ public class RestaurantReportQuery {
         }
         String waiterName = null;
         if (waiterUid != null && !waiterUid.isBlank()) {
-            // Any user of this company's orders; a uid that opened none simply matches nothing.
-            List<Object[]> found = jdbc.query(
-                    "SELECT id, display_name FROM app_users WHERE uid = ?",
-                    (rs, i) -> new Object[] {rs.getLong("id"), rs.getString("display_name")},
-                    waiterUid.trim());
-            if (found.isEmpty()) {
-                throw NotFoundException.of("Waiter", waiterUid);
-            }
-            sql.append(" AND COALESCE(o.served_by, o.opened_by) = ?");
-            params.add(found.get(0)[0]);
-            waiterName = (String) found.get(0)[1];
+            Object[] waiter = waiter(companyId, waiterUid);
+            sql.append(waiterSql(branchColumn));
+            params.add(waiter[0]);
+            waiterName = (String) waiter[1];
         }
         return new Filter(sql.toString(), params, waiterName, branchName);
+    }
+
+    /**
+     * {@code {id, display name}} of a waiter of this company: a user assigned to it or to one of
+     * its branches, or one who has held one of its orders (so a waiter who has left still reports).
+     * Another company's user is "not found", like an unknown uid.
+     */
+    private Object[] waiter(Long companyId, String waiterUid) {
+        List<Object[]> found = jdbc.query("""
+                SELECT u.id, u.display_name FROM app_users u
+                WHERE u.uid = ?
+                  AND (EXISTS (SELECT 1 FROM user_company uc
+                                WHERE uc.user_id = u.id AND uc.company_id = ?)
+                    OR EXISTS (SELECT 1 FROM user_branch ub JOIN branches b ON b.id = ub.branch_id
+                                WHERE ub.user_id = u.id AND b.company_id = ?)
+                    OR EXISTS (SELECT 1 FROM restaurant_orders ro
+                                WHERE ro.company_id = ?
+                                  AND (ro.served_by = u.id OR ro.opened_by = u.id)))
+                """,
+                (rs, i) -> new Object[] {rs.getLong("id"), rs.getString("display_name")},
+                waiterUid.trim(), companyId, companyId, companyId);
+        if (found.isEmpty()) {
+            throw NotFoundException.of("Waiter", waiterUid);
+        }
+        return found.get(0);
+    }
+
+    /**
+     * The waiter test for the table {@code branchColumn} belongs to — the waiter being whoever
+     * holds the restaurant order: an order ({@code o}) directly; a receipt ({@code i}) through the
+     * order it paid; a POS payout ({@code po}) through the receipt it refunded. A receipt or payout
+     * with no restaurant order (a counter sale) has no waiter, so it drops out.
+     */
+    static String waiterSql(String branchColumn) {
+        return switch (branchColumn) {
+            case "i.branch_id" -> " AND EXISTS (SELECT 1 FROM restaurant_orders wo"
+                    + " WHERE wo.sales_invoice_id = i.id"
+                    + " AND COALESCE(wo.served_by, wo.opened_by) = ?)";
+            case "po.branch_id" -> " AND EXISTS (SELECT 1 FROM sales_invoices wi"
+                    + " JOIN restaurant_orders wo ON wo.sales_invoice_id = wi.id"
+                    + " WHERE wi.uid = po.source_invoice_uid AND wi.company_id = po.company_id"
+                    + " AND COALESCE(wo.served_by, wo.opened_by) = ?)";
+            default -> " AND COALESCE(o.served_by, o.opened_by) = ?";
+        };
+    }
+
+    /** "Waiter: name" for a report header; none when no waiter is chosen. */
+    public List<String> waiterLines(Long companyId, String waiterUid) {
+        if (waiterUid == null || waiterUid.isBlank()) {
+            return List.of();
+        }
+        return List.of("Waiter: " + waiter(companyId, waiterUid)[1]);
     }
 
     Header loadHeader(Long companyId) {

@@ -68,6 +68,7 @@ export const DASHBOARD_PERMS = ['SALES.INVOICE.VIEW', 'REPORT.EXPORT'];
 export interface DashboardServiceStub {
   dashboard: (...a: unknown[]) => unknown;
   exportFlashReport: (...a: unknown[]) => unknown;
+  waiters: (...a: unknown[]) => unknown;
 }
 
 /** Plain functions: this file is compiled with the app, so no test-runner globals here. */
@@ -75,6 +76,7 @@ export function stubDashboardService(): DashboardServiceStub {
   return {
     dashboard: () => of(DASHBOARD),
     exportFlashReport: () => of(new Blob()),
+    waiters: () => of([{ uid: 'W1', name: 'Baraka Juma', username: 'baraka' }]),
   };
 }
 

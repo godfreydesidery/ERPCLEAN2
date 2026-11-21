@@ -159,6 +159,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Autowired private RestaurantKitchenService kitchenDisplay;
     @Autowired private RestaurantReportQuery   reports;
     @Autowired private RestaurantInsightsQuery insights;
+    @Autowired private PosSaleService          posSales;
     @Autowired private JdbcTemplate            jdbc;
     @Autowired private PosSaleReturnService    posReturns;
 
@@ -1299,7 +1300,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Test
     void anItemReturnOnAPaidBill_isNettedByTheRestaurantReportsAndInsights() {
         setRootCtx();
-        String juma = waiter("resto_juma3", "Juma Waiter");
+        String juma = waiter("resto_juma4", "Juma Waiter");
         setCashierCtx();
         RestaurantOrderDto served = orders.open(new CreateRestaurantOrderRequest(
                 null, table1.uid(), (short) 3, null, juma));
@@ -1380,6 +1381,176 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         assertThat(items.totalAmount()).isEqualByComparingTo(net);
         assertThat(items.rows().stream().filter(r -> r.name().equals(latte.name())).findFirst().orElseThrow()
                 .quantity()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void waiterFilter_onDashboardHoursAndPayments_followsTheWaiterHoldingTheOrder() {
+        setRootCtx();
+        String juma = waiter("resto_juma3", "Juma Waiter");
+        String asha = users.findById(cashierId).orElseThrow().getUid();
+
+        // Juma: a paid table of two (tacos). Asha: a paid latte. A counter sale (cake), no order.
+        setCashierCtx();
+        RestaurantOrderDto jumaPaid = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 2, null, juma));
+        orders.addLine(jumaPaid.uid(), item(tacos));
+        RestaurantBillDto jumaBill = orders.bill(jumaPaid.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos, latte, cake);
+        setCashierCtx();
+        orders.pay(jumaPaid.uid(), "resto-waiter-pay-1", payment(jumaBill.grossTotal()));
+        RestaurantOrderDto ashaPaid = openWith(latte);
+        RestaurantBillDto ashaBill = orders.bill(ashaPaid.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        orders.pay(ashaPaid.uid(), "resto-waiter-pay-2", payment(ashaBill.grossTotal()));
+        BigDecimal counter = posSales.processSale(null, new PosSaleRequest(sessionUid, customerId, null, "TZS",
+                List.of(new PosSaleRequest.LineItem(cake.id(), pcsId, BigDecimal.ONE, null, null)),
+                null, null)).grossTotalAmount();
+
+        // Juma also cancels a table, and has one open with a latte voided of two.
+        RestaurantOrderDto cancelled = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), null, null, juma));
+        orders.addLine(cancelled.uid(), item(cake));
+        orders.cancel(cancelled.uid(), null);
+        RestaurantOrderDto open = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), null, null, juma));
+        orders.addLine(open.uid(), new AddRestaurantOrderLineRequest(latte.id(), pcsId, new BigDecimal("2"), null));
+        orders.send(open.uid());
+        setRootCtx();
+        orders.voidLine(open.uid(), orders.get(open.uid()).lines().get(0).uid(),
+                new VoidRestaurantOrderLineRequest("Spilt", BigDecimal.ONE, null));
+
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        Long co = company.getId();
+        var none = RestaurantReportQuery.ItemFilter.NONE;
+        BigDecimal all = jumaBill.grossTotal().add(ashaBill.grossTotal()).add(counter);
+
+        var everyone = insights.dashboard(co, today, today, null, null, none);
+        assertThat(everyone.current().sales()).isEqualByComparingTo(all);
+        assertThat(everyone.waiters()).as("the counter sale has its own row")
+                .anySatisfy(w -> assertThat(w.waiterUid()).isNull());
+
+        // One waiter: their receipts, orders and items only; the counter sale has no waiter.
+        var d = insights.dashboard(co, today, today, juma, null, none);
+        assertThat(d.current().sales()).isEqualByComparingTo(jumaBill.grossTotal());
+        assertThat(d.current().receipts()).isEqualTo(1);
+        assertThat(d.current().orders()).isEqualTo(1);
+        assertThat(d.current().guests()).isEqualTo(2);
+        assertThat(d.current().cancelledOrders()).isEqualTo(1);
+        assertThat(d.current().voidedItems()).isEqualByComparingTo("1");
+        assertThat(d.current().refunds()).isEqualByComparingTo("0");
+        assertThat(d.live().openOrders()).isEqualTo(1);
+        assertThat(d.waiters()).as("no counter row for one waiter").singleElement()
+                .satisfies(w -> assertThat(w.waiterName()).isEqualTo("Juma Waiter"));
+        assertThat(d.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(jumaBill.grossTotal());
+        assertThat(d.departments()).extracting(RestaurantDashboardDto.Department::name)
+                .containsExactly("Food");
+
+        var a = insights.dashboard(co, today, today, asha, null, none);
+        assertThat(a.current().sales()).isEqualByComparingTo(ashaBill.grossTotal());
+        assertThat(a.current().cancelledOrders()).isZero();
+        assertThat(a.live().openOrders()).isZero();
+
+        // With the department too (AND): Juma sold no drinks, but voided one and has one open.
+        var jd = insights.dashboard(co, today, today, juma, null,
+                new RestaurantReportQuery.ItemFilter(null, "Drinks"));
+        assertThat(jd.current().sales()).isEqualByComparingTo("0");
+        assertThat(jd.current().receipts()).isZero();
+        assertThat(jd.current().voidedItems()).isEqualByComparingTo("1");
+        assertThat(jd.live().openOrders()).isEqualTo(1);
+
+        var hours = insights.daypart(co, today, today, juma, null, none);
+        assertThat(hours.totals().sales()).isEqualByComparingTo(jumaBill.grossTotal());
+        assertThat(hours.totals().receipts()).isEqualTo(1);
+        assertThat(insights.daypart(co, today, today, null, null, none).totals().receipts()).isEqualTo(3);
+
+        var pay = insights.payments(co, today, today, juma, null, none);
+        assertThat(pay.totalPaid()).isEqualByComparingTo(jumaBill.grossTotal());
+        assertThat(pay.completion().opened()).isEqualTo(3);
+        assertThat(pay.completion().paid()).isEqualTo(1);
+        assertThat(pay.completion().cancelled()).isEqualTo(1);
+        assertThat(pay.completion().pending()).isEqualTo(1);
+        assertThat(pay.cancelledOrders()).hasSize(1);
+        assertThat(pay.voidedItems()).hasSize(1);
+        assertThat(pay.voidedReceipts()).isEmpty();
+        assertThat(pay.refunds()).isEmpty();
+        assertThat(insights.payments(co, today, today, null, null, none).totalPaid())
+                .isEqualByComparingTo(all);
+
+        // Another company's user, or one with nothing to do with this one, is "not found".
+        AppUser outsider = new AppUser("resto_outsider", passwordEncoder.encode("0utS1der!Pass"), "Out Sider");
+        outsider.setOrganisationId(orgId);
+        String outsiderUid = users.save(outsider).getUid();
+        assertThatThrownBy(() -> insights.dashboard(co, today, today, outsiderUid, null, none))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class)
+                .hasMessage("Waiter not found.");
+        assertThat(reports.waiterLines(co, juma)).containsExactly("Waiter: Juma Waiter");
+    }
+
+    /** ADR-0072 x the waiter filter: a return nets only on the waiter holding the returned bill. */
+    @Test
+    void waiterFilter_netsAnItemReturnOnThatWaitersBill_andLeavesTheOthersAlone() {
+        setRootCtx();
+        String juma = waiter("resto_juma5", "Juma Waiter");
+        String asha = users.findById(cashierId).orElseThrow().getUid();
+        setCashierCtx();
+        RestaurantOrderDto jumaOrder = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 2, null, juma));
+        orders.addLine(jumaOrder.uid(), item(tacos));
+        orders.addLine(jumaOrder.uid(), item(latte));
+        RestaurantBillDto jumaBill = orders.bill(jumaOrder.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos, latte);
+        setCashierCtx();
+        orders.pay(jumaOrder.uid(), "resto-wret-pay-1", payment(jumaBill.grossTotal()));
+        RestaurantOrderDto ashaOrder = openWith(latte);
+        RestaurantBillDto ashaBill = orders.bill(ashaOrder.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        orders.pay(ashaOrder.uid(), "resto-wret-pay-2", payment(ashaBill.grossTotal()));
+
+        setRootCtx();
+        String invoiceUid = orders.get(jumaOrder.uid()).salesInvoiceUid();
+        String latteLine = posReturns.listForSale(invoiceUid).lines().stream()
+                .filter(l -> l.productName().equals(latte.name())).findFirst().orElseThrow().invoiceLineUid();
+        BigDecimal back = posReturns.returnItems(invoiceUid, null, new PosSaleReturnRequest("cold",
+                null, List.of(new PosSaleReturnRequest.LineDto(latteLine, BigDecimal.ONE)))).grossAmount();
+
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        Long co = company.getId();
+        var none = RestaurantReportQuery.ItemFilter.NONE;
+        BigDecimal jumaNet = jumaBill.grossTotal().subtract(back);
+
+        var j = insights.dashboard(co, today, today, juma, null, none);
+        assertThat(j.current().sales()).isEqualByComparingTo(jumaNet);
+        assertThat(j.current().receipts()).isEqualTo(1);
+        assertThat(j.days()).singleElement().satisfies(x -> assertThat(x.sales()).isEqualByComparingTo(jumaNet));
+        assertThat(j.departments().stream().map(RestaurantDashboardDto.Department::sales)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(jumaNet);
+        assertThat(j.waiters()).singleElement().satisfies(w -> assertThat(w.amount()).isEqualByComparingTo(jumaNet));
+        assertThat(j.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(jumaNet);
+        assertThat(j.current().refunds()).isEqualByComparingTo(back);
+        assertThat(insights.daypart(co, today, today, juma, null, none).totals().sales())
+                .isEqualByComparingTo(jumaNet);
+        var jp = insights.payments(co, today, today, juma, null, none);
+        assertThat(jp.totalPaid()).isEqualByComparingTo(jumaNet);
+        assertThat(jp.refunds()).hasSize(1);
+
+        // Asha's bill had no return: her figures are whole, and no refund shows for her.
+        var a = insights.dashboard(co, today, today, asha, null, none);
+        assertThat(a.current().sales()).isEqualByComparingTo(ashaBill.grossTotal());
+        assertThat(a.current().refunds()).isEqualByComparingTo("0");
+        assertThat(a.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(ashaBill.grossTotal());
+        assertThat(insights.daypart(co, today, today, asha, null, none).totals().sales())
+                .isEqualByComparingTo(ashaBill.grossTotal());
+        var ap = insights.payments(co, today, today, asha, null, none);
+        assertThat(ap.totalPaid()).isEqualByComparingTo(ashaBill.grossTotal());
+        assertThat(ap.refunds()).isEmpty();
+
+        // With the item filter as well: Juma's drinks are all returned.
+        assertThat(insights.dashboard(co, today, today, juma, null,
+                new RestaurantReportQuery.ItemFilter(null, "Drinks")).current().sales())
+                .isEqualByComparingTo("0");
+        // Waiter-scoped report rows agree.
+        assertThat(reports.waiterItems(co, today, today, juma, null).totalAmount()).isEqualByComparingTo(jumaNet);
     }
 
     private static BigDecimal deptSales(RestaurantDashboardDto d, String name) {

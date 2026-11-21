@@ -374,10 +374,11 @@ public class RestaurantReportController {
     public RestaurantDashboardDto dashboard(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String waiterUid,
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String productUid,
             @RequestParam(required = false) String department) {
-        return insights.dashboard(companyId(), fromDate, toDate, branchUid,
+        return insights.dashboard(companyId(), fromDate, toDate, waiterUid, branchUid,
                 new ItemFilter(productUid, department));
     }
 
@@ -387,6 +388,7 @@ public class RestaurantReportController {
     public ResponseEntity<byte[]> exportDashboard(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String waiterUid,
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String productUid,
             @RequestParam(required = false) String department,
@@ -394,10 +396,10 @@ public class RestaurantReportController {
         Long companyId = companyId();
         ItemFilter items = new ItemFilter(productUid, department);
         RestaurantDashboardDto d =
-                insights.dashboard(companyId, fromDate, toDate, branchUid, items);
+                insights.dashboard(companyId, fromDate, toDate, waiterUid, branchUid, items);
         List<String> header = header(d.company(), d.fromDate(), d.toDate(),
                 branchGuard.scopeHeaderLine(companyId, branchUid), null, d.currency(), false,
-                query.itemFilterLines(companyId, items));
+                filterLines(companyId, waiterUid, items));
         header.add("Compared with " + d.previousFromDate() + " to " + d.previousToDate());
         RestaurantDashboardDto.Kpis c = d.current();
         RestaurantDashboardDto.Kpis p = d.previous();
@@ -489,10 +491,11 @@ public class RestaurantReportController {
     public RestaurantDaypartDto daypart(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String waiterUid,
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String productUid,
             @RequestParam(required = false) String department) {
-        return insights.daypart(companyId(), fromDate, toDate, branchUid,
+        return insights.daypart(companyId(), fromDate, toDate, waiterUid, branchUid,
                 new ItemFilter(productUid, department));
     }
 
@@ -501,16 +504,18 @@ public class RestaurantReportController {
     public ResponseEntity<byte[]> exportDaypart(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String waiterUid,
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String productUid,
             @RequestParam(required = false) String department,
             @RequestParam(defaultValue = "PDF") ExportFormat format) {
         Long companyId = companyId();
         ItemFilter items = new ItemFilter(productUid, department);
-        RestaurantDaypartDto d = insights.daypart(companyId, fromDate, toDate, branchUid, items);
+        RestaurantDaypartDto d =
+                insights.daypart(companyId, fromDate, toDate, waiterUid, branchUid, items);
         List<String> header = header(d.company(), d.fromDate(), d.toDate(),
                 branchGuard.scopeHeaderLine(companyId, branchUid), null, d.currency(), false,
-                query.itemFilterLines(companyId, items));
+                filterLines(companyId, waiterUid, items));
         List<Column> columns = new ArrayList<>(List.of(new Column("Time", Align.LEFT),
                 new Column("Receipts", Align.RIGHT), new Column("Sales", Align.RIGHT),
                 new Column("Average per day", Align.RIGHT)));
@@ -559,10 +564,11 @@ public class RestaurantReportController {
     public RestaurantPaymentsReportDto payments(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String waiterUid,
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String productUid,
             @RequestParam(required = false) String department) {
-        return insights.payments(companyId(), fromDate, toDate, branchUid,
+        return insights.payments(companyId(), fromDate, toDate, waiterUid, branchUid,
                 new ItemFilter(productUid, department));
     }
 
@@ -571,6 +577,7 @@ public class RestaurantReportController {
     public ResponseEntity<byte[]> exportPayments(
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = ISO.DATE) LocalDate toDate,
+            @RequestParam(required = false) String waiterUid,
             @RequestParam(required = false) String branchUid,
             @RequestParam(required = false) String productUid,
             @RequestParam(required = false) String department,
@@ -578,10 +585,10 @@ public class RestaurantReportController {
         Long companyId = companyId();
         ItemFilter items = new ItemFilter(productUid, department);
         RestaurantPaymentsReportDto d =
-                insights.payments(companyId, fromDate, toDate, branchUid, items);
+                insights.payments(companyId, fromDate, toDate, waiterUid, branchUid, items);
         List<String> header = header(d.company(), d.fromDate(), d.toDate(),
                 branchGuard.scopeHeaderLine(companyId, branchUid), null, d.currency(), false,
-                query.itemFilterLines(companyId, items));
+                filterLines(companyId, waiterUid, items));
         List<List<String>> rows = new ArrayList<>();
         rows.add(List.of("PAYMENTS", "", "", "", "", "", "", ""));
         for (RestaurantPaymentsReportDto.Tender t : d.tenders()) {
@@ -636,6 +643,13 @@ public class RestaurantReportController {
     }
 
     // ---------------------------------------------------------------- shared
+
+    /** "Waiter: …" then the item and department lines, for the reports not per waiter. */
+    private List<String> filterLines(Long companyId, String waiterUid, ItemFilter items) {
+        List<String> lines = new ArrayList<>(query.waiterLines(companyId, waiterUid));
+        lines.addAll(query.itemFilterLines(companyId, items));
+        return lines;
+    }
 
     private static Long companyId() {
         return RequestContext.get().companyId();

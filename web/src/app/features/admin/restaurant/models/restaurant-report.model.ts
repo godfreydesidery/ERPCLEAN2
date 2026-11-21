@@ -357,6 +357,8 @@ export interface RestaurantDashboardFilter {
   fromDate: string;
   toDate: string;
   branchUid: string | null;
+  /** Optional waiter (whoever holds the order); counter sales, having none, drop out. */
+  waiterUid?: string | null;
   /** Optional item filter (a product uid): sales narrow to its lines. */
   productUid?: string | null;
   /** Optional department (product category); "(no department)" for items with none. */
