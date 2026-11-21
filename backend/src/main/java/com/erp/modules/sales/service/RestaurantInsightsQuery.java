@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +56,19 @@ import org.springframework.transaction.annotation.Transactional;
  * cancelled and open orders and the bills printed, payments by type, complimentary and refunds (by
  * the refunded receipt). So "Sales" filtered to Drinks is what the drinks sold for, and "Receipts"
  * how many receipts had drinks on them. The payments report applies them to its voided items only.
+ *
+ * <p><b>POS item returns (ADR-0072)</b> leave their receipt FINALISED, so every money figure that is
+ * built from receipt lines is netted by the lines returned, <em>dated by the return</em> (the date the
+ * GL and the till dashboard use), at the original receipt's rate, and narrowed by the same item and
+ * department filter as the sold lines: sales (KPI, spend per guest, days, hours, weekdays, the
+ * daypart's departments), discounts, and the department and item quantities and amounts (so the top
+ * items are re-ranked after the returns come off). Receipt, order and guest <em>counts</em> are not
+ * reduced - a returned bill was still a bill. Payments by type fall by the item returns' cash refunds
+ * (always paid in cash) in the window, as they do for a voided receipt, whose payments also leave the
+ * list; the refunds themselves stay listed apart - "Refunds" (KPI and the payments report's list)
+ * already includes the item returns, because each is a REFUND payout - so nothing is counted twice:
+ * sales and tenders are net, refunds are the cash that went out. The waiters are netted in
+ * {@link RestaurantReportQuery#waiterLineSales} on the same basis, so they still add up to the sales.
  *
  * <p>The optional waiter filter (2026-11-21): the waiter is whoever holds the restaurant order, as
  * in {@link RestaurantReportQuery}. Receipts count through the order they paid, refunds through
@@ -154,7 +168,9 @@ public class RestaurantInsightsQuery {
                   AND i.status IN ('FINALISED', 'VOID')
                   AND i.finalised_at >= ? AND i.finalised_at < ?
                 """ + w.filterSql(), args(lead(w), companyId, from, to, w.params()));
-        BigDecimal sales = (BigDecimal) receipts.get("sales");
+        // ADR-0072: the lines returned in the window come off, by return date.
+        BigDecimal sales = ((BigDecimal) receipts.get("sales"))
+                .subtract(returnedSum(w, companyId, from, to, PosReturnSql.gross(scale)));
         long receiptCount = ((Number) receipts.get("receipts")).longValue();
 
         Map<String, Object> orders = jdbc.queryForMap("""
@@ -171,6 +187,21 @@ public class RestaurantInsightsQuery {
                 """ + fo.sql() + items.invoiceExists("i.id"),
                 args(lead(w), companyId, from, to, plus(fo.params(), items)));
         long guests = ((Number) orders.get("guests")).longValue();
+        BigDecimal seatedReturned = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(""" + PosReturnSql.gross(scale) + """
+                ), 0)
+                """ + PosReturnSql.RETURNED_FROM + """
+                JOIN restaurant_orders o ON o.sales_invoice_id = i.id
+                                        AND o.company_id = rt.company_id
+                LEFT JOIN products p ON p.id = l.product_id
+                WHERE rt.company_id = ?
+                  AND o.status = 'PAID'
+                  AND o.guest_count > 0
+                  AND rt.created_at >= ? AND rt.created_at < ?
+                """ + fo.sql() + items.lineSql("l", "p"), BigDecimal.class,
+                args(companyId, from, to, plus(fo.params(), items)));
+        BigDecimal seatedSales = ((BigDecimal) orders.get("seated_sales"))
+                .subtract(seatedReturned == null ? BigDecimal.ZERO : seatedReturned);
 
         BigDecimal discounts = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(""" + BaseCurrencySql.lineDiscountToBase("i.fx_rate", scale)
@@ -184,6 +215,8 @@ public class RestaurantInsightsQuery {
                   AND i.finalised_at >= ? AND i.finalised_at < ?
                 """ + w.filterSql() + items.lineSql("l", "p"), BigDecimal.class,
                 args(companyId, from, to, plus(w.params(), items)));
+        discounts = discounts.subtract(
+                returnedSum(w, companyId, from, to, PosReturnSql.discount(scale)));
 
         BigDecimal complimentary = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(""" + BaseCurrencySql.toBase(
@@ -229,7 +262,7 @@ public class RestaurantInsightsQuery {
 
         return new Kpis(sales, receiptCount, divide(sales, receiptCount),
                 ((Number) orders.get("orders")).longValue(), guests,
-                divide((BigDecimal) orders.get("seated_sales"), guests), discounts, complimentary,
+                divide(seatedSales, guests), discounts, complimentary,
                 refunds, ((Number) receipts.get("voided")).longValue(),
                 cancelled == null ? 0 : cancelled, voidedItems);
     }
@@ -270,6 +303,17 @@ public class RestaurantInsightsQuery {
                             rs.getLong("receipts"), rs.getBigDecimal("sales")));
                 },
                 salesArgs(w, companyId));
+        // ADR-0072: returns come off the day they were made.
+        jdbc.query(returnedSql("to_char(rt.created_at AT TIME ZONE ?, 'YYYY-MM-DD') AS day, SUM("
+                        + PosReturnSql.gross(w.baseScale()) + ") AS amount", w, "GROUP BY 1"),
+                rs -> {
+                    String day = rs.getString("day");
+                    BigDecimal back = rs.getBigDecimal("amount");
+                    Day have = found.get(day);
+                    found.put(day, have == null ? new Day(day, 0, back.negate())
+                            : new Day(day, have.receipts(), have.sales().subtract(back)));
+                },
+                zoned(w, companyId));
         // Every day of the range, a quiet one as zero, so the chart's x-axis is honest.
         List<Day> out = new ArrayList<>();
         for (LocalDate d = fromDate; !d.isAfter(toDate); d = d.plusDays(1)) {
@@ -299,6 +343,18 @@ public class RestaurantInsightsQuery {
                             rs.getLong("receipts"), rs.getBigDecimal("sales")));
                 },
                 salesArgs(w, companyId));
+        // ADR-0072: returns come off the hour they were made.
+        jdbc.query(returnedSql("CAST(EXTRACT(HOUR FROM rt.created_at AT TIME ZONE ?) AS INT) AS hour,"
+                        + " SUM(" + PosReturnSql.gross(w.baseScale()) + ") AS amount", w,
+                        "GROUP BY 1"),
+                rs -> {
+                    int hour = rs.getInt("hour");
+                    BigDecimal back = rs.getBigDecimal("amount");
+                    Hour have = found.get(hour);
+                    found.put(hour, have == null ? new Hour(hour, 0, back.negate())
+                            : new Hour(hour, have.receipts(), have.sales().subtract(back)));
+                },
+                zoned(w, companyId));
         List<Hour> out = new ArrayList<>(24);
         for (int h = 0; h < 24; h++) {
             out.add(found.getOrDefault(h, new Hour(h, 0, BigDecimal.ZERO)));
@@ -328,6 +384,18 @@ public class RestaurantInsightsQuery {
                             new Object[] {rs.getLong("receipts"), rs.getBigDecimal("sales")});
                 },
                 salesArgs(w, companyId));
+        // ADR-0072: returns come off the weekday they were made.
+        jdbc.query(returnedSql("CAST(EXTRACT(ISODOW FROM rt.created_at AT TIME ZONE ?) AS INT) AS dow,"
+                        + " SUM(" + PosReturnSql.gross(w.baseScale()) + ") AS amount", w,
+                        "GROUP BY 1"),
+                rs -> {
+                    int dow = rs.getInt("dow");
+                    BigDecimal back = rs.getBigDecimal("amount");
+                    Object[] have = found.get(dow);
+                    found.put(dow, have == null ? new Object[] {0L, back.negate()}
+                            : new Object[] {have[0], ((BigDecimal) have[1]).subtract(back)});
+                },
+                zoned(w, companyId));
         int[] count = weekdayCounts(fromDate, toDate);
         List<Weekday> out = new ArrayList<>(7);
         for (DayOfWeek d : DayOfWeek.values()) {
@@ -375,22 +443,101 @@ public class RestaurantInsightsQuery {
                             k -> new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO});
                     acc[0] = acc[0].add(rs.getBigDecimal("quantity"));
                     acc[1] = acc[1].add(rs.getBigDecimal("sales"));
-                    if (items.size() < TOP_ITEMS) {
-                        items.add(new Item(rs.getString("code"), rs.getString("name"),
-                                rs.getString("unit"), rs.getBigDecimal("quantity"),
-                                rs.getBigDecimal("sales")));
-                    }
+                    // Every item is kept: the returns below can re-rank them, and the top ten is
+                    // cut only afterwards.
+                    items.add(new Item(rs.getString("code"), rs.getString("name"),
+                            rs.getString("unit"), rs.getBigDecimal("quantity"),
+                            rs.getBigDecimal("sales")));
                 },
                 args(companyId, w.from(), w.to(), plus(w.params(), w.items())));
+
+        // ADR-0072: the quantity and money of the lines returned in the window come off the item they
+        // belong to (same department, code, name and unit grouping as the sold lines above).
+        jdbc.query(returnedSql("COALESCE(NULLIF(TRIM(p.category), ''), '" + NO_DEPARTMENT
+                        + "') AS department, COALESCE(p.code, MAX(l.product_code)) AS code,"
+                        + " COALESCE(p.name, MAX(l.product_name)) AS name,"
+                        + " COALESCE(NULLIF(TRIM(u.symbol), ''), u.code) AS unit,"
+                        + " SUM(rl.qty_returned_base) AS quantity, SUM("
+                        + PosReturnSql.gross(w.baseScale()) + ") AS sales", w,
+                        "GROUP BY 1, rl.product_id, p.code, p.name, u.symbol, u.code")
+                        .replace(" WHERE rt.company_id", " LEFT JOIN units_of_measure u ON u.id = p.base_unit_id"
+                                + " WHERE rt.company_id"),
+                rs -> {
+                    String d = rs.getString("department");
+                    String key = d.toLowerCase(Locale.ROOT);
+                    label.putIfAbsent(key, d);
+                    BigDecimal qty = rs.getBigDecimal("quantity");
+                    BigDecimal back = rs.getBigDecimal("sales");
+                    BigDecimal[] acc = dept.computeIfAbsent(key,
+                            k -> new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO});
+                    acc[0] = acc[0].subtract(qty);
+                    acc[1] = acc[1].subtract(back);
+                    for (int n = 0; n < items.size(); n++) {
+                        Item have = items.get(n);
+                        if (Objects.equals(have.code(), rs.getString("code"))
+                                && Objects.equals(have.name(), rs.getString("name"))
+                                && Objects.equals(have.unit(), rs.getString("unit"))) {
+                            items.set(n, new Item(have.code(), have.name(), have.unit(),
+                                    have.quantity().subtract(qty), have.sales().subtract(back)));
+                            return;
+                        }
+                    }
+                    items.add(new Item(rs.getString("code"), rs.getString("name"),
+                            rs.getString("unit"), qty.negate(), back.negate()));
+                },
+                returnedArgs(w, companyId, w.from(), w.to()));
         for (Map.Entry<String, BigDecimal[]> e : dept.entrySet()) {
             departments.add(new Department(label.get(e.getKey()), e.getValue()[0],
                     e.getValue()[1]));
         }
         departments.sort((a, b) -> b.sales().compareTo(a.sales()));
-        topItems.addAll(items);
+        items.sort((a, b) -> {
+            int c = b.sales().compareTo(a.sales());
+            return c != 0 ? c : String.valueOf(a.name()).compareTo(String.valueOf(b.name()));
+        });
+        topItems.addAll(items.subList(0, Math.min(TOP_ITEMS, items.size())));
     }
 
     private List<RestaurantDashboardDto.Tender> tenders(Long companyId, Window w) {
+        List<RestaurantDashboardDto.Tender> taken = takings(companyId, w);
+        // ADR-0072: an item return is always refunded in CASH, so the window's refunds come off the
+        // CASH line - a voided receipt's payments leave the list the same way. The whole refund of
+        // each return counts (the receipt filter, branch and item, is applied to its receipt).
+        BigDecimal refunded = jdbc.queryForObject("""
+                SELECT COALESCE(SUM(""" + BaseCurrencySql.grossToBase("rt.net_amount",
+                        "rt.vat_amount", "i.fx_rate", w.baseScale()) + """
+                ), 0)
+                FROM pos_sale_returns rt
+                JOIN sales_invoices i ON i.id = rt.sales_invoice_id
+                WHERE rt.company_id = ?
+                  AND rt.created_at >= ? AND rt.created_at < ?
+                """ + w.filterSql(), BigDecimal.class,
+                args(companyId, w.from(), w.to(), w.params()));
+        if (refunded == null || refunded.signum() == 0) {
+            return taken;
+        }
+        List<RestaurantDashboardDto.Tender> out = new ArrayList<>();
+        boolean cashSeen = false;
+        for (RestaurantDashboardDto.Tender t : taken) {
+            if ("CASH".equals(t.tenderType())) {
+                cashSeen = true;
+                out.add(new RestaurantDashboardDto.Tender(t.tenderType(), t.payments(),
+                        t.amount().subtract(refunded)));
+            } else {
+                out.add(t);
+            }
+        }
+        if (!cashSeen) {
+            out.add(new RestaurantDashboardDto.Tender("CASH", 0, refunded.negate()));
+        }
+        out.sort((a, b) -> {
+            int c = b.amount().compareTo(a.amount());
+            return c != 0 ? c : a.tenderType().compareTo(b.tenderType());
+        });
+        return out;
+    }
+
+    private List<RestaurantDashboardDto.Tender> takings(Long companyId, Window w) {
         return jdbc.query("""
                 SELECT p.tender_type AS tender, COUNT(*) AS payments,
                        COALESCE(SUM(""" + paid(w) + """
@@ -489,6 +636,25 @@ public class RestaurantInsightsQuery {
                             .merge(key, s, BigDecimal::add);
                 },
                 withItems(twoZoneArgs(w, companyId), w.items()));
+        // ADR-0072: the lines returned in the window come off the hour, weekday and department of
+        // the return.
+        jdbc.query(returnedSql("CAST(EXTRACT(HOUR FROM rt.created_at AT TIME ZONE ?) AS INT) AS hour,"
+                        + " CAST(EXTRACT(ISODOW FROM rt.created_at AT TIME ZONE ?) AS INT) AS dow,"
+                        + " COALESCE(NULLIF(TRIM(p.category), ''), '" + NO_DEPARTMENT
+                        + "') AS department, SUM(" + PosReturnSql.gross(w.baseScale())
+                        + ") AS sales", w, "GROUP BY 1, 2, 3"),
+                rs -> {
+                    String d = rs.getString("department");
+                    String key = d.toLowerCase(Locale.ROOT);
+                    label.putIfAbsent(key, d);
+                    BigDecimal back = rs.getBigDecimal("sales").negate();
+                    deptTotal.merge(key, back, BigDecimal::add);
+                    byHour.computeIfAbsent(rs.getInt("hour"), k -> new HashMap<>())
+                            .merge(key, back, BigDecimal::add);
+                    byDay.computeIfAbsent(rs.getInt("dow"), k -> new HashMap<>())
+                            .merge(key, back, BigDecimal::add);
+                },
+                twoZoned(w, companyId));
         Map<Integer, Long> receiptsByHour = new HashMap<>();
         Map<Integer, Long> receiptsByDay = new HashMap<>();
         long receipts = 0;
@@ -728,6 +894,49 @@ public class RestaurantInsightsQuery {
             throw new IllegalArgumentException("Choose a range of one year or less.");
         }
         return w;
+    }
+
+    /**
+     * The lines returned by POS item returns in a window (ADR-0072), line grain: {@code select}
+     * over the returned lines ({@code rl}) with their return ({@code rt}), receipt ({@code i}),
+     * sold line ({@code l}) and product ({@code p}), narrowed by the window's branch and item
+     * filters. Bind {@link #returnedArgs}, after any zone parameters the select holds.
+     */
+    private static String returnedSql(String select, Window w, String tail) {
+        return "SELECT " + select + " " + PosReturnSql.RETURNED_FROM
+                + " LEFT JOIN products p ON p.id = l.product_id"
+                + " WHERE rt.company_id = ? AND rt.created_at >= ? AND rt.created_at < ? "
+                + w.filterSql() + w.items().lineSql("l", "p") + " " + tail;
+    }
+
+    private static Object[] returnedArgs(Window w, Long companyId, OffsetDateTime from,
+                                         OffsetDateTime to) {
+        return args(companyId, from, to, plus(w.params(), w.items()));
+    }
+
+    /** A scalar sum of {@code expr} over the lines returned in [from, to). */
+    private BigDecimal returnedSum(Window w, Long companyId, OffsetDateTime from,
+                                   OffsetDateTime to, String expr) {
+        BigDecimal v = jdbc.queryForObject(
+                returnedSql("COALESCE(SUM(" + expr + "), 0)", w, ""), BigDecimal.class,
+                returnedArgs(w, companyId, from, to));
+        return v == null ? BigDecimal.ZERO : v;
+    }
+
+    /** The zone, then the returned-lines arguments (one zone placeholder in the select). */
+    private static Object[] zoned(Window w, Long companyId) {
+        List<Object> a = new ArrayList<>();
+        a.add(w.zone().getId());
+        a.addAll(List.of(returnedArgs(w, companyId, w.from(), w.to())));
+        return a.toArray();
+    }
+
+    /** As {@link #zoned}, for a select with two zone placeholders. */
+    private static Object[] twoZoned(Window w, Long companyId) {
+        List<Object> a = new ArrayList<>();
+        a.add(w.zone().getId());
+        a.addAll(List.of(zoned(w, companyId)));
+        return a.toArray();
     }
 
     private static String receiptGross(Window w) {

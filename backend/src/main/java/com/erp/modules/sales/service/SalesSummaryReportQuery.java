@@ -34,9 +34,14 @@ import org.springframework.transaction.annotation.Transactional;
  * company's time zone. Gross, discount, VAT and net are read from {@code sales_invoice_lines}
  * exactly as those reports read them, and — like them — converted to the company's BASE currency
  * line by line at the rate stamped on each invoice at finalise ({@link BaseCurrencySql}), so a
- * foreign-currency sale is neither added at 1:1 nor margined against a base-currency cost. Sales returns and AR credit notes are NOT deducted — neither
- * of those reports deducts them either, and a summary that disagreed with the register it summarises
- * would be worse than one that shares its known limitation. Quantity is summed in BASE units
+ * foreign-currency sale is neither added at 1:1 nor margined against a base-currency cost. AR credit
+ * notes are NOT deducted — neither of those reports deducts them either, and a summary that
+ * disagreed with the register it summarises would be worse than one that shares its known
+ * limitation. <b>POS item returns ARE netted (ADR-0072)</b>, exactly as in the register: the returned
+ * lines come off quantity, gross, discount, VAT and net in the group and the window the return was
+ * made (a DAY group is the day of the return; a group is the original invoice's customer, agent,
+ * route, branch or cashier), and the cost put back by the return's SALE_REVERSAL movement comes off
+ * cost of sales. The invoice count is not reduced (a return is not a sale). Quantity is summed in BASE units
  * ({@code qty_in_base}) so a pack and a single are not added together as two of the same thing.
  *
  * <p><b>Cost of sales, without double counting.</b> Cost is the value of the {@code SALE_ISSUE}
@@ -128,6 +133,11 @@ public class SalesSummaryReportQuery {
      */
     private record Grouping(String keyExpr, String labelExpr, String codeExpr, String join,
                             boolean bindsZone) {
+        /** The key for a returned line: a DAY is the day of the return, not of the sale. */
+        String returnKeyExpr() {
+            return keyExpr.replace("i.finalised_at", "rt.created_at");
+        }
+
         static Grouping of(SalesSummaryGroupBy by) {
             return switch (by) {
                 case CUSTOMER -> new Grouping("c.uid", "c.display_name", "c.code",
@@ -151,6 +161,7 @@ public class SalesSummaryReportQuery {
                                                Long companyId, OffsetDateTime from,
                                                OffsetDateTime to, NamedRef branch, BranchReadScope scope,
                                                Map<String, Cogs> cogs) {
+        // Parameter order follows the SQL text: the sold lines, then the POS item returns.
         List<Object> params = new ArrayList<>();
         if (g.bindsZone()) {
             params.add(zone.getId());
@@ -163,29 +174,43 @@ public class SalesSummaryReportQuery {
             branchSql = " AND i.branch_id = ?";
             params.add(branch.id());
         }
+        if (g.bindsZone()) {
+            params.add(zone.getId());
+        }
+        params.add(companyId);
+        params.add(from);
+        params.add(to);
+        if (branch != null) {
+            params.add(branch.id());
+        }
 
         // Money is converted to BASE line by line at the rate stamped on each invoice
-        // (BaseCurrencySql) — the report is headed in the base currency and its cost of sales is
+        // (BaseCurrencySql) - the report is headed in the base currency and its cost of sales is
         // base, so a USD invoice summed at face would be mislabelled AND margined against TZS cost.
+        // ADR-0072: POS item returns are the second half of a UNION ALL, as negatives, dated by the
+        // return (PosReturnSql). They carry no invoice id, so the invoice count is unaffected, and a
+        // group that only had returns in the window still gets its (negative) row.
         int baseScale = BaseCurrencySql.baseScale(jdbc, companyId);
         String rate = "i.fx_rate";
-        String sql = "SELECT " + g.keyExpr() + " AS gkey, "
+        String sql = "SELECT gkey, glabel, gcode, "
+                + "COUNT(DISTINCT inv_id) AS invoices, "
+                + "COALESCE(SUM(qty), 0) AS qty, "
+                + "COALESCE(SUM(gross), 0) AS gross, "
+                // RPT-16 / LSF-12: every discount, VAT-inclusive (see BaseCurrencySql).
+                + "COALESCE(SUM(discount), 0) AS discount, "
+                + "COALESCE(SUM(vat), 0) AS vat, "
+                + "COALESCE(SUM(net), 0) AS net, "
+                + "COUNT(DISTINCT inv_id) FILTER (WHERE is_foreign) AS foreign_invoices "
+                + "FROM ( SELECT " + g.keyExpr() + " AS gkey, "
                 + g.labelExpr() + " AS glabel, "
                 + g.codeExpr() + " AS gcode, "
-                + """
-                       COUNT(DISTINCT i.id)                              AS invoices,
-                       COALESCE(SUM(l.qty_in_base), 0)                   AS qty,
-                """
-                + "       COALESCE(SUM(" + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount",
-                        rate, baseScale) + "), 0) AS gross,\n"
-                // RPT-16 / LSF-12: every discount, VAT-inclusive (see BaseCurrencySql).
-                + "       COALESCE(SUM(" + BaseCurrencySql.lineDiscountToBase(rate, baseScale)
-                + "), 0) AS discount,\n"
-                + "       COALESCE(SUM(" + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale)
-                + "), 0) AS vat,\n"
-                + "       COALESCE(SUM(" + BaseCurrencySql.toBase("l.net_amount", rate, baseScale)
-                + "), 0) AS net,\n"
-                + "       COUNT(DISTINCT i.id) FILTER (WHERE " + rate + " <> 1) AS foreign_invoices\n"
+                + "i.id AS inv_id, l.qty_in_base AS qty, "
+                + BaseCurrencySql.grossToBase("l.net_amount", "l.vat_amount", rate, baseScale)
+                + " AS gross, "
+                + BaseCurrencySql.lineDiscountToBase(rate, baseScale) + " AS discount, "
+                + BaseCurrencySql.toBase("l.vat_amount", rate, baseScale) + " AS vat, "
+                + BaseCurrencySql.toBase("l.net_amount", rate, baseScale) + " AS net, "
+                + "(" + rate + " <> 1) AS is_foreign "
                 + """
                 FROM sales_invoices i
                 JOIN sales_invoice_lines l ON l.invoice_id = i.id
@@ -199,8 +224,25 @@ public class SalesSummaryReportQuery {
                   AND i.finalised_at <  ?
                 """
                 + branchSql
+                + " UNION ALL SELECT " + g.returnKeyExpr() + ", "
+                + g.labelExpr() + ", " + g.codeExpr() + ", "
+                + "CAST(NULL AS BIGINT), -rl.qty_returned_base, "
+                + "-" + PosReturnSql.gross(baseScale) + ", "
+                + "-" + PosReturnSql.discount(baseScale) + ", "
+                + "-" + PosReturnSql.vat(baseScale) + ", "
+                + "-" + PosReturnSql.net(baseScale) + ", FALSE "
+                + PosReturnSql.RETURNED_FROM
+                + g.join()
                 + """
 
+                WHERE rt.company_id = ?
+                  AND rt.created_at >= ?
+                  AND rt.created_at <  ?
+                """
+                + branchSql
+                + """
+
+                ) t
                 GROUP BY 1, 2, 3
                 """;
 
@@ -298,6 +340,37 @@ public class SalesSummaryReportQuery {
             result.put(key != null ? key : ABSENT_KEY,
                     new Cogs(rs.getBigDecimal("cogs"), rs.getLong("unvalued")));
         }, params.toArray());
+
+        // ADR-0072: cost put back by POS item returns - the SALE_REVERSAL movements
+        // PosSaleReturnStockHandler posts at the original issue cost, source = the return - comes
+        // off the group's cost in the window of the return (a DAY group is the return's day).
+        List<Object> reversalParams = new ArrayList<>();
+        if (g.bindsZone()) {
+            reversalParams.add(zone.getId());
+        }
+        reversalParams.add(companyId);
+        reversalParams.add(from);
+        reversalParams.add(to);
+        if (branch != null) {
+            reversalParams.add(branch.id());
+        }
+        String reversalSql = "SELECT " + g.returnKeyExpr() + " AS gkey, "
+                + "COALESCE(SUM(ABS(sm.value_amount)), 0) AS cogs, "
+                + "COUNT(*) FILTER (WHERE sm.value_amount IS NULL) AS unvalued "
+                + PosReturnSql.COST_REVERSAL_FROM
+                + g.join()
+                + " WHERE sm.company_id = ? AND " + PosReturnSql.COST_REVERSAL_WHERE
+                + " AND rt.created_at >= ? AND rt.created_at < ? "
+                + branchSql + " GROUP BY 1";
+        jdbc.query(reversalSql, rs -> {
+            String key = rs.getString("gkey");
+            String k = key != null ? key : ABSENT_KEY;
+            Cogs sold = result.get(k);
+            BigDecimal soldValue = sold == null ? BigDecimal.ZERO : sold.value();
+            long soldUnvalued = sold == null ? 0L : sold.unvalued();
+            result.put(k, new Cogs(soldValue.subtract(rs.getBigDecimal("cogs")),
+                    soldUnvalued + rs.getLong("unvalued")));
+        }, reversalParams.toArray());
         return result;
     }
 

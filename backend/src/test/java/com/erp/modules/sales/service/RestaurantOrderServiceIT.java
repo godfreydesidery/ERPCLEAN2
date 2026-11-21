@@ -1,5 +1,6 @@
 package com.erp.modules.sales.service;
 
+import com.erp.modules.sales.domain.dto.PosSaleReturnRequest;
 import com.erp.modules.sales.domain.dto.PosSaleRequest;
 import com.erp.modules.sales.domain.dto.QuoteRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.RestaurantQuoteDto;
@@ -160,6 +161,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Autowired private RestaurantInsightsQuery insights;
     @Autowired private PosSaleService          posSales;
     @Autowired private JdbcTemplate            jdbc;
+    @Autowired private PosSaleReturnService    posReturns;
 
     private Company company;
     private Branch  branch;
@@ -1290,6 +1292,97 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
                 .containsExactly("Item: " + tacos.name(), "Department: Food");
     }
 
+    /**
+     * ADR-0072 follow-up: a POS item return on a paid restaurant bill is netted by the dashboard,
+     * hours, payments and the waiter reports - line grain by return date (and item filter), bill
+     * grain as the bill net of its returns - and the waiters still add up to the sales.
+     */
+    @Test
+    void anItemReturnOnAPaidBill_isNettedByTheRestaurantReportsAndInsights() {
+        setRootCtx();
+        String juma = waiter("resto_juma4", "Juma Waiter");
+        setCashierCtx();
+        RestaurantOrderDto served = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 3, null, juma));
+        orders.addLine(served.uid(), item(tacos));
+        orders.addLine(served.uid(), item(latte));
+        RestaurantBillDto bill = orders.bill(served.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos, latte);
+        setCashierCtx();
+        orders.pay(served.uid(), "resto-return-pay", payment(bill.grossTotal()));
+        BigDecimal gross = bill.grossTotal();
+
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        Long co = company.getId();
+        BigDecimal drinksBefore = deptSales(insights.dashboard(co, today, today, null), "Drinks");
+
+        // Return the latte: the only line in the Drinks department.
+        setRootCtx();
+        String invoiceUid = orders.get(served.uid()).salesInvoiceUid();
+        String latteLineUid = posReturns.listForSale(invoiceUid).lines().stream()
+                .filter(l -> l.productName().equals(latte.name())).findFirst().orElseThrow().invoiceLineUid();
+        var ret = posReturns.returnItems(invoiceUid, null, new PosSaleReturnRequest("cold",
+                null, List.of(new PosSaleReturnRequest.LineDto(latteLineUid, BigDecimal.ONE))));
+        BigDecimal back = ret.grossAmount();
+        assertThat(back).isEqualByComparingTo(drinksBefore);
+        BigDecimal net = gross.subtract(back);
+
+        var d = insights.dashboard(co, today, today, null);
+        assertThat(d.current().sales()).isEqualByComparingTo(net);
+        assertThat(d.current().receipts()).as("a returned bill was still a bill").isEqualTo(1);
+        assertThat(d.current().spendPerGuest()).isEqualByComparingTo(
+                net.divide(BigDecimal.valueOf(3), 2, java.math.RoundingMode.HALF_EVEN));
+        assertThat(d.current().refunds()).as("the item return is a REFUND payout").isEqualByComparingTo(back);
+        assertThat(d.days()).singleElement().satisfies(x -> assertThat(x.sales()).isEqualByComparingTo(net));
+        assertThat(d.hours().stream().map(RestaurantDashboardDto.Hour::sales)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(net);
+        assertThat(d.departments().stream().map(RestaurantDashboardDto.Department::sales)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(net);
+        assertThat(deptSales(d, "Drinks")).isEqualByComparingTo("0");
+        assertThat(d.topItems().stream().filter(i -> i.name().equals(latte.name())).findFirst().orElseThrow()
+                .quantity()).isEqualByComparingTo("0");
+        assertThat(d.topItems().get(0).name()).as("re-ranked: tacos lead once the latte is gone")
+                .isEqualTo(tacos.name());
+        assertThat(d.waiters()).singleElement().satisfies(w -> assertThat(w.amount()).isEqualByComparingTo(net));
+        assertThat(d.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).as("cash refunded comes off the cash line")
+                .isEqualByComparingTo(net);
+
+        var drinks = insights.dashboard(co, today, today, null,
+                new RestaurantReportQuery.ItemFilter(null, "Drinks"));
+        assertThat(drinks.current().sales()).as("the filter reaches the returned lines").isEqualByComparingTo("0");
+        assertThat(insights.dashboard(co, today, today, null,
+                new RestaurantReportQuery.ItemFilter(tacos.uid(), null)).current().sales())
+                .isEqualByComparingTo(gross.subtract(drinksBefore));
+
+        assertThat(insights.daypart(co, today, today, null).totals().sales()).isEqualByComparingTo(net);
+        var pay = insights.payments(co, today, today, null);
+        assertThat(pay.totalPaid()).isEqualByComparingTo(net);
+        assertThat(pay.refunds()).singleElement().satisfies(r -> {
+            assertThat(r.amount()).isEqualByComparingTo(back);
+            assertThat(r.reason()).startsWith("Item return PRT-");
+        });
+
+        // Bill grain: the bill net of its returns, the returned part shown.
+        assertThat(reports.waiterSales(co, today, today, null, null).rows()).singleElement().satisfies(r -> {
+            assertThat(r.bills()).isEqualTo(1);
+            assertThat(r.amount()).isEqualByComparingTo(net);
+        });
+        assertThat(reports.bills(co, today, today, null, null).rows()).singleElement().satisfies(r -> {
+            assertThat(r.amount()).isEqualByComparingTo(net);
+            assertThat(r.returned()).isEqualByComparingTo(back);
+        });
+        assertThat(reports.billsSummary(co, today, today, null, null).rows()).singleElement().satisfies(r -> {
+            assertThat(r.amount()).isEqualByComparingTo(net);
+            assertThat(r.tenders().stream().reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(net);
+        });
+        // Line grain.
+        var items = reports.waiterItems(co, today, today, null, null);
+        assertThat(items.totalAmount()).isEqualByComparingTo(net);
+        assertThat(items.rows().stream().filter(r -> r.name().equals(latte.name())).findFirst().orElseThrow()
+                .quantity()).isEqualByComparingTo("0");
+    }
+
     @Test
     void waiterFilter_onDashboardHoursAndPayments_followsTheWaiterHoldingTheOrder() {
         setRootCtx();
@@ -1391,6 +1484,73 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
                 .isInstanceOf(com.erp.platform.common.api.NotFoundException.class)
                 .hasMessage("Waiter not found.");
         assertThat(reports.waiterLines(co, juma)).containsExactly("Waiter: Juma Waiter");
+    }
+
+    /** ADR-0072 x the waiter filter: a return nets only on the waiter holding the returned bill. */
+    @Test
+    void waiterFilter_netsAnItemReturnOnThatWaitersBill_andLeavesTheOthersAlone() {
+        setRootCtx();
+        String juma = waiter("resto_juma5", "Juma Waiter");
+        String asha = users.findById(cashierId).orElseThrow().getUid();
+        setCashierCtx();
+        RestaurantOrderDto jumaOrder = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 2, null, juma));
+        orders.addLine(jumaOrder.uid(), item(tacos));
+        orders.addLine(jumaOrder.uid(), item(latte));
+        RestaurantBillDto jumaBill = orders.bill(jumaOrder.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos, latte);
+        setCashierCtx();
+        orders.pay(jumaOrder.uid(), "resto-wret-pay-1", payment(jumaBill.grossTotal()));
+        RestaurantOrderDto ashaOrder = openWith(latte);
+        RestaurantBillDto ashaBill = orders.bill(ashaOrder.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        orders.pay(ashaOrder.uid(), "resto-wret-pay-2", payment(ashaBill.grossTotal()));
+
+        setRootCtx();
+        String invoiceUid = orders.get(jumaOrder.uid()).salesInvoiceUid();
+        String latteLine = posReturns.listForSale(invoiceUid).lines().stream()
+                .filter(l -> l.productName().equals(latte.name())).findFirst().orElseThrow().invoiceLineUid();
+        BigDecimal back = posReturns.returnItems(invoiceUid, null, new PosSaleReturnRequest("cold",
+                null, List.of(new PosSaleReturnRequest.LineDto(latteLine, BigDecimal.ONE)))).grossAmount();
+
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        Long co = company.getId();
+        var none = RestaurantReportQuery.ItemFilter.NONE;
+        BigDecimal jumaNet = jumaBill.grossTotal().subtract(back);
+
+        var j = insights.dashboard(co, today, today, juma, null, none);
+        assertThat(j.current().sales()).isEqualByComparingTo(jumaNet);
+        assertThat(j.current().receipts()).isEqualTo(1);
+        assertThat(j.days()).singleElement().satisfies(x -> assertThat(x.sales()).isEqualByComparingTo(jumaNet));
+        assertThat(j.departments().stream().map(RestaurantDashboardDto.Department::sales)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(jumaNet);
+        assertThat(j.waiters()).singleElement().satisfies(w -> assertThat(w.amount()).isEqualByComparingTo(jumaNet));
+        assertThat(j.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(jumaNet);
+        assertThat(j.current().refunds()).isEqualByComparingTo(back);
+        assertThat(insights.daypart(co, today, today, juma, null, none).totals().sales())
+                .isEqualByComparingTo(jumaNet);
+        var jp = insights.payments(co, today, today, juma, null, none);
+        assertThat(jp.totalPaid()).isEqualByComparingTo(jumaNet);
+        assertThat(jp.refunds()).hasSize(1);
+
+        // Asha's bill had no return: her figures are whole, and no refund shows for her.
+        var a = insights.dashboard(co, today, today, asha, null, none);
+        assertThat(a.current().sales()).isEqualByComparingTo(ashaBill.grossTotal());
+        assertThat(a.current().refunds()).isEqualByComparingTo("0");
+        assertThat(a.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(ashaBill.grossTotal());
+        assertThat(insights.daypart(co, today, today, asha, null, none).totals().sales())
+                .isEqualByComparingTo(ashaBill.grossTotal());
+        var ap = insights.payments(co, today, today, asha, null, none);
+        assertThat(ap.totalPaid()).isEqualByComparingTo(ashaBill.grossTotal());
+        assertThat(ap.refunds()).isEmpty();
+
+        // With the item filter as well: Juma's drinks are all returned.
+        assertThat(insights.dashboard(co, today, today, juma, null,
+                new RestaurantReportQuery.ItemFilter(null, "Drinks")).current().sales())
+                .isEqualByComparingTo("0");
+        // Waiter-scoped report rows agree.
+        assertThat(reports.waiterItems(co, today, today, juma, null).totalAmount()).isEqualByComparingTo(jumaNet);
     }
 
     private static BigDecimal deptSales(RestaurantDashboardDto d, String name) {
