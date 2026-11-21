@@ -14,7 +14,9 @@ import java.math.RoundingMode;
  * line's last unit takes the exact remainder (sold amount minus everything returned before), so
  * partial returns can never drift from what the customer paid, by a cent or a shilling.
  *
- * <p>Gross is always {@code net + vat}, exactly as on the sold line.
+ * <p>Gross is always {@code net + vat}, exactly as on the sold line. The gross (what the customer
+ * paid) and the VAT are pro-rated, and net is their difference — so returning one of two items sold
+ * at a whole-shilling VAT-inclusive price refunds exactly that price.
  */
 final class PosReturnAmounts {
 
@@ -62,11 +64,18 @@ final class PosReturnAmounts {
             return new Slice(qty, soldQtyBase.subtract(priorBase), soldNet.subtract(priorNet),
                     discount.subtract(priorDisc), soldVat.subtract(priorVat));
         }
+        // Gross first, then VAT; net is what is left. Rounding net and VAT independently made a
+        // VAT-inclusive whole-shilling price come back a shilling off: 1 of 2 cups sold at 8,000
+        // (line 13,559 net + 2,441 VAT) refunded 6,780 + 1,221 = 8,001, and the last cup 7,999.
+        // Pro-rating the price the customer actually paid keeps each return at the shelf price.
+        BigDecimal cumGross = share(soldNet.add(soldVat), cumulative, soldQty, scale);
+        BigDecimal cumVat   = share(soldVat, cumulative, soldQty, scale);
+        BigDecimal cumNet   = cumGross.subtract(cumVat);
         return new Slice(qty,
                 share(soldQtyBase, cumulative, soldQty, QTY_SCALE).subtract(priorBase),
-                share(soldNet, cumulative, soldQty, scale).subtract(priorNet).max(BigDecimal.ZERO),
+                cumNet.subtract(priorNet).max(BigDecimal.ZERO),
                 share(discount, cumulative, soldQty, scale).subtract(priorDisc).max(BigDecimal.ZERO),
-                share(soldVat, cumulative, soldQty, scale).subtract(priorVat).max(BigDecimal.ZERO));
+                cumVat.subtract(priorVat).max(BigDecimal.ZERO));
     }
 
     private static BigDecimal share(BigDecimal whole, BigDecimal part, BigDecimal of, int scale) {
