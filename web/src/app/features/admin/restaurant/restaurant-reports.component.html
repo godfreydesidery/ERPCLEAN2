@@ -84,6 +84,34 @@
                             [options]="branchOptions()"
                             placeholder="All branches" />
           </div>
+          @if (showItemFilters()) {
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label" for="rr-item">
+                Item <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker [id]="'rr-item'" name="rr-item"
+                              [(ngModel)]="productUid"
+                              [options]="productOptions()"
+                              [search]="searchProducts"
+                              placeholder="All items" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="rr-department">
+                Department <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker [id]="'rr-department'" name="rr-department"
+                              [(ngModel)]="department"
+                              [options]="departmentOptions()"
+                              placeholder="All departments" />
+            </div>
+            @if (productUid() || department()) {
+              <div class="col-auto">
+                <button type="button" class="btn btn-link px-0" (click)="clearItemFilters()">
+                  Clear item filters
+                </button>
+              </div>
+            }
+          }
           <div class="col-auto">
             <button type="button" class="btn btn-primary"
                     (click)="run()"
@@ -153,6 +181,17 @@
               </p>
             </div>
           </div>
+          @if (appliedItemFilter(); as applied) {
+            <p class="small mb-3" data-testid="rr-item-filter">
+              <i class="bi bi-funnel me-1" aria-hidden="true"></i>
+              <span class="fw-semibold">Filtered</span> — {{ applied }}.
+              @if (lineGrain()) {
+                Only the matching items are counted.
+              } @else {
+                Bills that include a matching item are shown at their full amount.
+              }
+            </p>
+          }
         } @else {
           <div class="erp-empty">
             <i class="bi bi-person-badge" aria-hidden="true"></i>

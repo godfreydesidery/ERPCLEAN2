@@ -1169,6 +1169,131 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         assertThat(reports.pendingSummary(co, juma, null).rows()).isEmpty();
     }
 
+    @Test
+    void itemAndDepartmentFilters_narrowTheReports_billsWholeAndLinesMatching() {
+        setRootCtx();
+        String juma = waiter("resto_juma2", "Juma Waiter");
+
+        // Juma: tacos (Food) and a latte (Drinks), paid. Asha: a cake (no department), paid.
+        setCashierCtx();
+        RestaurantOrderDto mixed = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 3, null, juma));
+        orders.addLine(mixed.uid(), item(tacos));
+        orders.addLine(mixed.uid(), item(latte));
+        RestaurantBillDto mixedBill = orders.bill(mixed.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos, latte, cake);
+        setCashierCtx();
+        orders.pay(mixed.uid(), "resto-filter-pay-1", payment(mixedBill.grossTotal()));
+        RestaurantOrderDto cakeOrder = openWith(cake);
+        RestaurantBillDto cakeBill = orders.bill(cakeOrder.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        orders.pay(cakeOrder.uid(), "resto-filter-pay-2", payment(cakeBill.grossTotal()));
+
+        // Still open: two lattes sent, one voided.
+        RestaurantOrderDto open = orders.open(new CreateRestaurantOrderRequest(null, table1.uid(), null, null));
+        orders.addLine(open.uid(), new AddRestaurantOrderLineRequest(latte.id(), pcsId, new BigDecimal("2"), null));
+        orders.send(open.uid());
+        setRootCtx();
+        orders.voidLine(open.uid(), orders.get(open.uid()).lines().get(0).uid(),
+                new VoidRestaurantOrderLineRequest("Spilt", BigDecimal.ONE, null));
+
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        Long co = company.getId();
+        var all = insights.dashboard(co, today, today, null);
+        BigDecimal drinks = deptSales(all, "Drinks");
+        BigDecimal food = deptSales(all, "Food");
+        BigDecimal none = deptSales(all, "(no department)");
+        var tacosOnly = new RestaurantReportQuery.ItemFilter(tacos.uid(), null);
+        var latteOnly = new RestaurantReportQuery.ItemFilter(latte.uid(), null);
+        var drinksDept = new RestaurantReportQuery.ItemFilter(null, "  dRINKS ");
+        var noDept = new RestaurantReportQuery.ItemFilter(null, "(no department)");
+
+        // Bill grain: the bills holding a match, each at its whole amount.
+        assertThat(reports.waiterSales(co, today, today, null, null, tacosOnly).rows())
+                .singleElement().satisfies(r -> {
+                    assertThat(r.waiterName()).isEqualTo("Juma Waiter");
+                    assertThat(r.bills()).isEqualTo(1);
+                    assertThat(r.guests()).isEqualTo(3);
+                    assertThat(r.amount()).isEqualByComparingTo(mixedBill.grossTotal());
+                });
+        assertThat(reports.waiterSales(co, today, today, null, null, noDept).rows())
+                .singleElement().satisfies(r -> {
+                    assertThat(r.waiterName()).isEqualTo("Asha Waiter");
+                    assertThat(r.amount()).isEqualByComparingTo(cakeBill.grossTotal());
+                });
+        assertThat(reports.bills(co, today, today, null, null, drinksDept).rows())
+                .singleElement().satisfies(r -> assertThat(r.orderNumber()).isEqualTo(mixed.orderNumber()));
+        assertThat(reports.bills(co, today, today, null, null,
+                new RestaurantReportQuery.ItemFilter(tacos.uid(), "Drinks")).rows())
+                .as("both filters at once: tacos are not drinks").isEmpty();
+        assertThat(reports.billsSummary(co, today, today, null, null, noDept).rows())
+                .singleElement().satisfies(r -> assertThat(r.amount()).isEqualByComparingTo(cakeBill.grossTotal()));
+
+        // Line grain: only the matching lines.
+        var items = reports.waiterItems(co, today, today, null, null, drinksDept);
+        assertThat(items.rows()).singleElement().satisfies(r -> assertThat(r.name()).isEqualTo(latte.name()));
+        assertThat(items.totalAmount()).isEqualByComparingTo(drinks);
+        assertThat(items.waiters()).singleElement().satisfies(w -> assertThat(w.bills()).isEqualTo(1));
+
+        // Pending: the orders holding a matching item that is not voided.
+        assertThat(reports.pendingBills(co, null, null, latteOnly).rows())
+                .singleElement().satisfies(r -> assertThat(r.orderUid()).isEqualTo(open.uid()));
+        assertThat(reports.pendingBills(co, null, null, tacosOnly).rows()).isEmpty();
+        assertThat(reports.pendingSummary(co, null, null, drinksDept).rows()).hasSize(1);
+
+        // Dashboard: sales are the matching lines; receipts, orders and guests hold one.
+        var d = insights.dashboard(co, today, today, null, drinksDept);
+        assertThat(d.current().sales()).isEqualByComparingTo(drinks);
+        assertThat(d.current().receipts()).isEqualTo(1);
+        assertThat(d.current().orders()).isEqualTo(1);
+        assertThat(d.current().guests()).isEqualTo(3);
+        assertThat(d.current().voidedItems()).isEqualByComparingTo("1");
+        assertThat(d.live().openOrders()).isEqualTo(1);
+        assertThat(d.departments()).extracting(RestaurantDashboardDto.Department::name)
+                .containsExactly("Drinks");
+        assertThat(d.topItems()).singleElement().satisfies(i -> assertThat(i.name()).isEqualTo(latte.name()));
+        assertThat(d.waiters()).singleElement().satisfies(w -> {
+            assertThat(w.waiterName()).isEqualTo("Juma Waiter");
+            assertThat(w.amount()).as("the drinks on Juma's bill, not the whole bill")
+                    .isEqualByComparingTo(drinks);
+        });
+        assertThat(d.days()).singleElement().satisfies(x -> assertThat(x.sales()).isEqualByComparingTo(drinks));
+        assertThat(d.tenders().stream().map(RestaurantDashboardDto.Tender::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .as("payments are whole: the receipt that had drinks").isEqualByComparingTo(mixedBill.grossTotal());
+
+        var food2 = insights.dashboard(co, today, today, null, new RestaurantReportQuery.ItemFilter(null, "food"));
+        assertThat(food2.current().sales()).isEqualByComparingTo(food);
+        assertThat(food2.current().voidedItems()).isEqualByComparingTo("0");
+        assertThat(food2.live().openOrders()).isZero();
+        assertThat(insights.dashboard(co, today, today, null, noDept).current().sales())
+                .isEqualByComparingTo(none);
+
+        // Hours: sales by line, receipts holding one.
+        var hours = insights.daypart(co, today, today, null, tacosOnly);
+        assertThat(hours.totals().sales()).isEqualByComparingTo(food);
+        assertThat(hours.totals().receipts()).isEqualTo(1);
+        assertThat(hours.departments()).containsExactly("Food");
+
+        // Payments: only the voided items narrow.
+        var pay = insights.payments(co, today, today, null, tacosOnly);
+        assertThat(pay.voidedItems()).isEmpty();
+        assertThat(pay.totalPaid()).isEqualByComparingTo(mixedBill.grossTotal().add(cakeBill.grossTotal()));
+        assertThat(insights.payments(co, today, today, null, latteOnly).voidedItems()).hasSize(1);
+
+        // An item that is not this company's is "not found", whatever the uid.
+        assertThatThrownBy(() -> reports.waiterSales(co, today, today, null, null,
+                new RestaurantReportQuery.ItemFilter("01NOTAREALPRODUCT000000000", null)))
+                .isInstanceOf(com.erp.platform.common.api.NotFoundException.class)
+                .hasMessage("Item not found.");
+        assertThat(reports.itemFilterLines(co, new RestaurantReportQuery.ItemFilter(tacos.uid(), " Food ")))
+                .containsExactly("Item: " + tacos.name(), "Department: Food");
+    }
+
+    private static BigDecimal deptSales(RestaurantDashboardDto d, String name) {
+        return d.departments().stream().filter(x -> x.name().equals(name))
+                .map(RestaurantDashboardDto.Department::sales).findFirst().orElseThrow();
+    }
+
     // =========================================================================
     // ADR-0067: the waiter holding a table, and moving it to another waiter.
     // =========================================================================

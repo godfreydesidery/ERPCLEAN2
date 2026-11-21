@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { Observable } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 import { SessionStore } from '../../../core/auth/session.store';
 import { todayLocal } from '../../../shared/date.util';
 import { UidOption, UidPickerComponent } from '../../../shared/uid-picker/uid-picker.component';
@@ -24,6 +24,7 @@ import {
   WaiterSalesReportDto,
   tenderLabel,
 } from './models/restaurant-report.model';
+import { RestaurantItemFilterOptionsService } from './restaurant-item-filter-options.service';
 import { RestaurantReportService } from './restaurant-report.service';
 
 type LoadState = 'idle' | 'loading' | 'error' | 'forbidden';
@@ -47,6 +48,9 @@ function tabOf(kind: RestaurantReportKind): RestaurantReportTab {
   return 'waiters';
 }
 
+/** Reports that count only the matching lines; the others keep whole bills that hold one. */
+const LINE_KINDS: readonly RestaurantReportKind[] = ['waiter-items', 'daypart'];
+
 const ALL_KINDS: readonly RestaurantReportKind[] = [
   'waiter-sales', 'waiter-items', 'bills', 'bills-summary', 'pending-bills', 'pending-summary',
   'daypart', 'payments',
@@ -57,6 +61,10 @@ const ALL_KINDS: readonly RestaurantReportKind[] = [
  * waiter, the bills paid, the bills still pending — each as a summary or in detail, for one
  * waiter or all — plus sales by hour and day of the week, and payments & completion. Gated
  * SALES.INVOICE.VIEW, like the Sales Report; export needs REPORT.EXPORT as well.
+ *
+ * Item and department filters (2026-11-21) narrow every report but payments: the bill reports keep
+ * the bills that hold a matching item, at their whole amount; the items and hours reports count
+ * only the matching lines.
  */
 @Component({
   selector: 'app-restaurant-reports',
@@ -66,6 +74,7 @@ const ALL_KINDS: readonly RestaurantReportKind[] = [
 export class RestaurantReportsComponent implements OnInit {
   private readonly reports = inject(RestaurantReportService);
   private readonly filterOptions = inject(ReportFilterOptionsService);
+  private readonly itemOptions = inject(RestaurantItemFilterOptionsService);
   private readonly route = inject(ActivatedRoute, { optional: true });
   protected readonly session = inject(SessionStore);
 
@@ -83,8 +92,24 @@ export class RestaurantReportsComponent implements OnInit {
   readonly toDate = signal(todayLocal());
   readonly waiterUid = signal('');
   readonly branchUid = signal('');
+  readonly productUid = signal('');
+  readonly department = signal('');
   readonly waiterOptions = signal<UidOption[]>([]);
   readonly branchOptions = signal<UidOption[]>([]);
+  readonly productOptions = signal<UidOption[]>([]);
+  readonly departmentOptions = signal<UidOption[]>([]);
+  /** The company the item search runs against. */
+  private readonly companyId = signal('');
+  /** Item names by uid, from the seed and every search, to name the filter on the result. */
+  private readonly itemLabels = new Map<string, string>();
+  /** The item and department filters each report was last run with. */
+  private readonly appliedItemFilters = signal<Partial<Record<RestaurantReportKind, string | null>>>({});
+  /** The filters of the report on screen, e.g. "Item: Tacos · Department: Food"; null for none. */
+  readonly appliedItemFilter = computed(() => this.appliedItemFilters()[this.kind()] ?? null);
+
+  /** Server-side item search for the Item picker (arrow property so `this` survives binding). */
+  readonly searchProducts = (q: string): Observable<readonly UidOption[]> =>
+    this.itemOptions.search(this.companyId(), q).pipe(tap((opts) => this.remember(opts)));
 
   // ── Results (one per report, so switching never shows another's rows) ──────
   readonly sales = signal<WaiterSalesReportDto | null>(null);
@@ -124,6 +149,10 @@ export class RestaurantReportsComponent implements OnInit {
   readonly showWaiter = computed(
     () => this.canFilterWaiter() && this.kind() !== 'daypart' && this.kind() !== 'payments',
   );
+  /** Payments cover every tender and order; the item and department filters are not offered. */
+  readonly showItemFilters = computed(() => this.kind() !== 'payments');
+  /** Whether the report on screen counts matching lines (true) or whole bills holding one. */
+  readonly lineGrain = computed(() => LINE_KINDS.includes(this.kind()));
   readonly current = computed<{ company: ReportCompanyHeaderDto } | null>(() => {
     switch (this.kind()) {
       case 'waiter-sales':
@@ -150,8 +179,18 @@ export class RestaurantReportsComponent implements OnInit {
     // A dashboard link may name the report: /admin/restaurant/reports?report=pending-summary
     const asked = this.route?.snapshot.queryParamMap.get('report') as RestaurantReportKind | null;
     if (asked && ALL_KINDS.includes(asked)) this.kind.set(asked);
-    this.filterOptions.branchOptions().subscribe({
+    const company$ = this.filterOptions.company();
+    this.filterOptions.branchOptions(company$).subscribe({
       next: (opts) => this.branchOptions.set(opts),
+      error: () => undefined,
+    });
+    this.itemOptions.options(company$).subscribe({
+      next: (o) => {
+        this.companyId.set(o.companyId);
+        this.remember(o.items);
+        this.productOptions.set(o.items);
+        this.departmentOptions.set(o.departments);
+      },
       error: () => undefined,
     });
     if (this.canFilterWaiter()) {
@@ -187,13 +226,37 @@ export class RestaurantReportsComponent implements OnInit {
       toDate: to,
       waiterUid: this.waiterUid() || null,
       branchUid: this.branchUid() || null,
+      productUid: this.productUid() || null,
+      department: this.department() || null,
     };
+  }
+
+  /** Clears the item and department filters. */
+  clearItemFilters(): void {
+    this.productUid.set('');
+    this.department.set('');
+  }
+
+  private remember(opts: readonly UidOption[]): void {
+    for (const o of opts) this.itemLabels.set(o.uid, o.label);
+  }
+
+  /** "Item: Tacos · Department: Food" for the filters sent, or null for none. */
+  private describeItemFilter(f: RestaurantReportFilter): string | null {
+    if (this.kind() === 'payments') return null;
+    const parts: string[] = [];
+    if (f.productUid) parts.push(`Item: ${this.itemLabels.get(f.productUid) ?? 'the chosen item'}`);
+    if (f.department) parts.push(`Department: ${f.department}`);
+    return parts.length ? parts.join(' · ') : null;
   }
 
   run(): void {
     const f = this.filter();
     if (!f) return;
     this.state.set('loading');
+    const kind = this.kind();
+    const applied = this.describeItemFilter(f);
+    this.appliedItemFilters.update((m) => ({ ...m, [kind]: applied }));
     const done = <T>(set: (v: T) => void) => ({
       next: (dto: T) => {
         set(dto);
