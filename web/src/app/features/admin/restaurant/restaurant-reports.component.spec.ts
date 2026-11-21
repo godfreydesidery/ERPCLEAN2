@@ -179,7 +179,7 @@ describe('RestaurantReportsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('2026-10-30 19:00');
   });
 
-  it('Sales by hour & day shows a column per department and hides the waiter filter', () => {
+  it('Sales by hour & day shows a column per department and offers the waiter filter', () => {
     const svc = makeReportsBed();
     const fixture = TestBed.createComponent(RestaurantReportsComponent);
     fixture.detectChanges();
@@ -187,7 +187,7 @@ describe('RestaurantReportsComponent', () => {
     comp.setTab('daypart');
     fixture.detectChanges();
     expect(comp.hasViews()).toBe(false);
-    expect(fixture.nativeElement.querySelector('#rr-waiter')).toBeNull();
+    expect(fixture.nativeElement.querySelector('select#rr-waiter')).not.toBeNull();
     comp.run();
     fixture.detectChanges();
 
@@ -284,8 +284,8 @@ describe('RestaurantReportsComponent', () => {
     expect(comp.appliedItemFilter()).toBeNull();
   });
 
-  it('Payments does not offer the item and department filters', () => {
-    makeReportsBed();
+  it('Payments offers the waiter filter but not the item and department filters', () => {
+    const svc = makeReportsBed();
     const fixture = TestBed.createComponent(RestaurantReportsComponent);
     fixture.detectChanges();
     const comp = fixture.componentInstance;
@@ -293,6 +293,10 @@ describe('RestaurantReportsComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#rr-item')).toBeNull();
     expect(fixture.nativeElement.querySelector('#rr-department')).toBeNull();
+    expect(fixture.nativeElement.querySelector('select#rr-waiter')).not.toBeNull();
+    comp.waiterUid.set('W1');
+    comp.run();
+    expect(svc.payments).toHaveBeenCalledWith(expect.objectContaining({ waiterUid: 'W1' }));
   });
 
   it('export carries the item and department filters', () => {

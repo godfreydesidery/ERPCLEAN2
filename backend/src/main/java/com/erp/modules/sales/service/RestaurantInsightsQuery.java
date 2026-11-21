@@ -55,6 +55,11 @@ import org.springframework.transaction.annotation.Transactional;
  * cancelled and open orders and the bills printed, payments by type, complimentary and refunds (by
  * the refunded receipt). So "Sales" filtered to Drinks is what the drinks sold for, and "Receipts"
  * how many receipts had drinks on them. The payments report applies them to its voided items only.
+ *
+ * <p>The optional waiter filter (2026-11-21): the waiter is whoever holds the restaurant order, as
+ * in {@link RestaurantReportQuery}. Receipts count through the order they paid, refunds through
+ * the receipt they refunded, orders and their items directly ({@link RestaurantReportQuery#waiterSql}).
+ * A counter sale has no waiter, so with the filter it drops out, and so does the counter row.
  */
 @Component
 @Transactional(readOnly = true)
@@ -84,9 +89,16 @@ public class RestaurantInsightsQuery {
     /** With the optional item and department filters, as the class comment describes. */
     public RestaurantDashboardDto dashboard(Long companyId, LocalDate fromDate, LocalDate toDate,
                                             String branchUid, ItemFilter itemFilter) {
-        Window w = window(companyId, fromDate, toDate, branchUid, itemFilter);
-        Filter fo = reports.branchFilter(companyId, branchUid, "o.branch_id");
-        Filter fp = reports.branchFilter(companyId, branchUid, "po.branch_id");
+        return dashboard(companyId, fromDate, toDate, null, branchUid, itemFilter);
+    }
+
+    /** With the optional waiter, item and department filters, as the class comment describes. */
+    public RestaurantDashboardDto dashboard(Long companyId, LocalDate fromDate, LocalDate toDate,
+                                            String waiterUid, String branchUid,
+                                            ItemFilter itemFilter) {
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, itemFilter);
+        Filter fo = reports.waiterBranchFilter(companyId, waiterUid, branchUid, "o.branch_id");
+        Filter fp = reports.waiterBranchFilter(companyId, waiterUid, branchUid, "po.branch_id");
         long span = ChronoUnit.DAYS.between(fromDate, toDate) + 1;
         LocalDate prevFrom = fromDate.minusDays(span);
         LocalDate prevTo = fromDate.minusDays(1);
@@ -102,12 +114,14 @@ public class RestaurantInsightsQuery {
         departmentsAndItems(companyId, w, departments, topItems);
 
         WaiterSalesReportDto bySales =
-                reports.waiterLineSales(companyId, fromDate, toDate, branchUid, itemFilter);
+                reports.waiterLineSales(companyId, fromDate, toDate, waiterUid, branchUid,
+                        itemFilter);
         List<WaiterSalesRowDto> waiters = new ArrayList<>(bySales.rows());
         // What was sold without a table order, so the waiters add up to the sales.
         long counterReceipts = current.receipts() - bySales.totals().bills();
         BigDecimal counterSales = current.sales().subtract(bySales.totals().amount());
-        if (counterReceipts > 0 && counterSales.signum() > 0) {
+        // One waiter's figures have no counter sales in them (see the class comment).
+        if (w.waiterName() == null && counterReceipts > 0 && counterSales.signum() > 0) {
             waiters.add(new WaiterSalesRowDto(null, "Counter sales (no table order)",
                     counterReceipts, 0, counterSales,
                     counterSales.divide(BigDecimal.valueOf(counterReceipts), 2,
@@ -431,7 +445,14 @@ public class RestaurantInsightsQuery {
      */
     public RestaurantDaypartDto daypart(Long companyId, LocalDate fromDate, LocalDate toDate,
                                         String branchUid, ItemFilter itemFilter) {
-        Window w = window(companyId, fromDate, toDate, branchUid, itemFilter);
+        return daypart(companyId, fromDate, toDate, null, branchUid, itemFilter);
+    }
+
+    /** As above, for one waiter's receipts when {@code waiterUid} is set. */
+    public RestaurantDaypartDto daypart(Long companyId, LocalDate fromDate, LocalDate toDate,
+                                        String waiterUid, String branchUid,
+                                        ItemFilter itemFilter) {
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, itemFilter);
         int span = (int) ChronoUnit.DAYS.between(fromDate, toDate) + 1;
 
         // Sales per (hour, weekday, department) from the lines; receipts per (hour, weekday).
@@ -543,10 +564,20 @@ public class RestaurantInsightsQuery {
     public RestaurantPaymentsReportDto payments(Long companyId, LocalDate fromDate,
                                                 LocalDate toDate, String branchUid,
                                                 ItemFilter itemFilter) {
-        Window w = window(companyId, fromDate, toDate, branchUid, ItemFilter.NONE);
+        return payments(companyId, fromDate, toDate, null, branchUid, itemFilter);
+    }
+
+    /**
+     * As above; a waiter narrows every section to that waiter's orders and the receipts and
+     * refunds tied to them. A refund not tied to a table order then drops out.
+     */
+    public RestaurantPaymentsReportDto payments(Long companyId, LocalDate fromDate,
+                                                LocalDate toDate, String waiterUid,
+                                                String branchUid, ItemFilter itemFilter) {
+        Window w = window(companyId, fromDate, toDate, waiterUid, branchUid, ItemFilter.NONE);
         ItemScope items = reports.itemScope(companyId, itemFilter);
-        Filter fo = reports.branchFilter(companyId, branchUid, "o.branch_id");
-        Filter fp = reports.branchFilter(companyId, branchUid, "po.branch_id");
+        Filter fo = reports.waiterBranchFilter(companyId, waiterUid, branchUid, "o.branch_id");
+        Filter fp = reports.waiterBranchFilter(companyId, waiterUid, branchUid, "po.branch_id");
         ZoneId zone = w.zone();
 
         List<RestaurantDashboardDto.Tender> raw = tenders(companyId, w);
@@ -689,9 +720,9 @@ public class RestaurantInsightsQuery {
     private static final String SERVED_AT =
             "COALESCE(t.name, CASE WHEN o.order_type = 'TAKEAWAY' THEN 'Takeaway' END)";
 
-    private Window window(Long companyId, LocalDate fromDate, LocalDate toDate, String branchUid,
-                          ItemFilter itemFilter) {
-        Window w = reports.window(companyId, fromDate, toDate, null, branchUid, "i.branch_id",
+    private Window window(Long companyId, LocalDate fromDate, LocalDate toDate, String waiterUid,
+                          String branchUid, ItemFilter itemFilter) {
+        Window w = reports.window(companyId, fromDate, toDate, waiterUid, branchUid, "i.branch_id",
                 itemFilter);
         if (ChronoUnit.DAYS.between(fromDate, toDate) >= MAX_DAYS) {
             throw new IllegalArgumentException("Choose a range of one year or less.");

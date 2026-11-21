@@ -145,10 +145,8 @@ export class RestaurantReportsComponent implements OnInit {
   readonly needsDates = computed(
     () => this.kind() !== 'pending-bills' && this.kind() !== 'pending-summary',
   );
-  /** Hours and payments cover the whole floor; the waiter filter does not apply. */
-  readonly showWaiter = computed(
-    () => this.canFilterWaiter() && this.kind() !== 'daypart' && this.kind() !== 'payments',
-  );
+  /** Every report takes the waiter filter (hours and payments since 2026-11-21). */
+  readonly showWaiter = computed(() => this.canFilterWaiter());
   /** Payments cover every tender and order; the item and department filters are not offered. */
   readonly showItemFilters = computed(() => this.kind() !== 'payments');
   /** Whether the report on screen counts matching lines (true) or whole bills holding one. */

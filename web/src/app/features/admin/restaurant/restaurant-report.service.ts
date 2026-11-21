@@ -21,8 +21,6 @@ import {
 
 /** Reports that are "now", with no date range. */
 const NO_DATES: readonly RestaurantReportKind[] = ['pending-bills', 'pending-summary'];
-/** Reports over the whole floor, with no waiter filter. */
-const NO_WAITER: readonly RestaurantReportKind[] = ['daypart', 'payments'];
 /** Reports the item and department filters are not offered on. */
 const NO_ITEM: readonly RestaurantReportKind[] = ['payments'];
 
@@ -107,9 +105,7 @@ export class RestaurantReportService {
     if (!NO_DATES.includes(kind)) {
       params = params.set('fromDate', filter.fromDate).set('toDate', filter.toDate);
     }
-    if (filter.waiterUid && !NO_WAITER.includes(kind)) {
-      params = params.set('waiterUid', filter.waiterUid);
-    }
+    if (filter.waiterUid) params = params.set('waiterUid', filter.waiterUid);
     if (filter.branchUid) params = params.set('branchUid', filter.branchUid);
     if (!NO_ITEM.includes(kind)) params = this.itemParams(params, filter);
     return params;
@@ -117,6 +113,7 @@ export class RestaurantReportService {
 
   private dashboardParams(filter: RestaurantDashboardFilter): HttpParams {
     let params = new HttpParams().set('fromDate', filter.fromDate).set('toDate', filter.toDate);
+    if (filter.waiterUid) params = params.set('waiterUid', filter.waiterUid);
     if (filter.branchUid) params = params.set('branchUid', filter.branchUid);
     return this.itemParams(params, filter);
   }

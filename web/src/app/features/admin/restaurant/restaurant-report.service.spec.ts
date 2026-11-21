@@ -1,6 +1,7 @@
 /**
  * RestaurantReportService — the optional item and department filters (2026-11-21): sent when
- * chosen, left out when not (the mobile app and old links send neither), never on payments.
+ * chosen, left out when not (the mobile app and old links send neither), never on payments; and
+ * the waiter filter, now on hours, payments and the dashboard too.
  */
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
@@ -63,6 +64,21 @@ describe('RestaurantReportService', () => {
     expect(req.request.params.has('productUid')).toBe(false);
     expect(req.request.params.has('department')).toBe(false);
     req.flush({});
+  });
+
+  it('sends the waiter with every report, hours and payments included', () => {
+    svc.daypart({ ...BASE, waiterUid: 'W1' }).subscribe();
+    http.expectOne((r) => r.url === `${API}/daypart` && r.params.get('waiterUid') === 'W1').flush({});
+    svc.export('payments', { ...BASE, waiterUid: 'W1' }, 'XLSX').subscribe();
+    http
+      .expectOne((r) => r.url === `${API}/payments/export` && r.params.get('waiterUid') === 'W1')
+      .flush(new Blob());
+    svc
+      .exportFlashReport({ fromDate: '2026-11-21', toDate: '2026-11-21', branchUid: null, waiterUid: 'W1' }, 'PDF')
+      .subscribe();
+    http
+      .expectOne((r) => r.url === `${API}/dashboard/export` && r.params.get('waiterUid') === 'W1')
+      .flush(new Blob());
   });
 
   it('sends them with the dashboard', () => {

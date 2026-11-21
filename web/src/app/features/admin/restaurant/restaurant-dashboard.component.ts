@@ -59,6 +59,10 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  * The same figures download as the Flash Report. Gated SALES.INVOICE.VIEW like the reports;
  * the download needs REPORT.EXPORT.
  *
+ * Optional Waiter filter (2026-11-21): that waiter's orders and the receipts and refunds tied to
+ * them; counter sales have no waiter and drop out. Offered with a restaurant permission, which the
+ * waiter list needs.
+ *
  * Optional Item and Department filters (2026-11-21): sales, discounts, departments, items and
  * waiters narrow to the matching lines; receipts, orders, guests, payments and the live counts are
  * those holding a matching item.
@@ -85,6 +89,8 @@ export class RestaurantDashboardComponent implements OnInit {
   readonly toDate = signal(todayLocal());
   readonly branchUid = signal('');
   readonly branchOptions = signal<UidOption[]>([]);
+  readonly waiterUid = signal('');
+  readonly waiterOptions = signal<UidOption[]>([]);
   readonly productUid = signal('');
   readonly department = signal('');
   readonly productOptions = signal<UidOption[]>([]);
@@ -101,6 +107,12 @@ export class RestaurantDashboardComponent implements OnInit {
 
   readonly canView = computed(() => this.session.hasPermission('SALES.INVOICE.VIEW'));
   readonly canExport = computed(() => this.session.hasPermission('REPORT.EXPORT'));
+  /** The waiter list needs a restaurant permission; without it the filter is not offered. */
+  readonly canFilterWaiter = computed(
+    () =>
+      this.session.hasPermission('RESTAURANT.ORDER.MANAGE') ||
+      this.session.hasPermission('RESTAURANT.SETUP.MANAGE'),
+  );
 
   readonly tiles = computed<KpiTile[]>(() => {
     const d = this.data();
@@ -193,6 +205,13 @@ export class RestaurantDashboardComponent implements OnInit {
       next: (opts) => this.branchOptions.set(opts),
       error: () => undefined,
     });
+    if (this.canFilterWaiter()) {
+      this.reports.waiters().subscribe({
+        next: (list) =>
+          this.waiterOptions.set(list.map((w) => ({ uid: w.uid, label: w.name, hint: w.username }))),
+        error: () => undefined,
+      });
+    }
     this.itemOptions.options(company$).subscribe({
       next: (o) => {
         this.companyId.set(o.companyId);
@@ -228,6 +247,7 @@ export class RestaurantDashboardComponent implements OnInit {
     return {
       fromDate: from,
       toDate: to,
+      waiterUid: this.waiterUid() || null,
       branchUid: this.branchUid() || null,
       productUid: this.productUid() || null,
       department: this.department() || null,

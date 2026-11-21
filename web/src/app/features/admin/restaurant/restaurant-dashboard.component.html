@@ -36,6 +36,17 @@
                             [options]="branchOptions()"
                             placeholder="All branches" />
           </div>
+          @if (canFilterWaiter()) {
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label" for="rd-waiter">
+                Waiter <span class="text-muted small">(optional)</span>
+              </label>
+              <app-uid-picker [id]="'rd-waiter'" name="rd-waiter"
+                              [(ngModel)]="waiterUid"
+                              [options]="waiterOptions()"
+                              placeholder="All waiters" />
+            </div>
+          }
           <div class="col-sm-6 col-lg-2">
             <label class="form-label" for="rd-item">
               Item <span class="text-muted small">(optional)</span>
