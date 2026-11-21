@@ -60,6 +60,15 @@ public class StockTransferLine extends UidEntity {
     @Column(name = "value_amount", updatable = false, precision = 19, scale = 4)
     private BigDecimal valueAmount;
 
+    /**
+     * Unit cost the user typed when raising the transfer, per ONE of the line's unit (V116).
+     * REFERENCE ONLY: it is shown on the transfer and its document and never feeds valuation,
+     * stock movements or the GL — those keep the company moving average (ADR-0028 D-2/D-5).
+     * NULL = not entered.
+     */
+    @Column(name = "entered_unit_cost", updatable = false, precision = 19, scale = 4)
+    private BigDecimal enteredUnitCost;
+
     @Column(name = "currency", nullable = false, updatable = false, length = 3)
     private CurrencyCode currency;
 
@@ -117,6 +126,10 @@ public class StockTransferLine extends UidEntity {
     public BigDecimal getQtyDispatched()     { return qtyDispatched; }
     public BigDecimal getQtyReceived()       { return qtyReceived; }
     public BigDecimal getValueAmount()       { return valueAmount; }
+    public BigDecimal getEnteredUnitCost()   { return enteredUnitCost; }
+
+    /** Set once at create, before the line is saved (the column is not updatable). */
+    public void setEnteredUnitCost(BigDecimal enteredUnitCost) { this.enteredUnitCost = enteredUnitCost; }
 
     public void setQtyDispatched(BigDecimal qtyDispatched) { this.qtyDispatched = qtyDispatched; }
     public void setQtyReceived(BigDecimal qtyReceived)     { this.qtyReceived = qtyReceived; }

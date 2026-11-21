@@ -205,7 +205,8 @@ public class StockTransferController {
         }
     }
 
-    private TabularRenderModel flatten(StockTransferDto dto, ReportCompanyHeaderDto company,
+    /** Package-private so the column layout is tested without rendering a file. */
+    TabularRenderModel flatten(StockTransferDto dto, ReportCompanyHeaderDto company,
                                        String logoDataUri) {
         List<String> headerLines = new ArrayList<>();
         if (company != null && company.name() != null) {
@@ -229,28 +230,47 @@ public class StockTransferController {
         // The title stays "Stock Transfer" rather than their "Inter-Branch Transfer": these move
         // between LOCATIONS, which are often inside one branch, and the narrower name would be a
         // lie on most of them.
-        List<Column> columns = List.of(
+        //
+        // V116 (owner 2026-11-21): a line may also carry a unit cost the user typed at create. It is
+        // REFERENCE ONLY, so it gets its own pair of columns beside the system figures rather than
+        // replacing them, and both pairs are then labelled so nobody reads one as the other. The
+        // pair appears only when some line has an entered cost — a transfer without one prints
+        // exactly as it always has, rather than carrying two empty columns on a narrow A4 page.
+        List<StockTransferLineDto> lines = dto.lines() != null ? dto.lines() : List.of();
+        boolean withEntered = lines.stream().anyMatch(l -> l.enteredUnitCost() != null);
+
+        List<Column> columns = new ArrayList<>(List.of(
                 new Column("Code", Align.LEFT),
                 new Column("Product Description", Align.LEFT),
                 new Column("Package", Align.LEFT),
                 new Column("Qty", Align.RIGHT),
-                new Column("Price", Align.RIGHT),
-                new Column("Total Amount", Align.RIGHT));
+                new Column(withEntered ? "System Price" : "Price", Align.RIGHT),
+                new Column(withEntered ? "System Amount" : "Total Amount", Align.RIGHT)));
+        if (withEntered) {
+            columns.add(new Column("Entered Price", Align.RIGHT));
+            columns.add(new Column("Entered Amount", Align.RIGHT));
+        }
 
-        List<StockTransferLineDto> lines = dto.lines() != null ? dto.lines() : List.of();
         List<List<String>> rows = new ArrayList<>(lines.size());
-        BigDecimal totalQty   = BigDecimal.ZERO;
-        BigDecimal totalValue = BigDecimal.ZERO;
-        boolean anyValued     = false;
-        int unvalued          = 0;
+        BigDecimal totalQty     = BigDecimal.ZERO;
+        BigDecimal totalValue   = BigDecimal.ZERO;
+        BigDecimal totalEntered = BigDecimal.ZERO;
+        boolean anyValued       = false;
+        int unvalued            = 0;
+        int notEntered          = 0;
         for (StockTransferLineDto l : lines) {
-            rows.add(List.of(
+            List<String> row = new ArrayList<>(List.of(
                     nullToEmpty(l.productCode()),
                     nullToEmpty(l.productName()),
                     nullToEmpty(l.unitName()),
                     fmtQty(l.qtyTransferred()),
                     fmtMoney(l.unitCost()),
                     fmtMoney(l.valueAmount())));
+            if (withEntered) {
+                row.add(fmtMoney(l.enteredUnitCost()));
+                row.add(fmtMoney(l.enteredValue()));
+            }
+            rows.add(row);
             if (l.qtyTransferred() != null) {
                 totalQty = totalQty.add(l.qtyTransferred());
             }
@@ -259,6 +279,11 @@ public class StockTransferController {
                 anyValued = true;
             } else {
                 unvalued++;
+            }
+            if (l.enteredValue() != null) {
+                totalEntered = totalEntered.add(l.enteredValue());
+            } else {
+                notEntered++;
             }
         }
 
@@ -270,9 +295,13 @@ public class StockTransferController {
         //
         // An uncosted line prints blank, never 0.00, and the foot says how many it left out — a
         // total that silently drops them would understate what is moving.
-        List<String> totalsRow = List.of(
+        List<String> totalsRow = new ArrayList<>(List.of(
                 "", "Total Amount", "", fmtQty(totalQty), "",
-                anyValued ? fmtMoney(totalValue) : "");
+                anyValued ? fmtMoney(totalValue) : ""));
+        if (withEntered) {
+            totalsRow.add("");
+            totalsRow.add(fmtMoney(totalEntered));
+        }
 
         // The foot carries INFORMATION only. No sign-off rules and no Net/Vat/Rounding block: the
         // client's own note has them, but a transfer charges nobody, so a "Vat Amount: 0.00" line
@@ -283,6 +312,16 @@ public class StockTransferController {
                     + (lines.size() == 1 ? " line has" : " lines have")
                     + " no cost on record, and " + (unvalued == 1 ? "is" : "are")
                     + " left out of the total value.");
+        }
+        if (withEntered) {
+            footerLines.add("Entered Price and Entered Amount are the costs typed on this transfer,"
+                    + " for reference only. Stock is valued at the System Price."
+                    + (notEntered > 0
+                        ? " " + notEntered + " of " + lines.size()
+                            + (lines.size() == 1 ? " line has" : " lines have")
+                            + " no entered cost and " + (notEntered == 1 ? "is" : "are")
+                            + " left out of the entered total."
+                        : ""));
         }
         ZonedDateTime now = calendar.now(dto.companyId());
         footerLines.add(printFootprint(company, now));

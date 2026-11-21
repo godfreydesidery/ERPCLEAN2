@@ -7,10 +7,14 @@ import '../services/catalog_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
+import 'create_item_screen.dart' show StockTrackingSwitch;
 import 'master_pickers.dart';
 
 /// Edit an existing item: name, description, department, supplier, cost
-/// price, selling price and VAT; or deactivate it.
+/// price, selling price, VAT and whether stock is tracked; or deactivate it.
+///
+/// Turning stock tracking off is refused by the server while the item still
+/// has stock on hand anywhere in the company; its message is shown as is.
 ///
 /// The code and the counting unit are not edited here. The code never
 /// changes (BR-PROD-02), and changing the unit under existing prices is
@@ -118,6 +122,7 @@ class _EditFormState extends State<_EditForm> {
   late final _price = TextEditingController(text: _fmt(widget.data.basePrice));
   late String _department = _p.category;
   late bool _vatable = _p.isVatable;
+  late bool _stockable = _p.isStockable;
 
   /// The supplier the screen shows. [_supplierChanged] says whether the owner
   /// touched it; untouched, the stored one is sent back as it was.
@@ -163,6 +168,7 @@ class _EditFormState extends State<_EditForm> {
         description: _description.text.trim(),
         category: _department,
         vatable: _vatable,
+        stockable: _stockable,
         cost: cost != null && cost >= 0 ? cost : null,
         currency: _p.costCurrency ?? _currency,
         preferredSupplierId: _supplierChanged
@@ -350,6 +356,18 @@ class _EditFormState extends State<_EditForm> {
             ),
           ),
           subtitle: Text(_vatable ? 'Taxed' : 'Exempt', style: HqText.tiny),
+        ),
+        StockTrackingSwitch(
+          value: _stockable,
+          // A service is never stock-tracked (the server refuses it).
+          onChanged:
+              _p.isService ? null : (v) => setState(() => _stockable = v),
+          subtitle: _p.isService
+              ? 'Services are never stock-tracked.'
+              : _p.isStockable && !_stockable
+                  ? 'Only possible once its stock is zero — sales will stop '
+                      'reducing stock'
+                  : null,
         ),
         const SizedBox(height: 22),
         FilledButton(

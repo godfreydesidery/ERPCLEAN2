@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../app/theme.dart';
 import '../../core/api/api_exception.dart';
@@ -9,6 +10,7 @@ import '../../core/money.dart';
 import '../../models/auth.dart';
 import '../../models/context.dart';
 import '../../models/sale.dart';
+import '../../models/sale_return.dart';
 import '../../offline/offline_controller.dart';
 import '../../services/receipt_printer.dart';
 import '../../state/app_controller.dart';
@@ -17,6 +19,7 @@ import '../../state/receipt_journal.dart';
 import '../../widgets/ui.dart';
 import '../auth/approval_dialog.dart';
 import 'receipt_text.dart';
+import 'return_items_dialog.dart';
 
 /// Shows a printed-style receipt built from the finalised invoice (the receipt
 /// of record, AS-8). Reprint/gift never re-post (G-8); reverse is gated.
@@ -96,7 +99,42 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
   /// authoritative record is the server's audit row.
   String? _reversedBy;
 
+  /// ERP ADR-0072: items of this sale have been returned. Seeded from the
+  /// invoice and set again by a return made from this dialog. Once true the
+  /// whole-sale *Refund / reverse* is hidden — the server refuses it.
+  late bool _hasReturns = r.invoice.hasReturns;
+  late double _returnedGross = r.invoice.returnedGross;
+
+  /// The sale's returns, for the list with *Reprint slip*. Loaded only when the
+  /// sale has returns; null until then (or when the read failed).
+  List<PosSaleReturn>? _returns;
+  String? _reprintingUid;
+
   Receipt get r => widget.receipt;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_hasReturns && !r.invoice.awaitingSync) _loadReturns();
+  }
+
+  /// Refreshes the returns summary from the server. Advisory display only: a
+  /// failure (offline, an older server) keeps whatever the dialog already shows.
+  Future<void> _loadReturns() async {
+    try {
+      final d = await ref.read(saleServiceProvider).getReturns(r.invoice.uid);
+      if (!mounted) return;
+      setState(() {
+        _returns = d.returns;
+        if (d.hasReturns) {
+          _hasReturns = true;
+          _returnedGross = d.returnedGross;
+        }
+      });
+    } catch (_) {
+      // Leave the stamp as it is; the server re-checks every action anyway.
+    }
+  }
 
   /// The CASHIER line: whoever rang the sale. Straight after a sale that is the
   /// signed-in user; on a reprint it is only ever the name the server recorded,
@@ -126,13 +164,18 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
     // ERP ADR-0068 D-3: no reversals or refunds offline, and none of a sale the
     // server has not posted yet — there is nothing on the server to reverse.
     final offline = ref.watch(offlineControllerProvider.select((s) => s.offline));
-    final canReverse = (app.can(Perms.saleVoid) || supervisor) &&
+    // ERP ADR-0072: Return items follows exactly the reverse rules (same gate,
+    // same own-shift rule, open shift, online, posted, not reversed)...
+    final canReturn = (app.can(Perms.saleVoid) || supervisor) &&
         (supervisor || ownShift) &&
         (app.shift?.status.isOpen ?? false) &&
         !_reversed &&
         !r.invoice.status.isVoid &&
         !offline &&
         !r.invoice.awaitingSync;
+    // ...and once any item has gone back, the whole-sale reverse is refused by
+    // the server ("Return the remaining items with Return items"), so it goes.
+    final canReverse = canReturn && !_hasReturns;
     final voided = _reversed || r.invoice.status.isVoid;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: AppRadii.brLg),
@@ -168,7 +211,13 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(8),
-                child: _receiptBody(app),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_hasReturns && !voided) _returnsPanel(),
+                    _receiptBody(app),
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1),
@@ -196,18 +245,33 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
                       ),
                     ],
                   ),
+                  if (canReturn) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OrbixButton(
+                              label: 'Return items',
+                              icon: Icons.assignment_return_outlined,
+                              kind: BtnKind.ghost,
+                              onPressed: _returnItems),
+                        ),
+                        if (canReverse) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OrbixButton(
+                                label: 'Refund / reverse',
+                                icon: Icons.undo,
+                                kind: BtnKind.danger,
+                                onPressed: _reverse),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      if (canReverse)
-                        Expanded(
-                          child: OrbixButton(
-                              label: 'Refund / reverse',
-                              icon: Icons.undo,
-                              kind: BtnKind.danger,
-                              onPressed: _reverse),
-                        ),
-                      if (canReverse) const SizedBox(width: 8),
                       Expanded(
                         child: OrbixButton(
                             label: 'Done',
@@ -222,6 +286,112 @@ class _ReceiptDialogState extends ConsumerState<_ReceiptDialog> {
         ),
       ),
     );
+  }
+
+  /// The "items returned" stamp above the receipt: how much has gone back in
+  /// cash, and each return with a *Reprint slip* action.
+  Widget _returnsPanel() {
+    final cur = r.invoice.currency;
+    final returns = _returns ?? const <PosSaleReturn>[];
+    final tf = DateFormat('HH:mm');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 6),
+      decoration: BoxDecoration(
+        color: AppColors.warnSoft,
+        borderRadius: AppRadii.brSm,
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.assignment_return_outlined,
+                  size: 18, color: AppColors.warn),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                    _returnedGross > 0
+                        ? 'Returned: ${formatMoneyParts(_returnedGross, cur)}'
+                        : 'Items on this sale were returned',
+                    key: const Key('receipt-returned'),
+                    style: const TextStyle(
+                        color: AppColors.warn, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+          for (final ret in returns)
+            Row(
+              children: [
+                const SizedBox(width: 26),
+                Expanded(
+                  child: Text(
+                      [
+                        ret.returnNo,
+                        if (ret.createdAt != null)
+                          tf.format(ret.createdAt!.toLocal()),
+                        formatMoneyParts(ret.grossAmount,
+                            ret.currency.isEmpty ? cur : ret.currency),
+                      ].join('  ·  '),
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                if (_reprintingUid == ret.uid)
+                  const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2)))
+                else
+                  IconButton(
+                      tooltip: 'Reprint slip',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _reprintingUid == null
+                          ? () => _reprintSlip(ret.uid)
+                          : null,
+                      icon: const Icon(Icons.print_outlined, size: 20)),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Reprints one return's refund slip, read fresh from the server, marked as a
+  /// copy so it can never pass as a second refund.
+  Future<void> _reprintSlip(String returnUid) async {
+    setState(() => _reprintingUid = returnUid);
+    try {
+      final ret = await ref.read(saleServiceProvider).getReturn(returnUid);
+      if (!mounted) return;
+      await printRefundSlip(context, ref, ret, copy: true);
+    } on ApiException catch (e) {
+      if (mounted) showToast(context, returnErrorText(e));
+    } finally {
+      if (mounted) setState(() => _reprintingUid = null);
+    }
+  }
+
+  /// Opens *Return items*. A completed return hides *Refund / reverse* at once,
+  /// stamps the local journal, and refreshes the returns list from the server —
+  /// also after a cancelled or unresolved attempt, which may have landed.
+  Future<void> _returnItems() async {
+    final ret = await showReturnItemsDialog(context, ref, invoice: r.invoice);
+    if (!mounted) return;
+    if (ret != null) {
+      setState(() {
+        _hasReturns = true;
+        _returnedGross += ret.grossAmount;
+        _returns = [...?_returns, ret];
+      });
+    }
+    await _loadReturns();
+    if (mounted && _hasReturns) {
+      await ref
+          .read(receiptJournalProvider)
+          .markReturned(r.invoice.uid, _returnedGross);
+    }
   }
 
   /// The on-screen receipt is the printed text itself, rendered monospaced at

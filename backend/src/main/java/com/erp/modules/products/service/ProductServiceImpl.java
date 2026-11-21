@@ -246,6 +246,17 @@ public class ProductServiceImpl implements ProductService {
         // Defect 6b: SERVICE products cannot be stockable — clear message before DB CHECK fires.
         assertServiceNotStockable(req.type(), req.stockable());
 
+        // Owner ruling 2026-11-21: an item cannot become non-stock while it still holds stock
+        // anywhere in its company. Once non-stock, sales stop moving it, so that quantity (and its
+        // value) would sit on the books untouched forever. Covers the bulk-import update path too,
+        // which goes through this method.
+        if (p.isStockable() && !req.stockable()
+                && stock.hasStockOnHand(p.getCompanyId(), p.getId())) {
+            throw new ConflictException(
+                    "This item still has stock on hand. Adjust its stock to zero before marking it "
+                            + "non-stock.");
+        }
+
         // Resolve baseUnitUid scoped to the product's company (cross-tenant safe)
         UnitOfMeasure previousBaseUnit = p.getBaseUnit();
         UnitOfMeasure baseUnit = resolveUnit(p.getCompanyId(), req.baseUnitUid());

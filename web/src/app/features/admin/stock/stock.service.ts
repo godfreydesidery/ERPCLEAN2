@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiResponse, PageMeta } from '../../../core/api/api-response.model';
-import { SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
+import { SILENT_ERROR, SKIP_UNWRAP } from '../../../core/api/http-context.tokens';
 import { environment } from '../../../../environments/environment';
 import {
   AdjustStockRequest,
@@ -163,9 +163,12 @@ export class StockService {
    * scanned barcode). Gated PRODUCT.VIEW + STOCK.VIEW; the cost column additionally needs
    * INVENTORY.VALUATION.VIEW, which the response reports via `costVisible`.
    */
-  itemInquiry(q: string, branchUid?: string | null): Observable<ItemInquiryDto> {
+  itemInquiry(q: string, branchUid?: string | null, silent = false): Observable<ItemInquiryDto> {
     let params = new HttpParams().set('q', q);
     if (branchUid?.trim()) params = params.set('branchUid', branchUid.trim());
-    return this.http.get<ItemInquiryDto>(`${this.base}/item-inquiry`, { params });
+    // `silent` is for background lookups (e.g. prefilling a cost) whose failure the screen simply
+    // ignores — they must not raise the global error modal over a form the user is filling in.
+    const context = new HttpContext().set(SILENT_ERROR, silent);
+    return this.http.get<ItemInquiryDto>(`${this.base}/item-inquiry`, { params, context });
   }
 }

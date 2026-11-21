@@ -23,9 +23,12 @@ import com.erp.modules.products.service.UnitOfMeasureService;
 import com.erp.modules.stock.domain.dto.CreateStockTransferRequest;
 import com.erp.modules.stock.domain.dto.StockTransferDto;
 import com.erp.modules.stock.domain.entity.StockLocation;
+import com.erp.modules.stock.domain.entity.StockMovement;
 import com.erp.modules.stock.domain.entity.StockOnHand;
+import com.erp.modules.stock.domain.enums.MovementType;
 import com.erp.modules.stock.domain.enums.StockTransferStatus;
 import com.erp.modules.stock.repository.StockLocationRepository;
+import com.erp.modules.stock.repository.StockMovementRepository;
 import com.erp.modules.stock.repository.StockOnHandRepository;
 import com.erp.platform.events.DomainEvent;
 import com.erp.platform.events.DomainEventDispatcher;
@@ -64,6 +67,7 @@ class StockTransferCrossBranchIT extends PostgresIntegrationTest {
     @Autowired private LocationResolver        locationResolver;
     @Autowired private StockLocationRepository locations;
     @Autowired private StockOnHandRepository   onHands;
+    @Autowired private StockMovementRepository movements;
     @Autowired private ProductService          productService;
     @Autowired private UnitOfMeasureService    unitService;
     @Autowired private DomainEventRepository   domainEvents;
@@ -149,7 +153,7 @@ class StockTransferCrossBranchIT extends PostgresIntegrationTest {
 
         StockTransferDto draft = transferService.create(new CreateStockTransferRequest(
                 darMain.getUid(), arushaMain.getUid(), LocalDate.now(), "IN_TRANSIT", null,
-                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), MOVED_QTY, null))));
+                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), MOVED_QTY, null, null))));
 
         // --- Dispatch: source down, goods parked in Arusha's in-transit under ARUSHA ---
         transferService.dispatch(draft.uid());
@@ -187,7 +191,7 @@ class StockTransferCrossBranchIT extends PostgresIntegrationTest {
     void instantAcrossBranches_destinationGetsQtyValueAndTheSourceAvgCost() {
         StockTransferDto draft = transferService.create(new CreateStockTransferRequest(
                 darMain.getUid(), arushaMain.getUid(), LocalDate.now(), "INSTANT", null,
-                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), MOVED_QTY, null))));
+                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), MOVED_QTY, null, null))));
 
         StockTransferDto done = transferService.completeInstant(draft.uid());
 
@@ -199,14 +203,53 @@ class StockTransferCrossBranchIT extends PostgresIntegrationTest {
         assertAvg(arusha, arushaMain.getId(), AVG_COST);
     }
 
+    /**
+     * V116 (owner 2026-11-21): a typed unit cost is REFERENCE ONLY. It round-trips through the real
+     * column, and the movements and on-hand values are exactly what the same transfer without it
+     * produces (the test above) — the moving average, not the typed figure (ADR-0028 D-2/D-5).
+     */
+    @Test
+    void instant_enteredUnitCostRoundTripsButNeverReachesMovementsOrValuation() {
+        BigDecimal entered = new BigDecimal("999.123456");   // far from the 250 average, 6 dp in
+
+        StockTransferDto draft = transferService.create(new CreateStockTransferRequest(
+                darMain.getUid(), arushaMain.getUid(), LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), MOVED_QTY, null, entered))));
+        transferService.completeInstant(draft.uid());
+
+        // Round-trip through the database, rounded HALF_UP to 4 dp.
+        StockTransferDto reread = transferService.getByUid(draft.uid());
+        assertThat(reread.lines().get(0).enteredUnitCost()).isEqualByComparingTo("999.1235");
+        assertThat(reread.lines().get(0).enteredValue())
+                .isEqualByComparingTo(new BigDecimal("999.1235").multiply(MOVED_QTY));
+        // The system figures are untouched by it.
+        assertThat(reread.lines().get(0).unitCost()).isEqualByComparingTo(AVG_COST);
+        assertThat(reread.lines().get(0).valueAmount()).isEqualByComparingTo(MOVED_QTY.multiply(AVG_COST));
+
+        // Movements carry the average cost, not the entered one.
+        for (MovementType type : List.of(MovementType.TRANSFER_OUT, MovementType.TRANSFER_IN)) {
+            List<StockMovement> moves = movements.findBySourceDocumentUidAndMovementType(draft.uid(), type);
+            assertThat(moves).as(type + " movements").hasSize(1);
+            assertThat(moves.get(0).getUnitCostAmount()).as(type + " unit cost").isEqualByComparingTo(AVG_COST);
+            assertThat(moves.get(0).getValueAmount().abs()).as(type + " value")
+                    .isEqualByComparingTo(MOVED_QTY.multiply(AVG_COST));
+        }
+
+        // On-hand value and avg are exactly the no-entered-cost outcome.
+        assertValue(dar, darMain.getId(), OPENING_QTY.subtract(MOVED_QTY).multiply(AVG_COST));
+        assertValue(arusha, arushaMain.getId(), MOVED_QTY.multiply(AVG_COST));
+        assertAvg(arusha, arushaMain.getId(), AVG_COST);
+        assertAvg(dar, darMain.getId(), AVG_COST);
+    }
+
     @Test
     void list_filtersByDirectionStatusDateAndNumber_newestFirst_stk19() {
         StockTransferDto older = transferService.create(new CreateStockTransferRequest(
                 darMain.getUid(), arushaMain.getUid(), LocalDate.now().minusDays(3), "INSTANT", null,
-                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), BigDecimal.ONE, null))));
+                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), BigDecimal.ONE, null, null))));
         StockTransferDto newer = transferService.create(new CreateStockTransferRequest(
                 darMain.getUid(), arushaMain.getUid(), LocalDate.now(), "INSTANT", null,
-                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), BigDecimal.ONE, null))));
+                List.of(new CreateStockTransferRequest.LineRequest(product.uid(), BigDecimal.ONE, null, null))));
         transferService.cancel(older.uid());
 
         org.springframework.data.domain.Pageable newestFirst = org.springframework.data.domain.PageRequest.of(

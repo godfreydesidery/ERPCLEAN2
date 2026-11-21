@@ -186,8 +186,15 @@
                   <th scope="col">Product</th>
                   <th scope="col">Unit</th>
                   <th scope="col" class="num">Qty</th>
-                  <th scope="col" class="num">Price</th>
-                  <th scope="col" class="num">Value</th>
+                  @if (hasEnteredCost()) {
+                    <th scope="col" class="num">System price</th>
+                    <th scope="col" class="num">System value</th>
+                    <th scope="col" class="num">Entered price</th>
+                    <th scope="col" class="num">Entered value</th>
+                  } @else {
+                    <th scope="col" class="num">Price</th>
+                    <th scope="col" class="num">Value</th>
+                  }
                   <th scope="col">Currency</th>
                 </tr>
               </thead>
@@ -215,6 +222,23 @@
                         {{ +line.valueAmount | number:'1.2-2' }}
                       }
                     </td>
+                    <!-- V116: what the user typed, for reference only; not entered stays a dash. -->
+                    @if (hasEnteredCost()) {
+                      <td class="num">
+                        @if (line.enteredUnitCost === null || line.enteredUnitCost === undefined) {
+                          <span class="text-muted" title="No cost was entered on this line">—</span>
+                        } @else {
+                          {{ +line.enteredUnitCost | number:'1.2-2' }}
+                        }
+                      </td>
+                      <td class="num">
+                        @if (line.enteredValue === null || line.enteredValue === undefined) {
+                          <span class="text-muted">—</span>
+                        } @else {
+                          {{ +line.enteredValue | number:'1.2-2' }}
+                        }
+                      </td>
+                    }
                     <td>{{ line.currency ?? '—' }}</td>
                   </tr>
                 }
@@ -231,11 +255,29 @@
                       <strong>{{ totalValue() | number:'1.2-2' }}</strong>
                     }
                   </td>
+                  @if (hasEnteredCost()) {
+                    <td></td>
+                    <td class="num">
+                      @if (totalEnteredValue() === null) {
+                        <span class="text-muted">—</span>
+                      } @else {
+                        <strong>{{ totalEnteredValue() | number:'1.2-2' }}</strong>
+                      }
+                    </td>
+                  }
                   <td>{{ t.lines[0].currency ?? '' }}</td>
                 </tr>
+                @if (hasEnteredCost()) {
+                  <tr>
+                    <td colspan="10" class="small text-muted">
+                      Entered price and value are the costs typed on this transfer, for reference
+                      only. Stock is valued at the system price.
+                    </td>
+                  </tr>
+                }
                 @if (unvaluedLineCount() > 0) {
                   <tr>
-                    <td colspan="8" class="small text-muted">
+                    <td [attr.colspan]="hasEnteredCost() ? 10 : 8" class="small text-muted">
                       {{ unvaluedLineCount() }} of {{ t.lines.length }}
                       {{ t.lines.length === 1 ? 'line has' : 'lines have' }} no cost on record, so
                       the total above leaves {{ unvaluedLineCount() === 1 ? 'it' : 'them' }} out.

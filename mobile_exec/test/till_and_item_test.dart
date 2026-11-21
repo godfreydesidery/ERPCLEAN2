@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:orbix_hq/app/theme.dart';
+import 'package:orbix_hq/features/create_item_screen.dart';
 import 'package:orbix_hq/features/till_z.dart';
 import 'package:orbix_hq/services/catalog_service.dart';
 import 'package:orbix_hq/services/operations_service.dart';
@@ -133,6 +134,7 @@ void main() {
       double? cost,
       String? supplierId,
       bool clearSupplier = false,
+      bool? stockable,
     }) =>
         productUpdateBody(
           p,
@@ -143,6 +145,7 @@ void main() {
           cost: cost,
           preferredSupplierId: supplierId,
           clearSupplier: clearSupplier,
+          stockable: stockable,
         );
 
     test('every field the PUT replaces is sent', () {
@@ -183,12 +186,55 @@ void main() {
       expect(body(product(), vatable: false)['vatStatus'], 'EXEMPT');
     });
 
+    test('stock tracking: untouched keeps it, the switch sets it', () {
+      expect(product().isStockable, isTrue);
+      expect(body(product())['stockable'], isTrue);
+      expect(body(product(), stockable: false)['stockable'], isFalse);
+      expect(body(product(), stockable: true)['stockable'], isTrue);
+    });
+
     test('supplier: keep, change or clear', () {
       expect(body(product(), supplierId: '77')['preferredSupplierId'], '77');
       expect(body(product(), supplierId: '88')['preferredSupplierId'], '88');
       final cleared = body(product(), clearSupplier: true);
       expect(cleared.containsKey('preferredSupplierId'), isFalse);
       expect(cleared['clearFields'], ['preferredSupplierId']);
+    });
+  });
+
+  group('track stock switch', () {
+    Future<void> pump(WidgetTester tester, Widget w) => tester.pumpWidget(
+          MaterialApp(
+            theme: buildHqTheme(),
+            home: Scaffold(body: ListView(children: [w])),
+          ),
+        );
+
+    testWidgets('explains itself and reports a toggle', (tester) async {
+      bool? got;
+      await pump(
+        tester,
+        StockTrackingSwitch(value: true, onChanged: (v) => got = v),
+      );
+      expect(find.text('Track stock'), findsOneWidget);
+      expect(find.textContaining('services or items made to order'),
+          findsOneWidget);
+      await tester.tap(find.byType(Switch));
+      expect(got, isFalse);
+    });
+
+    testWidgets('is locked when there is no handler', (tester) async {
+      await pump(
+        tester,
+        const StockTrackingSwitch(
+          value: false,
+          onChanged: null,
+          subtitle: 'Services are never stock-tracked.',
+        ),
+      );
+      expect(find.text('Services are never stock-tracked.'), findsOneWidget);
+      final sw = tester.widget<Switch>(find.byType(Switch));
+      expect(sw.onChanged, isNull);
     });
   });
 }

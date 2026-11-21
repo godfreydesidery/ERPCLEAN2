@@ -18,6 +18,7 @@ import {
   StockLocationDto,
 } from './stock-transfer.model';
 import { StockTransferService } from './stock-transfer.service';
+import { StockService } from '../stock.service';
 
 interface LineEntry {
   productUid: string;
@@ -27,11 +28,30 @@ interface LineEntry {
   /** The units this product may be counted in — base first, then its configured pack sizes. */
   units: UnitOfMeasureDto[];
   unitsState: 'idle' | 'loading' | 'error';
+  /**
+   * Optional unit cost per ONE of `unitUid` (V116) — reference only, printed on the transfer, never
+   * used to value the stock. Empty = not entered.
+   */
+  unitCost: string;
+  /** True once the user has typed in the cost box; a typed value is never overwritten by prefill. */
+  costTouched: boolean;
+  /** The product's average cost per BASE unit, when the caller may see it; null = unknown/hidden. */
+  baseAvgCost: number | null;
+  /** Pack unit uid → factorToBase, for converting the base average into the chosen unit. */
+  packFactors: Record<string, number>;
 }
 
 /** A fresh, empty line. Units arrive only once a product is chosen. */
 function blankLine(): LineEntry {
-  return { productUid: '', qty: '', unitUid: '', units: [], unitsState: 'idle' };
+  return {
+    productUid: '', qty: '', unitUid: '', units: [], unitsState: 'idle',
+    unitCost: '', costTouched: false, baseAvgCost: null, packFactors: {},
+  };
+}
+
+/** Cost at 4 dp (the backend's scale), without trailing zeros, as the input's string value. */
+function costString(n: number): string {
+  return String(Number(n.toFixed(4)));
 }
 
 /**
@@ -60,6 +80,7 @@ export class StockTransferCreateComponent {
   private readonly branchService = inject(BranchService);
   private readonly orgService = inject(OrganisationService);
   private readonly productService = inject(ProductService);
+  private readonly stockService = inject(StockService);
   private readonly alerts = inject(AlertService);
   private readonly router = inject(Router);
   protected readonly session = inject(SessionStore);
@@ -118,6 +139,22 @@ export class StockTransferCreateComponent {
 
   readonly canCreate = computed(() => this.session.hasPermission('STOCK.TRANSFER.CREATE'));
 
+  /**
+   * Whether the unit-cost box may be prefilled with the product's average cost. The source is the
+   * Item Inquiry lookup (PRODUCT.VIEW + STOCK.VIEW), which only reveals cost to holders of
+   * INVENTORY.VALUATION.VIEW — so without all three there is nothing to ask for, and the box simply
+   * starts blank. The server enforces the same rule; this only spares a pointless request.
+   */
+  readonly canPrefillCost = computed(
+    () =>
+      this.session.hasPermission('INVENTORY.VALUATION.VIEW') &&
+      this.session.hasPermission('STOCK.VIEW') &&
+      this.session.hasPermission('PRODUCT.VIEW'),
+  );
+
+  /** Product uid → code, from every product list this screen has seen (the cost lookup is by code). */
+  private readonly productCodes = new Map<string, string>();
+
   constructor() {
     this.loadContext();
   }
@@ -164,7 +201,10 @@ export class StockTransferCreateComponent {
   private loadProducts(companyId: string): void {
     this.productsUnavailable.set(false);
     this.productService.list(companyId, '', 0, 200).subscribe({
-      next: ({ rows }) => this.products.set(rows.filter((p) => p.status !== 'ARCHIVED')),
+      next: ({ rows }) => {
+        rows.forEach((p) => this.productCodes.set(p.uid, p.code));
+        this.products.set(rows.filter((p) => p.status !== 'ARCHIVED'));
+      },
       error: () => { this.products.set([]); this.productsUnavailable.set(true); },
     });
   }
@@ -179,6 +219,10 @@ export class StockTransferCreateComponent {
       map(({ rows }) =>
         rows
           .filter((p) => p.status !== 'ARCHIVED')
+          .map((p) => {
+            this.productCodes.set(p.uid, p.code);
+            return p;
+          })
           .map((p) => ({ uid: p.uid, label: p.name, hint: p.code })),
       ),
     );
@@ -219,12 +263,83 @@ export class StockTransferCreateComponent {
     // A new product invalidates the unit beside it: "Carton" on the old product means nothing on
     // the new one, and leaving it there would submit a unit the backend refuses — or worse, one it
     // accepts with a different factor.
+    // The previous product's average and pack factors go with it. A cost the user TYPED stays —
+    // it is theirs to change — but a prefilled one is cleared so it cannot outlive its product.
     this.lines.update((ls) => {
       const copy = [...ls];
-      copy[index] = { ...copy[index], productUid: uid, unitUid: '', units: [], unitsState: 'idle' };
+      const prev = copy[index];
+      copy[index] = {
+        ...prev, productUid: uid, unitUid: '', units: [], unitsState: 'idle',
+        baseAvgCost: null, packFactors: {},
+        unitCost: prev.costTouched ? prev.unitCost : '',
+      };
       return copy;
     });
-    if (uid) this.loadUnitsForLine(index, uid);
+    if (uid) {
+      this.loadUnitsForLine(index, uid);
+      this.loadCostForLine(index, uid);
+    }
+  }
+
+  /**
+   * Prefill source for the unit-cost box: the product's average cost per BASE unit, from the Item
+   * Inquiry lookup (company-wide, the same moving average the transfer itself is valued at), plus
+   * the product's pack factors so the average can be quoted per carton when a carton is chosen.
+   *
+   * Every failure is silent and leaves the box blank: no permission (403, or `costVisible` false),
+   * a product never costed (null), or a lookup that did not find the product. The cost is optional
+   * and for reference — nothing here may stand in the way of raising the transfer.
+   */
+  private loadCostForLine(index: number, productUid: string): void {
+    if (!this.canPrefillCost()) return;
+    const code = this.productCodes.get(productUid);
+    if (!code) return;
+
+    this.stockService.itemInquiry(code, null, true).subscribe({
+      next: (res) => {
+        const row = res.costVisible ? res.rows.find((r) => r.productUid === productUid) : undefined;
+        const raw = row?.buyingPrice;
+        const avg = raw === null || raw === undefined || raw === '' ? NaN : +raw;
+        if (!Number.isFinite(avg) || avg < 0) return;
+        if (this.lines()[index]?.productUid !== productUid) return;   // superseded
+        this.patchLine(index, { baseAvgCost: avg });
+        this.applyCostPrefill(index);
+      },
+      error: () => { /* silent: the box stays blank */ },
+    });
+
+    this.productService.listBulkPacks(productUid).subscribe({
+      next: (packs) => {
+        if (this.lines()[index]?.productUid !== productUid) return;
+        const packFactors: Record<string, number> = {};
+        for (const p of packs) {
+          const f = +p.factorToBase;
+          if (Number.isFinite(f) && f > 0) packFactors[p.unitUid] = f;
+        }
+        this.patchLine(index, { packFactors });
+        this.applyCostPrefill(index);
+      },
+      error: () => { /* silent: a pack unit then gets no prefill */ },
+    });
+  }
+
+  /**
+   * Puts the average cost, converted to the line's unit (avg per base × the unit's factorToBase),
+   * into the cost box — but only while the user has not typed there. A unit whose factor is not
+   * known yet (or at all) clears a stale prefill rather than leaving the wrong unit's figure.
+   */
+  private applyCostPrefill(index: number): void {
+    const line = this.lines()[index];
+    if (!line || line.costTouched) return;
+    if (line.baseAvgCost === null) {
+      if (line.unitCost !== '') this.patchLine(index, { unitCost: '' });
+      return;
+    }
+    const baseUid = line.units[0]?.uid ?? '';
+    const factor =
+      !line.unitUid || line.unitUid === baseUid ? 1 : (line.packFactors[line.unitUid] ?? null);
+    const next = factor === null ? '' : costString(line.baseAvgCost * factor);
+    if (next !== line.unitCost) this.patchLine(index, { unitCost: next });
   }
 
   /**
@@ -247,6 +362,7 @@ export class StockTransferCreateComponent {
           unitUid: units.length > 0 ? units[0].uid : '',
           unitsState: 'idle',
         });
+        this.applyCostPrefill(index);
       },
       error: () => {
         const current = this.lines()[index];
@@ -258,6 +374,19 @@ export class StockTransferCreateComponent {
 
   updateLineUnit(index: number, unitUid: string): void {
     this.patchLine(index, { unitUid });
+    // A different unit means a different price per unit — re-quote it, unless the user typed one.
+    this.applyCostPrefill(index);
+  }
+
+  /**
+   * The user typed in the cost box: from now on prefill leaves it alone. Clearing it back to empty
+   * hands it back to prefill, which only acts on the next product or unit change — so a cleared box
+   * stays blank until then, which is what clearing it meant.
+   */
+  updateLineCost(index: number, cost: string | number | null): void {
+    // ngModel on type="number" emits a JS number (or null when emptied); keep the model a string.
+    const costStr = cost === null || cost === undefined ? '' : String(cost);
+    this.patchLine(index, { unitCost: costStr, costTouched: costStr.trim() !== '' });
   }
 
   private patchLine(index: number, patch: Partial<LineEntry>): void {
@@ -329,6 +458,13 @@ export class StockTransferCreateComponent {
         this.formError.set(`Line ${i + 1}: quantity must be a positive number.`);
         return;
       }
+      if (line.unitCost.trim() !== '') {
+        const costNum = Number(line.unitCost);
+        if (isNaN(costNum) || costNum < 0) {
+          this.formError.set(`Line ${i + 1}: unit cost must be zero or more, or left blank.`);
+          return;
+        }
+      }
     }
 
     this.saving.set(true);
@@ -345,6 +481,8 @@ export class StockTransferCreateComponent {
         qty: l.qty,
         // Omitted rather than sent empty: the backend reads absent as "the product's base unit".
         ...(l.unitUid ? { unitUid: l.unitUid } : {}),
+        // Reference only (V116). Omitted when blank: absent means "not entered", never zero.
+        ...(l.unitCost.trim() !== '' ? { enteredUnitCost: l.unitCost.trim() } : {}),
       })),
     };
 

@@ -373,7 +373,7 @@ class _AddProductDialogState extends ConsumerState<_AddProductDialog> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Track stock'),
-                subtitle: const Text('Turn off for dishes made to order'),
+                subtitle: const Text('Turn off for services or items made to order'),
                 value: _stockable,
                 onChanged: (v) => setState(() => _stockable = v),
               ),

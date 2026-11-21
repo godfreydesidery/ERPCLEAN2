@@ -29,5 +29,15 @@ public record StockTransferLineDto(
          */
         BigDecimal unitCost,
         BigDecimal valueAmount,
-        String currency
+        String currency,
+        /**
+         * Cost of ONE {@code unitName} as the user typed it when raising the transfer (V116).
+         * REFERENCE ONLY — never used for valuation or GL. Null when nobody entered one.
+         */
+        BigDecimal enteredUnitCost,
+        /**
+         * {@code enteredUnitCost x qtyTransferred}, derived here for the same reason as
+         * {@link #unitCost}: one place does the arithmetic. Null when no cost was entered.
+         */
+        BigDecimal enteredValue
 ) {}
