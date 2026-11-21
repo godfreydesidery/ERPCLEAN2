@@ -37,6 +37,41 @@ class PosReturnAmountsTest {
     }
 
     @Test
+    void oneOfTwoAtAWholeShillingVatInclusivePrice_refundsExactlyThatPrice() {
+        // Found in the 2026-11-21 client-copy rehearsal: 2 cups at 8,000 VAT-inclusive are stored
+        // as net 13,559 + VAT 2,441. Rounding net and VAT apart refunded 6,780 + 1,221 = 8,001 for
+        // the first cup and 7,999 for the second. Gross-first gives 8,000 both times.
+        var first = PosReturnAmounts.slice(d("2"), d("2"), d("13559"), null, d("2441"),
+                BigDecimal.ONE, null, 0);
+        assertThat(first.gross()).isEqualByComparingTo("8000");
+        assertThat(first.vat()).isEqualByComparingTo("1221");
+        assertThat(first.net()).isEqualByComparingTo("6779");
+
+        var last = PosReturnAmounts.slice(d("2"), d("2"), d("13559"), null, d("2441"),
+                BigDecimal.ONE, after(null, first), 0);
+        assertThat(last.gross()).isEqualByComparingTo("8000");
+        assertThat(first.net().add(last.net())).isEqualByComparingTo("13559");
+        assertThat(first.vat().add(last.vat())).isEqualByComparingTo("2441");
+    }
+
+    @Test
+    void everyPartialReturnOfAUnitPricedLine_refundsAWholeMultipleOfTheUnitPrice() {
+        // 7 at 1,180 VAT-inclusive (net 7,000 + VAT 1,260) returned 2 + 4 + 1: each return must be
+        // the shelf price times the quantity, never a shilling either side.
+        BigDecimal soldQty = d("7");
+        PosReturnedLineTotalsDto prior = null;
+        for (String q : new String[] {"2", "4", "1"}) {
+            var s = PosReturnAmounts.slice(soldQty, soldQty, d("7000"), null, d("1260"), d(q),
+                    prior, 0);
+            assertThat(s.gross()).as("refund for " + q)
+                    .isEqualByComparingTo(d("1180").multiply(d(q)));
+            prior = after(prior, s);
+        }
+        assertThat(prior.netAmount()).isEqualByComparingTo("7000");
+        assertThat(prior.vatAmount()).isEqualByComparingTo("1260");
+    }
+
+    @Test
     void theFinalReturnOfALine_takesTheExactRemainder_soThirdsNeverDrift() {
         // 3 units sold for net 1000 / vat 180: a third is 333.33 - three returns must sum back to
         // exactly 1000 and 180, whatever the rounding in between.
