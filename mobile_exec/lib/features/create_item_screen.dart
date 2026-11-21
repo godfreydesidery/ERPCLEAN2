@@ -53,6 +53,10 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
 
   UnitRef? _unit;
   bool _vatable = true;
+
+  /// Off for services and items made to order: sales do not reduce stock and
+  /// no opening stock is taken in.
+  bool _stockable = true;
   bool _busy = false;
 
   /// Units the company actually has, loaded from `/units`. A hard-coded list
@@ -132,7 +136,8 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
   static double? _num(TextEditingController c) =>
       double.tryParse(c.text.trim().replaceAll(',', ''));
 
-  double get _openingValue => _num(_openingQty) ?? 0;
+  /// A non-stock item has no opening stock, whatever is left in the field.
+  double get _openingValue => _stockable ? (_num(_openingQty) ?? 0) : 0;
 
   /// Opening stock is received FROM a supplier, so it needs one.
   bool get _openingNeedsSupplier => _openingValue > 0 && _supplier == null;
@@ -185,6 +190,7 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
         code: _code.text.trim().toUpperCase(),
         baseUnitUid: baseUnit.uid,
         vatable: _vatable,
+        stockable: _stockable,
         description: _description.text.trim(),
         category: _department,
         preferredSupplierId: _supplier?.id,
@@ -290,6 +296,7 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
             ? '${created.name}\n${created.code}\n'
                 '${_soldByLine(baseUnit)}'
                 '${received ? '\n${qty(opening)} ${baseUnit.code} in stock' : ''}'
+                '${_stockable ? '' : '\nNot stock-tracked'}'
             : '${created.name}\n${created.code}\n\n'
                 'Could not save: ${failures.join(', ')}.\n'
                 'Add packs from Pack sizes; bring stock in with '
@@ -446,7 +453,12 @@ class _CreateItemScreenState extends State<CreateItemScreen> {
                       const TextInputType.numberWithOptions(decimal: true),
                   suffixText: currency,
                 ),
-                if (session.can('PURCHASE.RECEIVE.DIRECT')) ...[
+                const SizedBox(height: 12),
+                StockTrackingSwitch(
+                  value: _stockable,
+                  onChanged: (v) => setState(() => _stockable = v),
+                ),
+                if (_stockable && session.can('PURCHASE.RECEIVE.DIRECT')) ...[
                   const SizedBox(height: 16),
                   HqField(
                     label: 'Opening stock'
@@ -643,6 +655,48 @@ class _Notice extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(child: Text(text, style: HqText.body)),
         ],
+      ),
+    );
+  }
+}
+
+/// "Track stock" on/off, shared by the new-item and edit-item screens.
+class StockTrackingSwitch extends StatelessWidget {
+  const StockTrackingSwitch({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+  });
+
+  final bool value;
+
+  /// Null shows the switch disabled.
+  final ValueChanged<bool>? onChanged;
+
+  /// Replaces the default explanation, e.g. why the switch is disabled.
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile.adaptive(
+      value: value,
+      onChanged: onChanged,
+      contentPadding: EdgeInsets.zero,
+      activeThumbColor: HqColors.brand,
+      title: const Text(
+        'Track stock',
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: HqColors.ink,
+        ),
+      ),
+      subtitle: Text(
+        subtitle ??
+            "Turn off for services or items made to order — sales won't "
+                'reduce stock',
+        style: HqText.tiny,
       ),
     );
   }
