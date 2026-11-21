@@ -177,6 +177,12 @@ public class StockTransferServiceImpl implements StockTransferService {
                     null, uom.name(),
                     lineReq.qty(), qtyBase,
                     lineValue, BASE_CURRENCY, principal.userId());
+            // V116: the user's own figure, per ONE of the line's unit. Reference only — stored and
+            // printed, never read by dispatch/receive/completeInstant, which keep pricing off the
+            // company moving average (ADR-0028 D-2/D-5). Same 4 dp HALF_UP as every amount here.
+            if (lineReq.enteredUnitCost() != null) {
+                line.setEnteredUnitCost(lineReq.enteredUnitCost().setScale(SCALE, RM));
+            }
             transferLines.save(line);
         }
 
@@ -521,6 +527,20 @@ public class StockTransferServiceImpl implements StockTransferService {
         return value.divide(qty, SCALE, RM);
     }
 
+    /**
+     * The entered (reference) value of the line — {@code enteredUnitCost x qty}, in the line's own
+     * unit, so it is comparable with {@link #unitCostOf}'s system figure. Null when no cost was
+     * entered: "not entered" is not "free".
+     */
+    private static BigDecimal enteredValueOf(StockTransferLine l) {
+        BigDecimal cost = l.getEnteredUnitCost();
+        BigDecimal qty  = l.getQtyTransferred();
+        if (cost == null || qty == null) {
+            return null;
+        }
+        return cost.multiply(qty).setScale(SCALE, RM);
+    }
+
     private BigDecimal resolveAvgCost(Long companyId, Long productId) {
         // The company-product avg_cost is the same across all location rows (D-2).
         // Find any on-hand row for this product in this company to get the running average.
@@ -543,7 +563,8 @@ public class StockTransferServiceImpl implements StockTransferService {
                         l.getId(), l.getUid(), l.getLineNo(),
                         l.getProductId(), l.getProductCode(), l.getProductName(),
                         l.getUnitName(), l.getQtyTransferred(), l.getQtyTransferredBase(),
-                        unitCostOf(l), l.getValueAmount(), l.getCurrency()))
+                        unitCostOf(l), l.getValueAmount(), l.getCurrency(),
+                        l.getEnteredUnitCost(), enteredValueOf(l)))
                 .toList();
 
         Branch srcBranch = branches.findById(t.getSourceBranchId()).orElse(null);

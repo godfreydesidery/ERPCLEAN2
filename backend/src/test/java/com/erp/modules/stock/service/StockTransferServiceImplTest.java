@@ -147,7 +147,7 @@ class StockTransferServiceImplTest {
                 "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
-                        "PRODUID00000000000000001", new BigDecimal("4"), null))));
+                        "PRODUID00000000000000001", new BigDecimal("4"), null, null))));
 
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
@@ -167,7 +167,7 @@ class StockTransferServiceImplTest {
                 "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
-                        "PRODUID00000000000000001", new BigDecimal("4"), null))));
+                        "PRODUID00000000000000001", new BigDecimal("4"), null, null))));
 
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
@@ -192,7 +192,7 @@ class StockTransferServiceImplTest {
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
                         "PRODUID00000000000000001", new BigDecimal("2"),
-                        "UNITUID00000000000000CTN"))));
+                        "UNITUID00000000000000CTN", null))));
 
         assertThat(saved).hasSize(1);
         assertThat(saved.get(0).getUnitName()).isEqualTo("Carton");
@@ -213,10 +213,75 @@ class StockTransferServiceImplTest {
                 "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
-                        "PRODUID00000000000000001", new BigDecimal("4"), null))));
+                        "PRODUID00000000000000001", new BigDecimal("4"), null, null))));
 
         assertThat(saved.get(0).getUnitName()).isEqualTo("Bottle");
         assertThat(saved.get(0).getQtyTransferredBase()).isEqualByComparingTo("4");
+    }
+
+    // -------------------------------------------------------------------------
+    // V116: the user-entered reference unit cost (owner 2026-11-21)
+    // -------------------------------------------------------------------------
+
+    /**
+     * The typed cost is stored per ONE of the line's unit, rounded HALF_UP to 4 dp like every
+     * other amount in the module — and it changes NOTHING about the system value, which still
+     * comes off the moving average (ADR-0028 D-2/D-5).
+     */
+    @Test
+    void create_storesTheEnteredUnitCostRoundedAndLeavesTheSystemValueAlone() {
+        List<StockTransferLine> saved = stubCreate(new BigDecimal("1500.00"));
+        when(productService.listBulkPacks("PRODUID00000000000000001")).thenReturn(List.of(
+                new ProductBulkPackDto(9L, "PACKUID00000000000000001", 5L,
+                        "UNITUID00000000000000CTN", "CTN", "Carton",
+                        new BigDecimal("12"), null, false, false, List.of())));
+
+        StockTransferDto dto = service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("2"),
+                        "UNITUID00000000000000CTN", new BigDecimal("20000.123456")))));
+
+        assertThat(saved.get(0).getEnteredUnitCost()).isEqualByComparingTo("20000.1235");
+        assertThat(saved.get(0).getEnteredUnitCost().scale()).isEqualTo(4);
+        // The system figure is exactly what it is without an entered cost: 24 pieces x 1500.
+        assertThat(saved.get(0).getValueAmount()).isEqualByComparingTo("36000.00");
+        assertThat(dto.lines().get(0).unitCost()).isEqualByComparingTo("18000");
+        // Entered value = entered cost x qty in the line's own unit (2 cartons).
+        assertThat(dto.lines().get(0).enteredUnitCost()).isEqualByComparingTo("20000.1235");
+        assertThat(dto.lines().get(0).enteredValue()).isEqualByComparingTo("40000.2470");
+    }
+
+    /** Not entered is not free: both entered fields stay null, never 0.00. */
+    @Test
+    void create_leavesTheEnteredCostNullWhenNoneWasTyped() {
+        List<StockTransferLine> saved = stubCreate(new BigDecimal("1500.00"));
+
+        StockTransferDto dto = service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("4"), null, null))));
+
+        assertThat(saved.get(0).getEnteredUnitCost()).isNull();
+        assertThat(dto.lines().get(0).enteredUnitCost()).isNull();
+        assertThat(dto.lines().get(0).enteredValue()).isNull();
+    }
+
+    /** A zero cost is a real answer (e.g. free samples) and round-trips as zero. */
+    @Test
+    void create_acceptsAZeroEnteredCost() {
+        List<StockTransferLine> saved = stubCreate(new BigDecimal("1500.00"));
+
+        StockTransferDto dto = service.create(new CreateStockTransferRequest(
+                "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
+                LocalDate.now(), "INSTANT", null,
+                List.of(new CreateStockTransferRequest.LineRequest(
+                        "PRODUID00000000000000001", new BigDecimal("4"), null, BigDecimal.ZERO))));
+
+        assertThat(saved.get(0).getEnteredUnitCost()).isEqualByComparingTo("0");
+        assertThat(dto.lines().get(0).enteredValue()).isEqualByComparingTo("0");
     }
 
     /**
@@ -234,7 +299,7 @@ class StockTransferServiceImplTest {
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
                         "PRODUID00000000000000001", new BigDecimal("2"),
-                        "UNITUID0000000000000BOGUS")))))
+                        "UNITUID0000000000000BOGUS", null)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Choose the item's own unit or one of its pack sizes");
     }
@@ -311,9 +376,9 @@ class StockTransferServiceImplTest {
                 "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
-                                "PRODUID00000000000000001", new BigDecimal("4"), null),
+                                "PRODUID00000000000000001", new BigDecimal("4"), null, null),
                         new CreateStockTransferRequest.LineRequest(
-                                "PRODUID00000000000000001", new BigDecimal("2"), null)))))
+                                "PRODUID00000000000000001", new BigDecimal("2"), null, null)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("more than one line");
         verify(transfers, never()).save(any());
@@ -331,7 +396,7 @@ class StockTransferServiceImplTest {
                 "SRCLOCUID0000000000000001", "DSTLOCUID0000000000000001",
                 LocalDate.now(), "INSTANT", null,
                 List.of(new CreateStockTransferRequest.LineRequest(
-                        "PRODUID00000000000000002", new BigDecimal("1"), null)))))
+                        "PRODUID00000000000000002", new BigDecimal("1"), null, null)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Delivery fee is not a stock item");
         verify(transfers, never()).save(any());

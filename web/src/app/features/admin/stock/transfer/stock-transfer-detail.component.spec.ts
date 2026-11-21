@@ -232,6 +232,58 @@ describe('StockTransferDetailComponent — line value', () => {
 
     expect(fixture.componentInstance.totalValue()).toBeNull();
   });
+
+  // ── V116: the entered (reference) unit cost ────────────────────────────────
+
+  function headers(fixture: { nativeElement: unknown }): string[] {
+    return Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('thead th'))
+      .map((th) => th.textContent?.trim() ?? '');
+  }
+
+  it('keeps the original Price / Value columns when no line has an entered cost', async () => {
+    makeBed({ transfer: makeTransfer({ lines: [line()] }) });
+    const fixture = createFixture();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.hasEnteredCost()).toBe(false);
+    expect(headers(fixture)).toEqual(['#', 'Code', 'Product', 'Unit', 'Qty', 'Price', 'Value', 'Currency']);
+  });
+
+  it('shows Entered price / value beside relabelled System columns, dash when not entered', async () => {
+    makeBed({
+      transfer: makeTransfer({
+        lines: [
+          line({ enteredUnitCost: 1750, enteredValue: 7000 }),
+          line({ uid: 'L2', lineNo: 2, enteredUnitCost: null, enteredValue: null }),
+        ],
+      }),
+    });
+    const fixture = createFixture();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance;
+    expect(comp.hasEnteredCost()).toBe(true);
+    expect(comp.totalEnteredValue()).toBe(7000);
+    expect(headers(fixture)).toEqual([
+      '#', 'Code', 'Product', 'Unit', 'Qty',
+      'System price', 'System value', 'Entered price', 'Entered value', 'Currency',
+    ]);
+
+    const el = fixture.nativeElement as HTMLElement;
+    const row1 = Array.from(el.querySelectorAll('tbody tr:nth-child(1) td')).map((td) => td.textContent?.trim());
+    expect(row1).toEqual(['1', 'KON500', 'Konyagi 500ml', 'Bottle', '4', '1,500.00', '6,000.00', '1,750.00', '7,000.00', 'TZS']);
+    const row2 = Array.from(el.querySelectorAll('tbody tr:nth-child(2) td')).map((td) => td.textContent?.trim());
+    expect(row2[7]).toBe('—');
+    expect(row2[8]).toBe('—');
+
+    const foot = el.querySelector('tfoot')?.textContent ?? '';
+    expect(foot).toContain('7,000.00');
+    expect(foot).toContain('for reference only');
+  });
 });
 
 describe('StockTransferDetailComponent — branch gate (STK-05)', () => {
