@@ -162,10 +162,13 @@ the same version unless you pass `-Force`. Bump `version:` in
 Each release goes into its own folder; the site is pointed at it. Rolling back
 means pointing it at the previous folder.
 
-**With the script (recommended).** Copy `dist\deploy-pwa-iis.ps1` to
-`C:\deploy\` on the server once (`Unblock-File` it if Windows marks it as
-downloaded). For each release, copy `OrbixApp-<version>.zip` **and** its
-`OrbixApp-<version>.json` into `C:\deploy\`, then in an Administrator PowerShell:
+**With the script (recommended).** Copy `dist\deploy-pwa-iis.ps1` **and**
+`dist\deploy-pwa-iis.cmd` to `C:\deploy\` on the server once (`Unblock-File`
+them if Windows marks them as downloaded). For each release, copy
+`OrbixApp-<version>.zip` **and** its `OrbixApp-<version>.json` into
+`C:\deploy\`, then **double-click `deploy-pwa-iis.cmd`**: it asks for
+administrator rights and offers 1 Deploy / 2 List / 3 Roll back, and keeps the
+window open to read the result. Or, in an Administrator PowerShell:
 
 ```powershell
 C:\deploy\deploy-pwa-iis.ps1               # newest zip in C:\deploy
