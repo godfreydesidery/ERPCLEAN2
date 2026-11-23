@@ -162,10 +162,28 @@ the same version unless you pass `-Force`. Bump `version:` in
 Each release goes into its own folder; the site is pointed at it. Rolling back
 means pointing it at the previous folder.
 
+**With the script (recommended).** Copy `dist\deploy-pwa-iis.ps1` to
+`C:\deploy\` on the server once (`Unblock-File` it if Windows marks it as
+downloaded). For each release, copy `OrbixApp-<version>.zip` **and** its
+`OrbixApp-<version>.json` into `C:\deploy\`, then in an Administrator PowerShell:
+
+```powershell
+C:\deploy\deploy-pwa-iis.ps1               # newest zip in C:\deploy
+C:\deploy\deploy-pwa-iis.ps1 -List         # releases on the server, * = live
+C:\deploy\deploy-pwa-iis.ps1 -Rollback     # back to the previous release
+```
+
+It checks the zip against the SHA-256 in the `.json`, unpacks it into
+`releases\<version>`, refuses a zip without `index.html`, points the site at
+it, keeps the newest five releases, and confirms `/sw.js` now serves the new
+version. Nothing in it changes per release.
+
+**By hand,** the same thing:
+
 ```powershell
 Import-Module WebAdministration
 $root = 'C:\inetpub\orbix-app'
-$ver  = '1.4.2-9'                                   # match the zip name
+$ver  = '1.4.3-10'                                  # match the zip name
 Expand-Archive "C:\deploy\OrbixApp-$ver.zip" -DestinationPath "$root\releases\$ver" -Force
 Set-ItemProperty 'IIS:\Sites\Orbix App' -Name physicalPath -Value "$root\releases\$ver"
 ```
