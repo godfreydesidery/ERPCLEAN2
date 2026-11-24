@@ -125,6 +125,7 @@ class UnitPriceLookupServiceImplTest {
                 products,
                 mock(PriceListRepository.class),
                 mock(com.erp.modules.products.repository.ProductBranchRepository.class),
+                mock(com.erp.modules.iam.repository.CompanyRepository.class),
                 com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC())));
 
         customers = mock(CustomerRepository.class);

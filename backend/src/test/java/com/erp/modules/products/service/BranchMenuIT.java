@@ -54,6 +54,8 @@ class BranchMenuIT extends PostgresIntegrationTest {
     @Autowired private PriceResolutionService priceResolution;
     @Autowired private UnitPriceLookupService priceLookup;
     @Autowired private BranchMenuService branchMenu;
+    @Autowired private com.erp.modules.products.repository.ProductBranchRepository productBranches;
+    @Autowired private com.erp.modules.products.repository.ProductRepository productRepo;
     @Autowired private OrganisationRepository organisations;
     @Autowired private CompanyRepository companies;
     @Autowired private BranchRepository branches;
@@ -129,14 +131,41 @@ class BranchMenuIT extends PostgresIntegrationTest {
 
     @Test
     void soldHere_onABranchWithNoRow_onAnItemThatHasRows_writesTheRow() {
-        // Arusha-only item (a row for Arusha, none for Moshi), then switched on at Moshi.
-        productService.assignBranch(mandazi.uid(), new AssignProductBranchRequest(arusha.getUid()));
+        arushaOnlyAsLegacyData(mandazi);
         assertThat(branchMenu.isSoldAt(mandazi.id(), moshi.getId())).isFalse();
 
         productService.setBranchMenu(mandazi.uid(),
                 new SetBranchMenuRequest(moshi.getUid(), true, null, null));
 
         assertThat(branchMenu.isSoldAt(mandazi.id(), moshi.getId())).isTrue();
+    }
+
+    @Test
+    void aPriceAlone_onABranchThatDoesNotSellTheItem_doesNotStartSellingIt() {
+        arushaOnlyAsLegacyData(mandazi);
+
+        productService.setBranchMenu(mandazi.uid(),
+                new SetBranchMenuRequest(moshi.getUid(), null, new BigDecimal("600"), null));
+
+        assertThat(branchMenu.isSoldAt(mandazi.id(), moshi.getId())).isFalse();
+    }
+
+    @Test
+    void assigningTheFirstBranch_keepsTheItemOnEveryOtherBranch() {
+        productService.assignBranch(latte.uid(), new AssignProductBranchRequest(arusha.getUid()));
+
+        assertThat(branchMenu.isSoldAt(latte.id(), arusha.getId())).isTrue();
+        assertThat(branchMenu.isSoldAt(latte.id(), moshi.getId())).isTrue();
+    }
+
+    @Test
+    void removingABranch_switchesItOff_andRemovingTheLastOne_neverMakesItSoldEverywhere() {
+        arushaOnlyAsLegacyData(mandazi);
+
+        productService.removeBranch(mandazi.uid(), arusha.getUid());
+
+        assertThat(branchMenu.isSoldAt(mandazi.id(), arusha.getId())).isFalse();
+        assertThat(branchMenu.isSoldAt(mandazi.id(), moshi.getId())).isFalse();
     }
 
     @Test
@@ -199,11 +228,19 @@ class BranchMenuIT extends PostgresIntegrationTest {
                 new AssignProductBranchRequest(arusha.getUid(), true, null, null, true));
 
         assertThat(productService.listBranches(latte.uid()))
+                .filteredOn(row -> row.branchId().equals(arusha.getId()))
                 .singleElement()
                 .satisfies(row -> assertThat(row.branchPrice()).isNull());
     }
 
     // ---- helpers -------------------------------------------------------------------
+
+    /** A row for Arusha and none for Moshi — what Product Master with "All branches" off saved. */
+    private void arushaOnlyAsLegacyData(ProductDto item) {
+        var product = productRepo.findByCompanyIdAndUid(companyId, item.uid()).orElseThrow();
+        productBranches.save(new com.erp.modules.products.domain.entity.ProductBranch(
+                product, arusha.getId(), rootId));
+    }
 
     private void at(Branch branch) {
         RequestContext.set(new RequestContext.Principal(

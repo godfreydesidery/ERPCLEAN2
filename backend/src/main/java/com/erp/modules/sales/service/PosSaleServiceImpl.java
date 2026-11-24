@@ -187,12 +187,16 @@ public class PosSaleServiceImpl implements PosSaleService {
                             .isPresent();
             // A key that already names a sale is answered by processSale exactly as before: the
             // menu may have changed since that sale posted.
+            // Checked at the branch the invoice will be raised (and priced) at: the caller's active
+            // branch, else the session's.
+            Long saleBranchId = RequestContext.get() != null && RequestContext.get().branchId() != null
+                    ? RequestContext.get().branchId() : session.getBranchId();
             if (!answered && req.lines() != null) {
                 for (var line : req.lines()) {
                     var product = products.findByCompanyIdAndId(session.getCompanyId(),
                             line.productId()).orElse(null);
                     if (product != null
-                            && !branchMenu.isSoldAt(product.getId(), session.getBranchId())) {
+                            && !branchMenu.isSoldAt(product.getId(), saleBranchId)) {
                         throw PosSaleFlowException.rejected(product.getName()
                                 + " is not sold at this branch. Remove it from the sale, or ask a"
                                 + " manager to turn it on for this branch in Product Master.",

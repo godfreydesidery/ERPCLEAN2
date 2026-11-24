@@ -21,6 +21,7 @@ import com.erp.modules.products.domain.enums.UnitPriceStatus;
 import com.erp.modules.products.repository.CustomerPriceRepository;
 import com.erp.modules.products.repository.PriceListRepository;
 import com.erp.modules.products.repository.ProductBranchRepository;
+import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
@@ -72,6 +73,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     private final ProductRepository       products;
     private final PriceListRepository     priceLists;
     private final ProductBranchRepository productBranches;
+    private final CompanyRepository       companies;
     private final CompanyCalendar calendar;
 
     public PriceResolutionServiceImpl(CustomerPriceRepository customerPrices,
@@ -82,6 +84,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                                       ProductRepository products,
                                       PriceListRepository priceLists,
                                       ProductBranchRepository productBranches,
+                                      CompanyRepository companies,
                                       CompanyCalendar calendar) {
         this.customerPrices = customerPrices;
         this.promotions     = promotions;
@@ -91,6 +94,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         this.products       = products;
         this.priceLists     = priceLists;
         this.productBranches = productBranches;
+        this.companies       = companies;
         this.calendar       = calendar;
     }
 
@@ -243,32 +247,39 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         if (listPrice.isResolved() && fromCustomerList(query, listPrice.price())) {
             return listPrice;
         }
+        Optional<PriceList> companyDefault = priceLists.findDefaultsOfCompany(query.companyId())
+                .stream()
+                .min(java.util.Comparator.comparing(PriceList::getId));
+        // A branch price is in the company's base currency. A document in another currency (a USD
+        // invoice in a TZS company) keeps its own list price — never 5,000 shillings charged as
+        // 5,000 dollars.
+        String home = companies.findScopedById(query.companyId())
+                .map(com.erp.modules.iam.domain.entity.Company::getBaseCurrency)
+                .orElse(null);
+        if (query.currency() != null && home != null && !home.equalsIgnoreCase(query.currency())) {
+            return listPrice;
+        }
         if (factor == null) {
             return UnitPriceQuoteResult.unpriced(UnitPriceStatus.UNIT_NOT_APPLICABLE);
         }
-        String currency;
-        boolean vatInclusive;
-        if (listPrice.isResolved()) {
-            currency = listPrice.price().currency();
-            vatInclusive = listPrice.price().vatInclusive();
-        } else {
-            Optional<PriceList> companyDefault = priceLists.findDefaultsOfCompany(query.companyId())
-                    .stream()
-                    .min(java.util.Comparator.comparing(PriceList::getId));
-            currency = companyDefault.map(PriceList::getCurrency).map(cc -> CurrencyCode.value(cc))
-                    .orElse(query.currency());
-            vatInclusive = companyDefault.map(PriceList::isPriceIncludesVat).orElse(false);
-        }
+        String currency = home != null ? home : query.currency();
+        boolean vatInclusive = listPrice.isResolved()
+                ? listPrice.price().vatInclusive()
+                : companyDefault.map(PriceList::isPriceIncludesVat).orElse(false);
         return UnitPriceQuoteResult.resolved(new UnitPriceQuoteDto(perBase.get().multiply(factor),
                 currency, vatInclusive, PriceSource.BRANCH_PRICE, null, BRANCH_PRICE_NAME));
     }
 
-    /** Whether {@code price} came from the customer's own default price list. */
+    /**
+     * Whether {@code price} came from the customer's own special list. A customer whose "own" list
+     * is simply the company default list pays what a walk-in pays — the branch price included.
+     */
     private boolean fromCustomerList(SellingPriceQuery query, UnitPriceQuoteDto price) {
         if (query.customerPriceListId() == null || price.priceListUid() == null) {
             return false;
         }
         return priceLists.findByCompanyIdAndId(query.companyId(), query.customerPriceListId())
+                .filter(list -> !list.isDefault())
                 .map(PriceList::getUid)
                 .filter(price.priceListUid()::equals)
                 .isPresent();

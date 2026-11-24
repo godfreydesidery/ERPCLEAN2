@@ -485,6 +485,8 @@ public class ProductServiceImpl implements ProductService {
                             "branchPrice", String.valueOf(assoc.getBranchPrice()))));
             return ProductBranchDto.from(assoc);
         }
+        // ADR-0073 D-1: the first row on an item with none would make this its only branch.
+        materialiseOtherBranches(p, branchId);
         ProductBranch assoc = new ProductBranch(p, branchId, actorId());
         assoc.setActive(req.active() == null || req.active());
         assoc.setReorderLevel(req.reorderLevel());
@@ -514,17 +516,13 @@ public class ProductServiceImpl implements ProductService {
         if (!changesSomething) {
             return listBranches(uid);
         }
-        if (rows.isEmpty()) {
-            // ADR-0073 D-1: no rows = sold everywhere. Writing the first row would otherwise make
-            // this the only branch that sells it.
-            for (Long other : branchGuard.branchIdsOf(p.getCompanyId())) {
-                if (!other.equals(branchId)) {
-                    productBranches.save(new ProductBranch(p, other, actorId()));
-                }
-            }
-        }
         if (here == null) {
+            boolean soldHereBefore = rows.isEmpty();   // no rows = sold everywhere (D-1)
+            // The first row on an item with none would otherwise make this its only branch.
+            materialiseOtherBranches(p, branchId);
             here = new ProductBranch(p, branchId, actorId());
+            // A price alone must not start selling an item this branch did not sell.
+            here.setActive(soldHereBefore);
         }
         if (req.soldHere() != null) {
             here.setActive(req.soldHere());
@@ -545,12 +543,34 @@ public class ProductServiceImpl implements ProductService {
                 .toList();
     }
 
+    /**
+     * ADR-0073 D-1: an item with no branch rows is sold everywhere. Before its first row is written,
+     * record every other branch of the company as sold-there, so that row does not make
+     * {@code exceptBranchId} the only branch that sells it. No-op once the item has rows.
+     */
+    private void materialiseOtherBranches(Product p, Long exceptBranchId) {
+        if (!productBranches.findByProductId(p.getId()).isEmpty()) {
+            return;
+        }
+        for (Long other : branchGuard.branchIdsOf(p.getCompanyId())) {
+            if (!other.equals(exceptBranchId)) {
+                productBranches.save(new ProductBranch(p, other, actorId()));
+            }
+        }
+    }
+
     @Override
     public void removeBranch(String uid, String branchUid) {
         Product p = require(uid);
         scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
         Long branchId = branchGuard.resolveAndAssertSameCompany(p.getCompanyId(), branchUid);
-        productBranches.deleteByProductIdAndBranchId(p.getId(), branchId);
+        // ADR-0073: switched off, not deleted. Deleting the last row would make the item sold at
+        // EVERY branch again (no rows = sold everywhere); deleting any row loses its reorder level.
+        productBranches.findByProductIdAndBranchId(p.getId(), branchId)
+                .ifPresent(row -> {
+                    row.setActive(false);
+                    productBranches.save(row);
+                });
         audit.record(AuditEvent.of(AuditActions.PRODUCT_BRANCH_REMOVE, "products", p.getId(), p.getUid())
                 .detail(Map.of("branchUid", branchUid)));
     }

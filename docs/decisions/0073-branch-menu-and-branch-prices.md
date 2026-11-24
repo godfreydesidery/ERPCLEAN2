@@ -67,8 +67,9 @@ at that branch. Precedence for one line:
 - **Catalogue reads** take `soldHere=true` (`GET /products`, `GET /products/categories`,
   `GET /products/barcode-lookup`): filtered to the caller's active branch. Without the flag nothing changes —
   web admin lists and pickers keep showing the whole company.
-- **Till sale** (`POST /pos/sales`, via `PosSaleService.processTillSale`): refused (409) when a line is not sold at
-  the session's branch, with `errorCode` `NOT_ON_BRANCH_MENU` (the till then offers no discount approval) —
+- **Till sale** (`POST /pos/sales`, via `PosSaleService.processTillSale`): refused (422 REJECTED, like every till
+  sale rule) when a line is not sold at the branch the invoice is raised at (the caller's active branch, else
+  the session's), with `errorCode` `NOT_ON_BRANCH_MENU` (the till then offers no discount approval) —
   unless the idempotency key already names a posted sale, which is answered as before.
 - **Restaurant order line** (`POST /restaurant/orders/uid/{uid}/lines`): refused (409) for an item not sold at the
   order's branch. Priced add-ons are not checked — they belong to the item's choices.
