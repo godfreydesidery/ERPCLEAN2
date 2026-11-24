@@ -506,6 +506,16 @@ void main() {
       expect(await t.app.loginOffline('asha', 'Secret#2026'), contains('not allowed to sell offline'));
     });
 
+    test("refused when the saved menu is another branch's (ERP ADR-0073)", () async {
+      final t = await knownTill();
+      addTearDown(t.dispose);
+      await t.catalog.save(t.catalog.snapshot.copyWith(branchUid: 'BR2'));
+      expect(await t.app.loginOffline('asha', 'Secret#2026'),
+          contains('no saved products or prices for your branch'));
+      expect(t.appState.phase, isNot(AppPhase.register));
+      expect(t.offlineState.offline, isFalse);
+    });
+
     test('wrong password offline: refused, nothing opened', () async {
       final t = await knownTill();
       addTearDown(t.dispose);

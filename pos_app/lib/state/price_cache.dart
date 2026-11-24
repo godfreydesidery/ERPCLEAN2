@@ -18,10 +18,16 @@ import 'providers.dart';
 /// computed guess, because those guesses disagreeing with the posted invoice is
 /// the exact defect the batch endpoint was built to end.
 class PriceCache {
-  PriceCache(this._svc, {DateTime Function()? clock})
-      : _now = clock ?? DateTime.now;
+  PriceCache(this._svc, {DateTime Function()? clock, String? Function()? branchUid})
+      : _now = clock ?? DateTime.now,
+        _branchUid = branchUid ?? _noBranch;
   final CatalogService _svc;
   final DateTime Function() _now;
+
+  /// The active branch (`X-Branch-Uid`). Prices are per branch (ERP ADR-0073),
+  /// so it is part of the audience: signing in at another branch starts afresh.
+  final String? Function() _branchUid;
+  static String? _noBranch() => null;
 
   /// How long an answer is trusted (POS-18). The cache used to live for the
   /// whole app session, so a price changed in the office never reached the
@@ -30,9 +36,27 @@ class PriceCache {
 
   final Map<String, DateTime> _fetchedAt = {};
 
-  /// Whose prices are cached: `customerUid|currency` (PRD-01). A different
-  /// customer pays different prices, so a change of audience starts afresh.
+  /// Whose prices are cached: `branchUid|customerUid|currency` (PRD-01,
+  /// ADR-0073). A different customer — or the same one at another branch —
+  /// pays different prices, so a change of audience starts afresh.
   String _audience = '';
+
+  /// The branch the cached answers (and the [denied] latch) belong to.
+  String? _branchSeen;
+
+  String _audienceOf(String? customerUid, String? currency) =>
+      '${_branchUid() ?? ''}|${customerUid ?? ''}|${currency ?? ''}';
+
+  /// Another branch is active (a sign-in elsewhere): nothing read before
+  /// applies — not the prices, and not a permission refusal for another user.
+  void _checkBranch() {
+    final now = _branchUid();
+    if (now == _branchSeen) return;
+    clear();
+    _audience = '';
+    _denied = false;
+    _branchSeen = now;
+  }
 
   /// Server cap on one batch (`ResolveUnitPricesRequest`).
   static const int _maxBatch = 200;
@@ -43,13 +67,20 @@ class PriceCache {
 
   /// True when this till may not read prices at all. Callers then show nothing
   /// rather than implying an item is unpriced.
-  bool get denied => _denied;
+  bool get denied {
+    _checkBranch();
+    return _denied;
+  }
 
-  /// The server's answer for [productUid], or null while it is still unknown.
+  /// The server's answer for [productUid], or null while it is still unknown —
+  /// including after a change of branch (that answer was another branch's price).
   ///
   /// A returned row with `status != RESOLVED` is a definite "no price" — render
   /// it as such.
-  ResolvedUnitPrice? priceFor(String productUid) => _byProductUid[productUid];
+  ResolvedUnitPrice? priceFor(String productUid) {
+    _checkBranch();
+    return _byProductUid[productUid];
+  }
 
   /// Forget every answer — called after each completed sale so the next
   /// basket starts from the office's current prices (POS-18).
@@ -71,8 +102,9 @@ class PriceCache {
   /// what the dropdown shows is what that customer will be charged.
   Future<void> refreshFor(Iterable<String> productUids,
       {String? customerUid, String? currency}) async {
+    _checkBranch();
     if (_denied) return;
-    final audience = '${customerUid ?? ''}|${currency ?? ''}';
+    final audience = _audienceOf(customerUid, currency);
     if (audience != _audience) {
       clear();
       _audience = audience;
@@ -120,5 +152,7 @@ class PriceCache {
   }
 }
 
-final priceCacheProvider =
-    Provider<PriceCache>((ref) => PriceCache(ref.read(catalogServiceProvider)));
+final priceCacheProvider = Provider<PriceCache>((ref) => PriceCache(
+      ref.read(catalogServiceProvider),
+      branchUid: () => ref.read(apiClientProvider).branchUidOverride,
+    ));

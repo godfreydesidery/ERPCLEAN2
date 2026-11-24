@@ -193,6 +193,14 @@ class OfflineCatalog {
   CatalogSnapshot _snap = const CatalogSnapshot();
   CatalogSnapshot get snapshot => _snap;
 
+  /// Whether the cached menu and prices were built for [branchUid] (ERP
+  /// ADR-0073: each branch has its own menu and may have its own prices). A
+  /// cache built at another branch must never be sold from — the till then has
+  /// no saved menu here until the next refresh. A null/blank [branchUid] (no
+  /// branch known yet) places no restriction.
+  bool servesBranch(String? branchUid) =>
+      branchUid == null || branchUid.isEmpty || _snap.branchUid == branchUid;
+
   Future<void> load() async {
     try {
       final raw = await _store.read(_key);
@@ -315,6 +323,11 @@ class OfflineCatalog {
 /// Fills the offline catalogue from the server while the till is online
 /// (ADR-0068 D-2): after sign-in, every ~15 minutes, and on demand.
 ///
+/// Everything is read for the caller's ACTIVE branch (ERP ADR-0073): the
+/// product pages and categories carry `soldHere=true`, and the price resolver
+/// prices at the branch the API client names (`X-Branch-Uid`). The snapshot
+/// records that branch; [OfflineCatalog.servesBranch] refuses it elsewhere.
+///
 /// Products are paged through the normal list (200 a page). Prices come from
 /// the server's own resolver in batches of 200, for the walk-in customer — the
 /// only customer an offline sale may have. Barcodes and packs have no
@@ -356,15 +369,20 @@ class OfflineCatalogRefresher {
       if (rows.length < _page) break;
     }
 
-    List<String> categories = previous.categories;
+    // The menu and prices are per BRANCH (ERP ADR-0073): a cache built for
+    // another branch (or company) is not carried over at all — its barcodes,
+    // packs and categories describe another menu, and its sweep date would
+    // leave this branch's own items unswept for up to a day.
+    final sameScope = previous.companyId == companyId && previous.branchUid == branchUid;
+
+    List<String> categories = sameScope ? previous.categories : _categoriesOf(products.values);
     try {
       categories = await _svc.listCategories(companyId);
-    } catch (_) {/* keep the last ones */}
+    } catch (_) {/* keep the last ones (this branch's), else the products' own */}
 
-    final sameCompany = previous.companyId == companyId;
-    var barcodes = sameCompany ? {...previous.barcodes} : <String, CachedBarcode>{};
-    var packs = sameCompany ? {...previous.packs} : <String, List<CachedPack>>{};
-    var sweptAt = sameCompany ? previous.sweptAt : null;
+    var barcodes = sameScope ? {...previous.barcodes} : <String, CachedBarcode>{};
+    var packs = sameScope ? {...previous.packs} : <String, List<CachedPack>>{};
+    var sweptAt = sameScope ? previous.sweptAt : null;
     final now = _now().toUtc();
     if (forceSweep || sweptAt == null || now.difference(sweptAt) >= sweepEvery) {
       final swept = await _sweep(products.keys.toList());
@@ -428,6 +446,17 @@ class OfflineCatalogRefresher {
       pricesAsOf: now,
       sweptAt: sweptAt,
     );
+  }
+
+  /// The departments of [products], sorted — the fallback category buttons
+  /// when the server's list cannot be read for a branch never cached before.
+  static List<String> _categoriesOf(Iterable<Product> products) {
+    final out = <String>{
+      for (final p in products)
+        if ((p.category?.trim() ?? '').isNotEmpty) p.category!.trim(),
+    }.toList()
+      ..sort();
+    return out;
   }
 
   Future<({Map<String, CachedBarcode> barcodes, Map<String, List<CachedPack>> packs})> _sweep(

@@ -191,6 +191,7 @@ class OfflineState {
     bool clearSyncError = false,
     List<HeldSale>? held,
     DateTime? pricesAsOf,
+    bool clearPricesAsOf = false,
     bool? queueReadable,
     DateTime? firstUnsyncedSoldAt,
     bool clearFirstUnsynced = false,
@@ -213,7 +214,7 @@ class OfflineState {
         lastSyncAt: lastSyncAt ?? this.lastSyncAt,
         lastSyncError: clearSyncError ? null : (lastSyncError ?? this.lastSyncError),
         held: held ?? this.held,
-        pricesAsOf: pricesAsOf ?? this.pricesAsOf,
+        pricesAsOf: clearPricesAsOf ? null : (pricesAsOf ?? this.pricesAsOf),
         queueReadable: queueReadable ?? this.queueReadable,
         firstUnsyncedSoldAt: clearFirstUnsynced
             ? null
@@ -308,9 +309,13 @@ class OfflineController extends Notifier<OfflineState> {
     await _queue.load();
     await _catalog.load();
     _publishQueue();
+    // A cache built at another branch is not this branch's menu (ERP ADR-0073):
+    // no "prices as of" until the refresh below rebuilds it here.
+    final fits = _catalog.servesBranch(ref.read(appControllerProvider).context?.branchUid);
     state = state.copyWith(
       tillAllowed: currentTill?.offlineAllowed ?? false,
-      pricesAsOf: _catalog.snapshot.pricesAsOf,
+      pricesAsOf: fits ? _catalog.snapshot.pricesAsOf : null,
+      clearPricesAsOf: !fits,
     );
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(kCatalogRefreshEvery, (_) => refreshCatalog());
@@ -364,6 +369,13 @@ class OfflineController extends Notifier<OfflineState> {
         vatRates: app.vatRates,
         forceSweep: forceSweep,
       );
+      // Signed out, or in at another branch, while this was reading: it is the
+      // old branch's menu. The next refresh reads the new one.
+      final now = ref.read(appControllerProvider).context;
+      if (!_signedIn || now == null || now.branchUid != ctx.branchUid) {
+        state = state.copyWith(refreshing: false);
+        return;
+      }
       // The till's own setting can change in the office (POS › Tills).
       var till = currentTill;
       if (till != null) {
@@ -641,6 +653,12 @@ class OfflineController extends Notifier<OfflineState> {
     if (_catalog.snapshot.walkIn == null || _catalog.snapshot.isEmpty) {
       return (user: null, error: 'This till has no saved products or prices yet, so it cannot '
           'sell offline.');
+    }
+    // The saved menu and prices are one branch's (ERP ADR-0073): never sell
+    // another branch's items at its prices.
+    if (_catalog.snapshot.branchUid != u.context.branchUid) {
+      return (user: null, error: 'This till has no saved products or prices for your branch '
+          'yet, so it cannot sell offline.');
     }
     return (user: u, error: null);
   }

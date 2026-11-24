@@ -5,9 +5,17 @@ import '../models/catalog.dart';
 /// Catalogue + pricing reads (§03/§04). List endpoints return a bare array in
 /// `data` (pagination lives in the envelope `meta`), so the caller pages by
 /// length: a full page implies there may be more.
+///
+/// **Branch menu (ERP ADR-0073 D-3).** A till sells at one branch, so every
+/// catalogue read here asks for the active branch's menu only (`soldHere=true`,
+/// scoped by the `X-Branch-Uid` the API client sends). A server that predates
+/// the flag ignores it and answers the whole company, as before.
 class CatalogService {
   CatalogService(this._api);
   final ApiClient _api;
+
+  /// The query flag that narrows a catalogue read to the active branch's menu.
+  static const String soldHereParam = 'soldHere';
 
   Future<List<Product>> searchProducts(
     String companyId, {
@@ -22,6 +30,7 @@ class CatalogService {
       'category': ?category,
       'page': page,
       'size': size,
+      soldHereParam: true,
     });
     return asList(data, Product.fromJson);
   }
@@ -36,13 +45,16 @@ class CatalogService {
       'page': page,
       'size': size,
       'sort': 'id,asc',
+      soldHereParam: true,
     });
     return asList(data, Product.fromJson);
   }
 
-  /// The product categories (departments) in use, for the category buttons.
+  /// The product categories (departments) in use at this branch, for the
+  /// category buttons.
   Future<List<String>> listCategories(String companyId) async {
-    final data = await _api.get('/products/categories', query: {'companyId': companyId});
+    final data = await _api.get('/products/categories',
+        query: {'companyId': companyId, soldHereParam: true});
     return data is List ? [for (final c in data) if (c is String && c.trim().isNotEmpty) c] : const [];
   }
 
@@ -50,10 +62,12 @@ class CatalogService {
       Product.fromJson(asMap(await _api.get('/products/uid/$uid')));
 
   /// Resolves a scanned barcode (exact-match or embedded weight/price) within
-  /// the company. Throws [ApiException] 404 when unknown.
+  /// the company. Throws [ApiException] 404 when unknown — and, from a server
+  /// with branch menus, when the item is not sold at this branch (its message
+  /// then says so: "This item is not sold at this branch.").
   Future<ProductBarcode> lookupBarcode(String companyId, String barcode) async {
     final data = await _api.get('/products/barcode-lookup',
-        query: {'companyId': companyId, 'barcode': barcode});
+        query: {'companyId': companyId, 'barcode': barcode, soldHereParam: true});
     return ProductBarcode.fromJson(asMap(data));
   }
 

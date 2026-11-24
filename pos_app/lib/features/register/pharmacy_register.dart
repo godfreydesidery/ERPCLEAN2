@@ -158,7 +158,10 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
     if (v.isEmpty) return;
     _refreshStock(v);
     // Barcode lookup only for actual scans; a typed drug name always 404s here.
-    // The product is fetched fresh by uid (no local catalogue).
+    // The product is fetched fresh by uid (no local catalogue). A refused scan's
+    // own words ("not sold at this branch", ERP ADR-0073) are kept for when the
+    // branch-menu search below finds nothing either.
+    String? scanRefusal;
     if (looksLikeBarcode(v)) {
       try {
         final bc = await ref.read(catalogServiceProvider).lookupBarcode(_companyId, v);
@@ -193,6 +196,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
           return; // POS-17: never fall through to "No match" when offline
         }
         if (!e.isNotFound && mounted) showToast(context, e.message);
+        if (e.isNotFound && e.errors.isNotEmpty) scanRefusal = e.message;
       }
       if (!mounted) return;
     }
@@ -224,7 +228,7 @@ class _PharmacyRegisterState extends ConsumerState<PharmacyRegister> {
       _add(pick);
       _reset();
     } else {
-      showToast(context, 'No match for "$v".');
+      showToast(context, scanRefusal ?? 'No match for "$v".');
     }
   }
 
