@@ -1707,7 +1707,9 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
                 List.of(new PosSaleRequest.LineItem(tacos.id(), pcsId, BigDecimal.ONE, null, null)),
                 null, null)))
                 .isInstanceOf(PosSaleFlowException.class)
-                .hasMessageContaining("Grilled Chicken Tacos is not sold at this branch");
+                .hasMessageContaining("Grilled Chicken Tacos is not sold at this branch")
+                .extracting(ex -> ((PosSaleFlowException) ex).getErrorCode())
+                .isEqualTo("NOT_ON_BRANCH_MENU");
 
         // The cake was ordered while it was on the menu; taking it off now must not trap the table.
         setRootCtx();

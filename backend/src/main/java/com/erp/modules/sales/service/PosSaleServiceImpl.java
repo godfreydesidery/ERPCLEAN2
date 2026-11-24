@@ -171,6 +171,9 @@ public class PosSaleServiceImpl implements PosSaleService {
         this.branchMenu        = branchMenu;
     }
 
+    /** Error code of a till sale refused by the branch menu (ADR-0073) — no remedy at the till. */
+    public static final String NOT_ON_BRANCH_MENU = "NOT_ON_BRANCH_MENU";
+
     @Override
     public SalesInvoiceDto processTillSale(String idempotencyKey, PosSaleRequest req) {
         // ADR-0073 D-3: a till sells only what its branch sells. Checked here, not in processSale,
@@ -192,7 +195,8 @@ public class PosSaleServiceImpl implements PosSaleService {
                             && !branchMenu.isSoldAt(product.getId(), session.getBranchId())) {
                         throw PosSaleFlowException.rejected(product.getName()
                                 + " is not sold at this branch. Remove it from the sale, or ask a"
-                                + " manager to turn it on for this branch in Product Master.");
+                                + " manager to turn it on for this branch in Product Master.",
+                                NOT_ON_BRANCH_MENU);
                     }
                 }
             }

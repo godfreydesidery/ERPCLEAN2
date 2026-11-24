@@ -68,7 +68,8 @@ at that branch. Precedence for one line:
   `GET /products/barcode-lookup`): filtered to the caller's active branch. Without the flag nothing changes —
   web admin lists and pickers keep showing the whole company.
 - **Till sale** (`POST /pos/sales`, via `PosSaleService.processTillSale`): refused (409) when a line is not sold at
-  the session's branch — unless the idempotency key already names a posted sale, which is answered as before.
+  the session's branch, with `errorCode` `NOT_ON_BRANCH_MENU` (the till then offers no discount approval) —
+  unless the idempotency key already names a posted sale, which is answered as before.
 - **Restaurant order line** (`POST /restaurant/orders/uid/{uid}/lines`): refused (409) for an item not sold at the
   order's branch. Priced add-ons are not checked — they belong to the item's choices.
 - **Not enforced** (deliberately):
@@ -86,6 +87,10 @@ at that branch. Precedence for one line:
 - `AssignProductBranchRequest` gains `clearBranchPrice` (a blank price used to mean "leave as it was", so a
   branch price could never be removed).
 - The till's *Add product* and OrbixHQ's *New item* create items with no rows (sold everywhere), as before.
+- OrbixHQ *Edit item* shows *At <branch>* (Sold here / Price here, via `PUT /branch-menu`) only to users with two
+  or more branches (owner 2026-11-24).
+- A till's saved offline menu from before the update is company-wide until its first refresh after sign-in;
+  accepted (owner 2026-11-24) — discarding it would leave a till updated while offline with no menu.
 
 ## Rollout check (before a client updates)
 
