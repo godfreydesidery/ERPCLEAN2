@@ -30,6 +30,7 @@ class ApiException implements Exception {
     this.isNetwork = false,
     this.isTimeout = false,
     this.code,
+    this.errorCode,
     this.cause,
   });
 
@@ -54,6 +55,13 @@ class ApiException implements Exception {
   /// never decide anything: it is written for a person, it gets reworded, and
   /// it is translated.
   final String? code;
+
+  /// The refusing RULE's own token, when the server named one: `data.errorCode`
+  /// on a refused sale (e.g. `DISCOUNT_APPROVAL_REQUIRED`, `NOT_ON_BRANCH_MENU`).
+  /// [code] says what happened to the request (REJECTED …); this says which
+  /// rule refused it, so the till offers that rule's remedy — and no other —
+  /// without reading the prose. Null when the server sent none.
+  final String? errorCode;
 
   final Object? cause;
 
@@ -134,6 +142,7 @@ class ApiException implements Exception {
       statusCode: status,
       errors: errors,
       code: _extractCode(response),
+      errorCode: _extractErrorCode(response.data),
       message: _messageFor(status, errors),
       cause: cause,
     );
@@ -152,6 +161,15 @@ class ApiException implements Exception {
     final header = response.headers.value(kPosSaleStatusHeader);
     final h = header?.trim();
     return (h == null || h.isEmpty) ? null : h;
+  }
+
+  /// `data.errorCode` from the envelope, or null.
+  static String? _extractErrorCode(dynamic data) {
+    if (data is Map && data['data'] is Map) {
+      final s = (data['data'] as Map)['errorCode']?.toString().trim();
+      if (s != null && s.isNotEmpty) return s;
+    }
+    return null;
   }
 
   static List<ApiError> _extractErrors(dynamic data) {

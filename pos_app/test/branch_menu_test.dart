@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/api/api_client.dart';
 import 'package:pos_app/core/api/api_exception.dart';
@@ -174,6 +175,63 @@ void main() {
     expect(r.isResolved, isTrue);
     expect(r.amount, 1500);
     expect(r.vatInclusive, isTrue);
+  });
+
+  group('a sale refused as not on the branch menu offers no discount approval', () {
+    // The server's answer to POST /pos/sales (PosSaleController.handlePosSaleFlow).
+    ApiException refusal(String? errorCode, String text) => ApiException.fromResponse(Response(
+          requestOptions: RequestOptions(path: '/pos/sales'),
+          statusCode: 422,
+          headers: Headers.fromMap({
+            kPosSaleStatusHeader: ['REJECTED'],
+          }),
+          data: {
+            'data': {'code': 'REJECTED', 'message': text, 'errorCode': errorCode},
+            'errors': [text],
+            'meta': null,
+          },
+        ));
+
+    const menuText = 'Soda is not sold at this branch. Remove it from the sale, or ask a manager '
+        'to turn it on in Product Master.';
+
+    test("the refusal carries the rule's token and the server's own words", () {
+      final e = refusal(kNotOnBranchMenu, menuText);
+      expect(e.errorCode, 'NOT_ON_BRANCH_MENU');
+      expect(e.code, 'REJECTED');
+      expect(e.message, menuText);
+      expect(refusal(null, 'Short tender.').errorCode, isNull);
+    });
+
+    test('NOT_ON_BRANCH_MENU never offers discount approval, even with a discount in the basket', () {
+      final e = refusal(kNotOnBranchMenu, menuText);
+      expect(
+          refusalOffersDiscountApproval(
+              status: PosSaleFlowStatus.resolve(e.code, e.statusCode),
+              errorCode: e.errorCode,
+              hasUnapprovedDiscount: true),
+          isFalse);
+    });
+
+    test('a discount refusal still offers it', () {
+      for (final code in ['DISCOUNT_APPROVAL_REQUIRED', null]) {
+        final e = refusal(code, 'The discount needs a manager.');
+        expect(
+            refusalOffersDiscountApproval(
+                status: PosSaleFlowStatus.resolve(e.code, e.statusCode),
+                errorCode: e.errorCode,
+                hasUnapprovedDiscount: true),
+            isTrue,
+            reason: '$code');
+        expect(
+            refusalOffersDiscountApproval(
+                status: PosSaleFlowStatus.resolve(e.code, e.statusCode),
+                errorCode: e.errorCode,
+                hasUnapprovedDiscount: false),
+            isFalse,
+            reason: 'no discount to approve');
+      }
+    });
   });
 
   group('the offline catalogue is per branch', () {
