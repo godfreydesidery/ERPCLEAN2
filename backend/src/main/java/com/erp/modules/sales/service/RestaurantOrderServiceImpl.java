@@ -10,6 +10,7 @@ import com.erp.modules.products.domain.entity.UnitOfMeasure;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductRepository;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
+import com.erp.modules.products.service.BranchMenuService;
 import com.erp.modules.sales.domain.dto.AddRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.BillRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.CancelRestaurantOrderRequest;
@@ -124,6 +125,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     private final ModifierOptionRepository modifierOptions;
     private final ProductModifierGroupRepository productModifierGroups;
     private final CompanyCalendar calendar;
+    private final BranchMenuService branchMenu;
 
     public RestaurantOrderServiceImpl(RestaurantOrderRepository orders,
                                       RestaurantOrderLineRepository lines,
@@ -148,7 +150,8 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
                                       ModifierGroupRepository modifierGroups,
                                       ModifierOptionRepository modifierOptions,
                                       ProductModifierGroupRepository productModifierGroups,
-                                      CompanyCalendar calendar) {
+                                      CompanyCalendar calendar,
+                                      BranchMenuService branchMenu) {
         this.orders             = orders;
         this.lines              = lines;
         this.tables             = tables;
@@ -173,6 +176,7 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
         this.modifierOptions    = modifierOptions;
         this.productModifierGroups = productModifierGroups;
         this.calendar = calendar;
+        this.branchMenu = branchMenu;
     }
 
     // -------------------------------------------------------------------------
@@ -278,6 +282,9 @@ public class RestaurantOrderServiceImpl implements RestaurantOrderService {
     public RestaurantOrderDto addLine(String uid, AddRestaurantOrderLineRequest req) {
         var order = lockLive(uid);
         Product product = requireSellable(order.getCompanyId(), req.productId());
+        // ADR-0073 D-3: only what this branch sells. Add-ons below are not checked — they come with
+        // the item's choices.
+        branchMenu.assertSoldAt(product.getId(), order.getBranchId(), product.getName());
         UnitOfMeasure unit = units.findByCompanyIdAndId(order.getCompanyId(), req.unitId())
                 .orElseThrow(() -> new NotFoundException("This unit was not found."));
         boolean baseUnit = product.getBaseUnit() != null

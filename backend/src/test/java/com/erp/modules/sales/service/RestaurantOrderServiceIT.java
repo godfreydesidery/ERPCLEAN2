@@ -1687,6 +1687,66 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
         return productService.getByUid(dto.uid());
     }
 
+    // =========================================================================
+    // ADR-0073: branch menu + branch price.
+    // =========================================================================
+
+    @Test
+    void branchMenu_refusesAnItemNotSoldHere_atOrderAndAtTheTill_butNeverBlocksPayingAnOpenTable() {
+        setRootCtx();
+        productService.setBranchMenu(tacos.uid(), new com.erp.modules.products.domain.dto
+                .SetBranchMenuRequest(branch.getUid(), false, null, null));
+
+        setCashierCtx();
+        RestaurantOrderDto order = openWith(cake);
+        assertThatThrownBy(() -> orders.addLine(order.uid(), item(tacos)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Grilled Chicken Tacos is not sold at this branch");
+        assertThatThrownBy(() -> posSales.processTillSale(null, new PosSaleRequest(sessionUid,
+                customerId, null, "TZS",
+                List.of(new PosSaleRequest.LineItem(tacos.id(), pcsId, BigDecimal.ONE, null, null)),
+                null, null)))
+                .isInstanceOf(PosSaleFlowException.class)
+                .hasMessageContaining("Grilled Chicken Tacos is not sold at this branch")
+                .extracting(ex -> ((PosSaleFlowException) ex).getErrorCode())
+                .isEqualTo("NOT_ON_BRANCH_MENU");
+
+        // The cake was ordered while it was on the menu; taking it off now must not trap the table.
+        setRootCtx();
+        productService.setBranchMenu(cake.uid(), new com.erp.modules.products.domain.dto
+                .SetBranchMenuRequest(branch.getUid(), false, null, null));
+        stock(cake);
+        setCashierCtx();
+        RestaurantBillDto bill = orders.bill(order.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        RestaurantPaymentDto paid = orders.pay(order.uid(), "resto-menu-pay", payment(bill.grossTotal()));
+        assertThat(paid.order().status()).isEqualTo(RestaurantOrderStatus.PAID);
+    }
+
+    @Test
+    void branchPrice_pricesTheBillAndThePostedSale() {
+        setRootCtx();
+        productService.setBranchMenu(latte.uid(), new com.erp.modules.products.domain.dto
+                .SetBranchMenuRequest(branch.getUid(), null, new BigDecimal("6500"), null));
+
+        setCashierCtx();
+        RestaurantOrderDto order = openWith(latte);
+        RestaurantBillDto bill = orders.bill(order.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        assertThat(bill.lines()).singleElement()
+                .as("the retail list is VAT-exclusive, so the bill shows 6,500 + 18% VAT")
+                .satisfies(l -> assertThat(l.unitPrice()).isEqualByComparingTo("7670"));
+
+        stock(latte);
+        setCashierCtx();
+        RestaurantPaymentDto paid = orders.pay(order.uid(), "resto-branch-price", payment(bill.grossTotal()));
+        assertThat(paid.invoice().grossTotalAmount()).isEqualByComparingTo(bill.grossTotal());
+        assertThat(jdbc.queryForObject(
+                "SELECT l.list_price_amount FROM sales_invoice_lines l"
+                        + " JOIN sales_invoices i ON i.id = l.invoice_id WHERE i.uid = ?",
+                BigDecimal.class, paid.invoice().uid()))
+                .as("the posted line's list price is the branch price")
+                .isEqualByComparingTo("6500");
+    }
+
     private AddRestaurantOrderLineRequest item(ProductDto p) {
         return new AddRestaurantOrderLineRequest(p.id(), pcsId, null, null);
     }

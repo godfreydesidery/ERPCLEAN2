@@ -9,5 +9,7 @@ public enum PriceSource {
     PROMOTION,
     TIER,
     LIST_PRICE,
+    /** The item's own price at the document's branch ({@code product_branch.branch_price}, ADR-0073). */
+    BRANCH_PRICE,
     NONE
 }

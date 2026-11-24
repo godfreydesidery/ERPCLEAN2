@@ -935,11 +935,11 @@
                 <thead>
                   <tr>
                     <th scope="col">Branch</th>
-                    <th scope="col">Active</th>
+                    <th scope="col">Sold here</th>
                     @if (!stockableDisabled() && fStockable()) {
                       <th scope="col">Reorder level</th>
                     }
-                    <th scope="col">Branch price</th>
+                    <th scope="col">Price here</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -954,7 +954,7 @@
                                  (ngModelChange)="updateBranchRow(i, { active: $event })"
                                  [disabled]="saving() || allBranchesToggle()" />
                           <label [for]="'branchActive_' + i" class="form-check-label sr-only">
-                            Active in {{ row.branch.name }}
+                            Sold in {{ row.branch.name }}
                           </label>
                         </div>
                       </td>
@@ -971,17 +971,21 @@
                       <td>
                         <input [id]="'branchPrice_' + i" [name]="'branchPrice_' + i"
                                type="text" class="form-control form-control-sm" style="width:110px"
-                               placeholder="inherit"
+                               placeholder="company price"
                                [ngModel]="row.branchPrice"
                                (ngModelChange)="updateBranchRow(i, { branchPrice: $event })"
                                [disabled]="saving()"
-                               [attr.aria-label]="'Branch price for ' + row.branch.name" />
+                               [attr.aria-label]="'Price here for ' + row.branch.name" />
                       </td>
                     </tr>
                   }
                 </tbody>
               </table>
             </div>
+            <p class="text-muted small mt-2 mb-0" id="branchMenuHelp">
+              An item with no branch settings is sold at every branch. Once set, only the ticked branches sell it,
+              and a price here replaces the company price at that branch (per base unit; packs scale).
+            </p>
           }
 
         </div>

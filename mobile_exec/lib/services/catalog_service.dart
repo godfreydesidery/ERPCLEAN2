@@ -282,6 +282,83 @@ class UnitPrice {
   final String currency;
 }
 
+// -- branch menu (ADR-0073) ---------------------------------------------------
+
+/// One row of `GET /products/uid/{uid}/branches` (`ProductBranchDto`).
+///
+/// The row names its branch by numeric id only (a string on the wire), so the
+/// app matches it against the active branch's id, resolved once per branch.
+class BranchMenuRow {
+  const BranchMenuRow({
+    required this.branchId,
+    required this.active,
+    this.branchPrice,
+  });
+
+  factory BranchMenuRow.fromJson(Map<String, dynamic> j) => BranchMenuRow(
+        branchId: asStrOr(j['branchId']),
+        active: asBool(j['active'], true),
+        branchPrice: asNum(j['branchPrice']),
+      );
+
+  final String branchId;
+  final bool active;
+
+  /// The price per base unit at that branch; null = the company price.
+  final double? branchPrice;
+}
+
+/// Where one item stands at one branch: sold there or not, and its price there
+/// (null = the company price).
+class BranchMenuEntry {
+  const BranchMenuEntry({required this.soldHere, this.price});
+
+  final bool soldHere;
+  final double? price;
+}
+
+/// The item's entry at branch [branchId] from all of its branch [rows]
+/// (ADR-0073 D-1):
+///
+/// - no rows at all: sold at every branch, at the company price;
+/// - a row for the branch: sold there when it is active, at its price;
+/// - rows, but none for this branch: not sold here.
+///
+/// Null when there are rows but the branch's id is unknown: the answer cannot
+/// be told, and guessing would show the switch in the wrong position.
+BranchMenuEntry? branchMenuFor(List<BranchMenuRow> rows, String? branchId) {
+  if (rows.isEmpty) return const BranchMenuEntry(soldHere: true);
+  if (branchId == null || branchId.isEmpty) return null;
+  for (final r in rows) {
+    if (r.branchId == branchId) {
+      return BranchMenuEntry(soldHere: r.active, price: r.branchPrice);
+    }
+  }
+  return const BranchMenuEntry(soldHere: false);
+}
+
+/// The body of `PUT /products/uid/{uid}/branch-menu` for what the owner
+/// changed, or null when nothing changed (no call is made).
+///
+/// Only what changed is sent. Emptying a price that was set sends
+/// `clearPrice: true`; a missing price means "leave it as it is".
+Map<String, dynamic>? branchMenuBody({
+  required String branchUid,
+  required BranchMenuEntry before,
+  required bool soldHere,
+  required double? price,
+}) {
+  final body = <String, dynamic>{'branchUid': branchUid};
+  if (soldHere != before.soldHere) body['soldHere'] = soldHere;
+  final was = before.price;
+  if (price == null) {
+    if (was != null) body['clearPrice'] = true;
+  } else if (was == null || (price - was).abs() >= 0.00005) {
+    body['price'] = price == price.roundToDouble() ? price.toInt() : price;
+  }
+  return body.length == 1 ? null : body;
+}
+
 /// Products, suppliers, units, packs, prices and the master-data writes.
 class CatalogService {
   CatalogService(this.session);
@@ -442,6 +519,50 @@ class CatalogService {
       'price': {'amount': amount.toStringAsFixed(2), 'currency': currency},
       if (unitUid != null) 'unitUid': unitUid,
     });
+  }
+
+  // -- branch menu (ADR-0073) -----------------------------------------------
+
+  /// Branch uid -> numeric id. A branch's id never changes.
+  final Map<String, String> _branchIds = {};
+
+  /// The numeric id of [branchUid] (`GET /branches/uid/{uid}`), or null when
+  /// the answer has none.
+  Future<String?> branchIdOf(String branchUid) async {
+    final known = _branchIds[branchUid];
+    if (known != null) return known;
+    final res = await session.api.get('/branches/uid/$branchUid');
+    final id = asStr(asMap(res)['id']);
+    if (id != null && id.isNotEmpty) _branchIds[branchUid] = id;
+    return id;
+  }
+
+  Future<List<BranchMenuRow>> branchMenuRows(String productUid) async {
+    final res = await session.api.get('/products/uid/$productUid/branches');
+    return asList(res, BranchMenuRow.fromJson);
+  }
+
+  /// Where [productUid] stands at [branchUid]; null when it cannot be told.
+  /// The branch id is only looked up when the item has rows to match.
+  Future<BranchMenuEntry?> branchMenu(
+    String productUid,
+    String branchUid,
+  ) async {
+    final rows = await branchMenuRows(productUid);
+    if (rows.isEmpty) return branchMenuFor(rows, null);
+    return branchMenuFor(rows, await branchIdOf(branchUid));
+  }
+
+  /// Write one branch's entry; [body] comes from [branchMenuBody].
+  Future<List<BranchMenuRow>> setBranchMenu(
+    String productUid,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await session.api.put(
+      '/products/uid/$productUid/branch-menu',
+      body: body,
+    );
+    return asList(res, BranchMenuRow.fromJson);
   }
 
   // -- master-data writes ---------------------------------------------------

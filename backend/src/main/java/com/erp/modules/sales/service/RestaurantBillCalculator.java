@@ -86,7 +86,7 @@ class RestaurantBillCalculator {
                     .orElseThrow(() -> new NotFoundException("This unit no longer exists."));
             UnitListPriceDto price = LinePriceResolver.resolve(prices,
                     LinePriceResolver.query(companyId, product.getId(), unit.getId(), customer,
-                            currency, item.quantity(), businessDate),
+                            currency, item.quantity(), businessDate, branchId),
                     null);
             BigDecimal vatRate = taxRates.findByCompanyIdAndVatStatus(companyId, product.getVatStatus())
                     .map(TaxRate::getRate)

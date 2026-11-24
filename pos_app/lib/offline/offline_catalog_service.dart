@@ -15,42 +15,72 @@ import 'offline_catalog.dart';
 /// Offline, prices are the server's cached answers for the walk-in customer —
 /// never a figure the till worked out. A product without a cached price reads
 /// NO_PRICE, exactly as the server would say it, and cannot be sold offline.
+///
+/// The cache holds ONE branch's menu and prices (ERP ADR-0073). Offline at any
+/// other branch — another user signed in elsewhere before the refresh caught
+/// up — it answers as an empty menu rather than sell another branch's items at
+/// another branch's prices.
 class OfflineAwareCatalogService extends CatalogService {
   OfflineAwareCatalogService(
     super.api, {
     required OfflineCatalog cache,
     required bool Function() isOffline,
+    String? Function()? activeBranchUid,
   })  : _cache = cache,
-        _offline = isOffline;
+        _offline = isOffline,
+        _branch = activeBranchUid ?? _noBranch;
 
   final OfflineCatalog _cache;
   final bool Function() _offline;
+  final String? Function() _branch;
+
+  static String? _noBranch() => null;
 
   static ApiException _notFound() =>
       ApiException(statusCode: 404, message: 'Not found on this till while offline.');
 
+  static const String _noMenuHereText =
+      'This till has no saved menu for this branch yet, so it cannot find items while offline.';
+
+  /// Carries its text as an error entry too, so a register that shows a refused
+  /// scan's own words shows this instead of a bare "No match".
+  static ApiException _noMenuHere() => ApiException(
+      statusCode: 404,
+      message: _noMenuHereText,
+      errors: const [ApiError('', _noMenuHereText)]);
+
+  /// The cache may answer for the active branch.
+  bool get _cacheFits => _cache.servesBranch(_branch());
+
   @override
   Future<List<Product>> searchProducts(String companyId,
       {String? q, String? category, int page = 0, int size = 50}) async {
-    if (_offline()) return _cache.search(q: q, category: category, page: page, size: size);
+    if (_offline()) {
+      if (!_cacheFits) return const [];
+      return _cache.search(q: q, category: category, page: page, size: size);
+    }
     return super.searchProducts(companyId, q: q, category: category, page: page, size: size);
   }
 
   @override
   Future<List<String>> listCategories(String companyId) async {
-    if (_offline()) return _cache.snapshot.categories;
+    if (_offline()) return _cacheFits ? _cache.snapshot.categories : const [];
     return super.listCategories(companyId);
   }
 
   @override
   Future<Product> getProduct(String uid) async {
-    if (_offline()) return _cache.product(uid) ?? (throw _notFound());
+    if (_offline()) {
+      if (!_cacheFits) throw _noMenuHere();
+      return _cache.product(uid) ?? (throw _notFound());
+    }
     return super.getProduct(uid);
   }
 
   @override
   Future<ProductBarcode> lookupBarcode(String companyId, String barcode) async {
     if (_offline()) {
+      if (!_cacheFits) throw _noMenuHere();
       final hit = _cache.byBarcode(barcode) ?? (throw _notFound());
       return ProductBarcode(
         uid: '',
@@ -66,8 +96,9 @@ class OfflineAwareCatalogService extends CatalogService {
       );
     }
     final bc = await super.lookupBarcode(companyId, barcode);
-    // Embedded weight/price labels decode per scan; only plain codes are kept.
-    if (!bc.isEmbedded) _cache.learnBarcode(barcode, bc.productUid, bc.uomId);
+    // Embedded weight/price labels decode per scan; only plain codes are kept —
+    // and only into a cache of this branch's menu.
+    if (!bc.isEmbedded && _cacheFits) _cache.learnBarcode(barcode, bc.productUid, bc.uomId);
     return bc;
   }
 
@@ -75,6 +106,7 @@ class OfflineAwareCatalogService extends CatalogService {
   Future<List<ResolvedUnitPrice>> resolvePrices(List<String> productUids,
       {String? unitUid, String? customerUid, String? currency}) async {
     if (_offline()) {
+      if (!_cacheFits) return const [];
       // Only the walk-in's prices are kept: an offline sale has no other customer.
       final walkIn = _cache.snapshot.walkIn?.uid;
       if (customerUid != null && customerUid.isNotEmpty && customerUid != walkIn) {
@@ -88,7 +120,7 @@ class OfflineAwareCatalogService extends CatalogService {
 
   @override
   Future<List<ProductPack>> listPacks(String productUid) async {
-    if (_offline()) return _cache.packsOf(productUid);
+    if (_offline()) return _cacheFits ? _cache.packsOf(productUid) : const [];
     return super.listPacks(productUid);
   }
 

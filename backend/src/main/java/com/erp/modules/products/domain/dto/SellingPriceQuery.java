@@ -24,6 +24,8 @@ import java.time.LocalDate;
  * @param quantity            the line quantity in {@code unitId}; null = 1. Only consulted for a
  *                            customer price's minimum quantity.
  * @param businessDate        the date validity windows are judged on; null = today
+ * @param branchId            the branch the document belongs to; null = no branch in view. When set,
+ *                            the item's branch price there (ADR-0073) replaces the company list price.
  */
 public record SellingPriceQuery(
         Long companyId,
@@ -33,10 +35,19 @@ public record SellingPriceQuery(
         Long customerPriceListId,
         String currency,
         BigDecimal quantity,
-        LocalDate businessDate) {
+        LocalDate businessDate,
+        Long branchId) {
 
-    /** The walk-in question — no customer, any currency, today. */
+    /** The question without a branch in view — every caller that predates ADR-0073. */
+    public SellingPriceQuery(Long companyId, Long productId, Long unitId, Long customerId,
+                             Long customerPriceListId, String currency, BigDecimal quantity,
+                             LocalDate businessDate) {
+        this(companyId, productId, unitId, customerId, customerPriceListId, currency, quantity,
+                businessDate, null);
+    }
+
+    /** The walk-in question — no customer, any currency, today, no branch. */
     public static SellingPriceQuery walkIn(Long companyId, Long productId, Long unitId) {
-        return new SellingPriceQuery(companyId, productId, unitId, null, null, null, null, null);
+        return new SellingPriceQuery(companyId, productId, unitId, null, null, null, null, null, null);
     }
 }

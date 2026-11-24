@@ -45,6 +45,25 @@ enum PosPayoutType {
 /// till armed a "pending sale" for a plain business rejection and blocked the
 /// drawer with nothing actually in flight. These three are now distinguishable
 /// by HTTP status, by the `X-Pos-Sale-Status` header, and by `data.code`.
+/// The refusing rule's token for a sale refused because an item is not on the
+/// branch's menu (ERP ADR-0073; `PosSaleServiceImpl.NOT_ON_BRANCH_MENU`).
+const String kNotOnBranchMenu = 'NOT_ON_BRANCH_MENU';
+
+/// Whether a refused sale may be offered the manager discount-approval path.
+///
+/// Only for an explicit business REJECTED while the basket in fact holds an
+/// unapproved discount — and never when the server named another rule as the
+/// reason: an item not sold at this branch is not cured by approving a
+/// discount, so the cashier is shown the server's words and nothing else.
+bool refusalOffersDiscountApproval({
+  required PosSaleFlowStatus status,
+  required String? errorCode,
+  required bool hasUnapprovedDiscount,
+}) =>
+    status == PosSaleFlowStatus.rejected &&
+    errorCode != kNotOnBranchMenu &&
+    hasUnapprovedDiscount;
+
 enum PosSaleFlowStatus {
   /// 409 — an earlier attempt under the SAME key has not finished. The only
   /// outcome for which a pending sale may be armed and retried.

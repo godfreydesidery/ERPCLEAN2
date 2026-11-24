@@ -867,6 +867,18 @@ The hint beneath the switch reads *"When on, a sale is blocked if there isn't en
 
 > **Allow until configured, then block by default.** A brand-new company that has **never opened and saved** Sales Settings is *not* yet guarded — its sales are allowed to oversell until you configure the screen. The moment you save Sales Settings for the first time, the switch defaults to **Block**, so a saved company blocks negative-stock sales unless you deliberately turn the switch off.
 
+### Till shift time limit
+
+**What this control does.** A till stops taking sales on a shift (POS session) that has been open too long. The cashier sees *"This till session has been open too long to take new sales. Close and reconcile it, then open a new session."* — nothing is charged. The limit exists so that each cash count and Z-report covers one trading day. Open restaurant bills are **not** lost: they are not tied to a shift, so after closing the old shift and opening a new one, the bill can be paid as normal.
+
+**The choices.**
+
+- **Use the server setting** (the default) — the limit set on the server, normally **36 hours**. The hint under the control shows the actual number.
+- **Set my own limit** — enter a whole number of hours from **12 to 168** (one week).
+- **No limit** — a shift can stay open for days. Its cash count and Z-report then cover every day it was open, so differences are harder to trace. Choose this only if the business deliberately does not close shifts daily.
+
+**To change it:** choose the **Company**, pick an option under **Till shift time limit** (and the hours, for *Set my own limit*), then click **Save Settings**. The new limit applies to the next sale on every till of that company — no till update or restart is needed. Same permission: `SALES.SETTINGS.MANAGE`.
+
 ---
 
 ## Fiscal / EFD Configuration
@@ -1289,10 +1301,19 @@ Fill in the fields you want and click **Save weighing profile**. All three numer
 4. On the **Pricing** tab, enter the **Cost (buying) price** — an **Amount** and a **Currency** (the **Currency Picker**) — then click **Add price list** for each **Selling price** row and set its **Price list**, **Amount**, **Currency**, and optional **Effective from** date. A first selling-price row is pre-added automatically, pre-selected to the company's default price list where the system can resolve one (the list flagged as default, a list coded `DEFAULT`/`STANDARD`, or the only list that exists); otherwise it is left for you to choose.
 5. On the **Supplier & UoM** tab (headed *Supplier & Unit of Measure*), select the required **Base unit of measure**, optionally add **Pack / bulk units** — a **Unit** and a **Factor to base**, then click **Add** — the same bulk-pack conversions described under *Bulk packs* below, optionally search for and select a **Preferred supplier**, and set the **Stock planning defaults** (**Reorder level**, **Reorder qty**, **Safety stock**, **Min stock**, **Max stock** — disabled when **Type** is Service, since a Service product cannot be stockable).
 6. On the **Stock & Barcodes** tab, add any **Barcodes / Article numbers** — a **Barcode value**, optional **Type** and **Unit**, and a **Primary** checkbox (the first barcode you add is marked primary automatically even if you don't tick it) — and, if the product is stockable, an **Opening stock Quantity** and **Note**, seeded into your current active branch.
-7. On the **Branches** tab, leave **Make available in all branches** ticked (the default) to activate the product everywhere, or untick it and set each branch's own **Active** switch, **Reorder level** (stockable products only), and **Branch price** (blank inherits the price-list price).
+7. On the **Branches** tab, leave **Make available in all branches** ticked (the default) to sell the product everywhere, or untick it and set each branch's own **Sold here** switch, **Reorder level** (stockable products only), and **Price here** (blank = the company price). See *Different menus and prices per branch* below.
 8. Click **Create product**.
 
 **Validation.** **Name** and **Base unit of measure** are required — leaving either blank shows an error and switches you to the tab that needs it. If you add any barcodes, exactly one must be marked **Primary**.
+
+**Different menus and prices per branch.** When your branches do not all sell the same items, or sell an item at different prices, use **Sold here** and **Price here**:
+
+- An item with no branch settings is **sold at every branch** at the company price. Nothing changes until you set something.
+- Once an item has branch settings, it is sold **only at the branches where Sold here is ticked**. The till at any other branch does not show it, a scan says *This item is not sold at this branch*, and a sale or restaurant order with it is refused.
+- **Price here** replaces the company price at that branch. It is the price of one base unit; a pack is charged at that price times the pack size. A customer's contract price, or the customer's own price list, still comes first. VAT works as on your company price list.
+- You can also set one branch at a time on the product's detail page (the branches card) or in OrbixHQ (**Edit item** → *At <branch>*). Switching an item off at one branch, or pricing it there, never takes it off your other branches.
+- A new branch does not automatically sell items that already have branch settings — tick **Sold here** for it.
+- Restaurant bills for orders already placed are never blocked by a menu change; offline till sales always post and any price difference is flagged for a manager.
 
 **The save result.** If the product itself fails to save, the error is surfaced as a toast (for example a duplicate code) or, for an unexpected failure, the "Something went wrong" dialog — the form shows no inline message and the result panel below does not appear until the product has actually been created. Correct the issue and click **Create product** again. Once the product itself has saved, the screen always shows a result panel listing every section — **Product**, **Selling prices**, **Barcodes**, **Pack units**, **Branch availability**, **Opening stock** — each with a status: a check for a section that saved, a cross with the error message for one that failed, or a dash for one you left empty. Click **Retry** next to a failed section (other than **Product** itself) to resubmit just that part without repeating the whole form. From here, click **Open product** to go to the product's detail page, **Back to list** to return to the product list, or — if any section failed — **Continue editing** to go back to the form.
 
@@ -2523,6 +2544,7 @@ A success receipt is displayed showing the invoice number and total. Click **Vie
 - On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
 - The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
 - If the chosen session has been closed in the meantime, the sale is rejected with **"This POS session is not OPEN."** so you know to re-open or re-select an OPEN session.
+- If the session has been open longer than the company's **till shift time limit** (36 hours unless changed in **Sales Settings**), the sale is rejected with *"This till session has been open too long to take new sales."* Nothing is charged: close and reconcile the session, open a new one, and ring or pay the sale again. Open restaurant bills carry over to the new session.
 - If a **Complete Sale** click is interrupted (network drop, slow response) and the cashier retries, the system recognises the repeat and returns the original sale instead of ringing it twice — a sale is never double-posted, so it is safe to retry.
 
 #### Splitting payment across tenders
@@ -2575,6 +2597,16 @@ The **X-Read** card on the session detail page shows running totals without clos
 | Invoice Count | Number of sales processed |
 
 Click the refresh icon to reload the X-read at any time.
+
+### Offline selling (tills that keep selling without the server)
+
+A till can be allowed to keep selling cash, mobile money and card sales while it cannot reach the server — for example when the internet is down. It keeps those sales on the till and sends them when the server is back; the ERP records each one once, at the price the customer paid and at the time it was sold.
+
+- **Allow it per till.** **POS › Tills**, the **Offline selling** switch (permission `POS.TILL.MANAGE`). Every till starts with it **off**.
+- **Review what was sold offline.** **POS › Offline Sales Review** (permission `POS.OFFLINE.REVIEW`, held by Sales Managers and Branch Managers) lists, for the active branch, offline sales recorded at a different price from today's, sales that took stock below zero, sales sold below cost (when the below-cost policy is on), sales dated in a closed accounting period, and sales the ERP **held** without recording — with the sale exactly as it was rung. It also lists every offline period (till, who switched, why, how long, how many sales). **Acknowledge** each item once you have looked at it; nothing on the list blocks the books.
+- **Switching a till offline by hand** on a slow but working connection needs a manager with `POS.OFFLINE.SWITCH`, confirmed by password at the till.
+
+The cashier's side is described in the OrbixPOS user manual, chapter *Selling Offline*.
 
 ### 9.7 Close a session (end of day)
 

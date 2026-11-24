@@ -239,7 +239,7 @@ public class SalesOrderServiceImpl implements SalesOrderService {
                         LinePriceResolver.pricingCustomer(customers, order.getCompanyId(),
                                 order.getCustomerId()),
                         order.getCurrency() == null ? null : order.getCurrency().value(),
-                        req.quantity(), calendar.today(order.getCompanyId())),
+                        req.quantity(), calendar.today(order.getCompanyId()), order.getBranchId()),
                 req.unitPriceOverride());
         BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;
