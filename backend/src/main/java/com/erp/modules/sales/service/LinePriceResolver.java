@@ -66,13 +66,16 @@ final class LinePriceResolver {
      * @param currency  the document's currency code
      * @param quantity  the line quantity in {@code unitId}
      * @param businessDate today in the company's zone — the date price-list validity is judged on
+     * @param branchId  the document's branch — its branch price, when set, replaces the company list
+     *                  price (ADR-0073 D-2)
      */
     static SellingPriceQuery query(Long companyId, Long productId, Long unitId, Customer customer,
-                                   String currency, BigDecimal quantity, LocalDate businessDate) {
+                                   String currency, BigDecimal quantity, LocalDate businessDate,
+                                   Long branchId) {
         return new SellingPriceQuery(companyId, productId, unitId,
                 customer == null ? null : customer.getId(),
                 customer == null ? null : customer.getDefaultPriceListId(),
-                currency, quantity, businessDate);
+                currency, quantity, businessDate, branchId);
     }
 
     /**

@@ -10,6 +10,7 @@ import com.erp.modules.products.domain.entity.CustomerPrice;
 import com.erp.modules.products.domain.entity.PriceList;
 import com.erp.modules.products.domain.entity.PriceTier;
 import com.erp.modules.products.domain.entity.Product;
+import com.erp.modules.products.domain.entity.ProductBranch;
 import com.erp.modules.products.domain.entity.ProductBulkPack;
 import com.erp.modules.products.domain.entity.ProductPrice;
 import com.erp.modules.products.domain.entity.Promotion;
@@ -19,6 +20,7 @@ import com.erp.modules.products.domain.enums.PromotionTarget;
 import com.erp.modules.products.domain.enums.UnitPriceStatus;
 import com.erp.modules.products.repository.CustomerPriceRepository;
 import com.erp.modules.products.repository.PriceListRepository;
+import com.erp.modules.products.repository.ProductBranchRepository;
 import com.erp.modules.products.repository.ProductBulkPackRepository;
 import com.erp.modules.products.repository.ProductPriceRepository;
 import com.erp.modules.products.repository.ProductRepository;
@@ -39,8 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Deterministic price resolver. The live selling path is {@link #findSellingPriceQuote}: customer
- * contract price &gt; list price (customer list &gt; company default list &gt; legacy lowest-id row),
- * PRD-01. {@link #resolve} (ADR-0029 D-6, adding promotions and tiers) stays unwired. Read-only
+ * contract price &gt; customer list &gt; branch price (ADR-0073) &gt; company default list &gt; legacy
+ * lowest-id row, PRD-01. {@link #resolve} (ADR-0029 D-6, adding promotions and tiers) stays unwired. Read-only
  * transaction.
  */
 @Service
@@ -69,6 +71,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
     private final ProductBulkPackRepository bulkPacks;
     private final ProductRepository       products;
     private final PriceListRepository     priceLists;
+    private final ProductBranchRepository productBranches;
     private final CompanyCalendar calendar;
 
     public PriceResolutionServiceImpl(CustomerPriceRepository customerPrices,
@@ -78,6 +81,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                                       ProductBulkPackRepository bulkPacks,
                                       ProductRepository products,
                                       PriceListRepository priceLists,
+                                      ProductBranchRepository productBranches,
                                       CompanyCalendar calendar) {
         this.customerPrices = customerPrices;
         this.promotions     = promotions;
@@ -86,6 +90,7 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
         this.bulkPacks      = bulkPacks;
         this.products       = products;
         this.priceLists     = priceLists;
+        this.productBranches = productBranches;
         this.calendar       = calendar;
     }
 
@@ -197,7 +202,9 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                 .filter(row -> SellingPriceRules.rowUsable(row, date))
                 .toList();
 
-        UnitPriceQuoteResult listPrice = resolveListPrice(product, query, factor, usable);
+        // 2 + 3 — List price, then the item's own price at the document's branch (ADR-0073 D-2).
+        UnitPriceQuoteResult listPrice = withBranchPrice(query, factor,
+                resolveListPrice(product, query, factor, usable));
 
         // 1 — Customer contract price (PRD-02, customer prices only). Applies to the named customer
         // alone, so a walk-in sale — and the till's preview of it — is never affected.
@@ -208,8 +215,63 @@ public class PriceResolutionServiceImpl implements PriceResolutionService {
                 return contract.get();
             }
         }
-        // 2 — List price: customer list > company default list > legacy lowest-id row.
+        // 2 — List price: customer list > branch price > company default list > legacy lowest-id row.
         return listPrice;
+    }
+
+    /** Name the quote carries when a branch price priced the line (no price list behind it). */
+    static final String BRANCH_PRICE_NAME = "Branch price";
+
+    /**
+     * ADR-0073 D-2: the item's own price at the query's branch, per base unit, replaces the company
+     * list price for every unit of the item. The customer's own default list still wins over it, and
+     * a unit the product is not sold in stays not applicable. VAT stance and currency follow the list
+     * price the line would otherwise have had; with none, the company default list's; else exclusive.
+     */
+    private UnitPriceQuoteResult withBranchPrice(SellingPriceQuery query, BigDecimal factor,
+                                                 UnitPriceQuoteResult listPrice) {
+        if (query.branchId() == null) {
+            return listPrice;
+        }
+        Optional<BigDecimal> perBase = productBranches
+                .findByProductIdAndBranchId(query.productId(), query.branchId())
+                .filter(ProductBranch::isActive)
+                .map(ProductBranch::getBranchPrice);
+        if (perBase.isEmpty()) {
+            return listPrice;
+        }
+        if (listPrice.isResolved() && fromCustomerList(query, listPrice.price())) {
+            return listPrice;
+        }
+        if (factor == null) {
+            return UnitPriceQuoteResult.unpriced(UnitPriceStatus.UNIT_NOT_APPLICABLE);
+        }
+        String currency;
+        boolean vatInclusive;
+        if (listPrice.isResolved()) {
+            currency = listPrice.price().currency();
+            vatInclusive = listPrice.price().vatInclusive();
+        } else {
+            Optional<PriceList> companyDefault = priceLists.findDefaultsOfCompany(query.companyId())
+                    .stream()
+                    .min(java.util.Comparator.comparing(PriceList::getId));
+            currency = companyDefault.map(PriceList::getCurrency).map(cc -> CurrencyCode.value(cc))
+                    .orElse(query.currency());
+            vatInclusive = companyDefault.map(PriceList::isPriceIncludesVat).orElse(false);
+        }
+        return UnitPriceQuoteResult.resolved(new UnitPriceQuoteDto(perBase.get().multiply(factor),
+                currency, vatInclusive, PriceSource.BRANCH_PRICE, null, BRANCH_PRICE_NAME));
+    }
+
+    /** Whether {@code price} came from the customer's own default price list. */
+    private boolean fromCustomerList(SellingPriceQuery query, UnitPriceQuoteDto price) {
+        if (query.customerPriceListId() == null || price.priceListUid() == null) {
+            return false;
+        }
+        return priceLists.findByCompanyIdAndId(query.companyId(), query.customerPriceListId())
+                .map(PriceList::getUid)
+                .filter(price.priceListUid()::equals)
+                .isPresent();
     }
 
     // ---- selling-price resolution (PRD-01) ------------------------------------------

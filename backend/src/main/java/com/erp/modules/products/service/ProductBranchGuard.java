@@ -44,4 +44,11 @@ public class ProductBranchGuard {
         }
         return branch.getId();
     }
+
+    /** Ids of every branch of {@code companyId} (ADR-0073: materialising "sold everywhere"). */
+    public java.util.List<Long> branchIdsOf(Long companyId) {
+        return branches.findByCompanyIdOrderByName(companyId).stream()
+                .map(com.erp.modules.iam.domain.entity.Branch::getId)
+                .toList();
+    }
 }

@@ -841,7 +841,7 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                         LinePriceResolver.pricingCustomer(customers, inv.getCompanyId(),
                                 inv.getCustomerId()),
                         inv.getCurrency() == null ? null : inv.getCurrency().value(), quantity,
-                        calendar.today(inv.getCompanyId())),
+                        calendar.today(inv.getCompanyId()), inv.getBranchId()),
                 statedPrice);
         BigDecimal listPrice = resolvedPrice.amount();
 

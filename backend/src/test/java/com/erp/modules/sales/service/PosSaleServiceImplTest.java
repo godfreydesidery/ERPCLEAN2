@@ -104,6 +104,7 @@ class PosSaleServiceImplTest {
     private ComplimentaryAuthorisationGuard complimentaryGuard;
     private ComplimentaryGlSeeder       complimentaryGl;
     private SalesSettingsRepository     salesSettings;
+    private com.erp.modules.products.service.BranchMenuService branchMenu;
 
     private PosSaleServiceImpl service;
 
@@ -124,6 +125,8 @@ class PosSaleServiceImplTest {
         stepUpAuth         = mock(StepUpAuthService.class);
         complimentaryGuard = mock(ComplimentaryAuthorisationGuard.class);
         complimentaryGl    = mock(ComplimentaryGlSeeder.class);
+        branchMenu         = mock(com.erp.modules.products.service.BranchMenuService.class);
+        when(branchMenu.isSoldAt(any(), any())).thenReturn(true);
         salesSettings      = mock(SalesSettingsRepository.class);   // no row → server default
 
         service = new PosSaleServiceImpl(
@@ -131,7 +134,7 @@ class PosSaleServiceImplTest {
                 customers, companies, scopeGuard, audit, idempotency, permissionResolver,
                 agents, stepUpAuth, complimentaryGuard, complimentaryGl,
                 REPLAY_MAX_AGE, SALE_MAX_AGE,
-                new PosSessionAgePolicy(salesSettings, MAX_OPEN_SESSION_AGE));
+                new PosSessionAgePolicy(salesSettings, MAX_OPEN_SESSION_AGE), branchMenu);
 
         // Common stubs: open session in company scope
         PosSession session = buildSession();

@@ -180,7 +180,7 @@ public class QuotationServiceImpl implements QuotationService {
                         LinePriceResolver.pricingCustomer(customers, q.getCompanyId(),
                                 q.getCustomerId()),
                         q.getCurrency() == null ? null : q.getCurrency().value(),
-                        req.quantity(), calendar.today(q.getCompanyId())),
+                        req.quantity(), calendar.today(q.getCompanyId()), q.getBranchId()),
                 req.unitPriceOverride());
         BigDecimal listPrice = resolvedPrice.amount();
         BigDecimal appliedPrice = req.unitPriceOverride() != null ? req.unitPriceOverride() : listPrice;

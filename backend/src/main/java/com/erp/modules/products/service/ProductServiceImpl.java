@@ -10,6 +10,7 @@ import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.EmbeddedBarcodeDecode;
 import com.erp.modules.products.domain.dto.ProductBarcodeDto;
 import com.erp.modules.products.domain.dto.ProductBranchDto;
+import com.erp.modules.products.domain.dto.SetBranchMenuRequest;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
@@ -230,12 +231,47 @@ public class ProductServiceImpl implements ProductService {
     @Transactional(readOnly = true)
     public List<String> listCategories(Long companyId) {
         scopeGuard.assertCanActIn(RequestContext.get(), companyId);
-        // One entry per category however it was typed ("Drinks", "drinks"), sorted by name.
+        return distinctCategories(products.findCategories(companyId));
+    }
+
+    /** One entry per category however it was typed ("Drinks", "drinks"), sorted by name. */
+    private static List<String> distinctCategories(List<String> raw) {
         Map<String, String> byKey = new java.util.TreeMap<>();
-        for (String c : products.findCategories(companyId)) {
+        for (String c : raw) {
             byKey.putIfAbsent(c.toLowerCase(java.util.Locale.ROOT), c);
         }
         return List.copyOf(byKey.values());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProductDto> listSoldHere(Long companyId, String q, String category,
+                                         Pageable pageable) {
+        Long branchId = activeBranchId();
+        if (branchId == null) {
+            return list(companyId, q, category, pageable);
+        }
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        String term = q == null || q.isBlank() ? null : q;
+        String cat = category == null || category.isBlank() ? null : category.trim();
+        return products.searchSoldAt(companyId, term, cat, branchId, pageable).map(ProductDto::from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> listCategoriesSoldHere(Long companyId) {
+        Long branchId = activeBranchId();
+        if (branchId == null) {
+            return listCategories(companyId);
+        }
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        return distinctCategories(products.findCategoriesSoldAt(companyId, branchId));
+    }
+
+    /** The caller's active branch (JWT default or {@code X-Branch-Uid}); null when there is none. */
+    private static Long activeBranchId() {
+        RequestContext.Principal principal = RequestContext.get();
+        return principal == null ? null : principal.branchId();
     }
 
     @Override
@@ -436,7 +472,9 @@ public class ProductServiceImpl implements ProductService {
             if (req.reorderLevel() != null) {
                 assoc.setReorderLevel(req.reorderLevel());
             }
-            if (req.branchPrice() != null) {
+            if (Boolean.TRUE.equals(req.clearBranchPrice())) {
+                assoc.setBranchPrice(null);
+            } else if (req.branchPrice() != null) {
                 assoc.setBranchPrice(req.branchPrice());
             }
             audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
@@ -450,11 +488,61 @@ public class ProductServiceImpl implements ProductService {
         ProductBranch assoc = new ProductBranch(p, branchId, actorId());
         assoc.setActive(req.active() == null || req.active());
         assoc.setReorderLevel(req.reorderLevel());
-        assoc.setBranchPrice(req.branchPrice());
+        assoc.setBranchPrice(Boolean.TRUE.equals(req.clearBranchPrice()) ? null : req.branchPrice());
         assoc = productBranches.save(assoc);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_BRANCH_ADD, "products", p.getId(), p.getUid())
                 .detail(Map.of("branchUid", req.branchUid())));
         return ProductBranchDto.from(assoc);
+    }
+
+    @Override
+    public List<ProductBranchDto> setBranchMenu(String uid, SetBranchMenuRequest req) {
+        Product p = require(uid);
+        scopeGuard.assertCanActIn(RequestContext.get(), p.getCompanyId());
+        Long branchId = branchGuard.resolveAndAssertSameCompany(p.getCompanyId(), req.branchUid());
+
+        List<ProductBranch> rows = productBranches.findByProductId(p.getId());
+        ProductBranch here = rows.stream().filter(r -> r.getBranchId().equals(branchId))
+                .findFirst().orElse(null);
+        // With no rows the item is already sold here at the company price, so only "not sold here"
+        // or a price changes anything. With rows, a missing row for this branch means NOT sold
+        // here, so "sold here" must write one.
+        boolean changesSomething = rows.isEmpty()
+                ? Boolean.FALSE.equals(req.soldHere()) || req.price() != null
+                : req.soldHere() != null || req.price() != null
+                        || (here != null && Boolean.TRUE.equals(req.clearPrice()));
+        if (!changesSomething) {
+            return listBranches(uid);
+        }
+        if (rows.isEmpty()) {
+            // ADR-0073 D-1: no rows = sold everywhere. Writing the first row would otherwise make
+            // this the only branch that sells it.
+            for (Long other : branchGuard.branchIdsOf(p.getCompanyId())) {
+                if (!other.equals(branchId)) {
+                    productBranches.save(new ProductBranch(p, other, actorId()));
+                }
+            }
+        }
+        if (here == null) {
+            here = new ProductBranch(p, branchId, actorId());
+        }
+        if (req.soldHere() != null) {
+            here.setActive(req.soldHere());
+        }
+        if (Boolean.TRUE.equals(req.clearPrice())) {
+            here.setBranchPrice(null);
+        } else if (req.price() != null) {
+            here.setBranchPrice(req.price());
+        }
+        here = productBranches.save(here);
+        audit.record(AuditEvent.of(AuditActions.PRODUCT_UPDATE, "products", p.getId(), p.getUid())
+                .detail(Map.of("action", "BRANCH_MENU",
+                        "branchUid", req.branchUid(),
+                        "soldHere", String.valueOf(here.isActive()),
+                        "branchPrice", String.valueOf(here.getBranchPrice()))));
+        return productBranches.findByProductId(p.getId()).stream()
+                .map(ProductBranchDto::from)
+                .toList();
     }
 
     @Override
@@ -813,6 +901,20 @@ public class ProductServiceImpl implements ProductService {
         return barcodes.findByProductId(p.getId()).stream()
                 .map(ProductBarcodeDto::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProductBarcodeDto lookupBarcode(Long companyId, String barcode, boolean soldHere) {
+        ProductBarcodeDto found = lookupBarcode(companyId, barcode);
+        Long branchId = soldHere ? activeBranchId() : null;
+        if (branchId != null && found.productId() != null) {
+            // found came from the company-scoped lookup above, so its product is this company's.
+            if (!productBranches.isSoldAt(found.productId(), branchId).orElse(true)) {
+                throw new NotFoundException("This item is not sold at this branch.");
+            }
+        }
+        return found;
     }
 
     @Override

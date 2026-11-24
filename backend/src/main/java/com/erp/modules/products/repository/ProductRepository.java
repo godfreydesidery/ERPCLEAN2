@@ -96,6 +96,46 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                                    @Param("category") String category,
                                    Pageable pageable);
 
+    /**
+     * {@link #search} / {@link #searchInCategory} limited to the items sold at {@code branchId}
+     * (ADR-0073 D-1: no branch rows = sold everywhere; rows = only where active). {@code q} and
+     * {@code category} are optional. The till's catalogue and its offline cache read through this.
+     */
+    @Query("""
+            SELECT p FROM Product p
+            WHERE p.companyId = :companyId
+              AND (CAST(:category AS String) IS NULL
+                   OR LOWER(TRIM(p.category)) = LOWER(TRIM(CAST(:category AS String))))
+              AND (CAST(:q AS String) IS NULL OR
+                   LOWER(p.name) LIKE LOWER(CONCAT('%', CAST(:q AS String), '%'))
+                   OR LOWER(p.code) LIKE LOWER(CONCAT('%', CAST(:q AS String), '%'))
+                   OR EXISTS (SELECT 1 FROM ProductBarcode b
+                              WHERE b.product = p AND b.barcode = CAST(:q AS String)))
+              AND (NOT EXISTS (SELECT 1 FROM ProductBranch anyRow WHERE anyRow.product = p)
+                   OR EXISTS (SELECT 1 FROM ProductBranch here
+                              WHERE here.product = p AND here.branchId = :branchId
+                                AND here.active = true))
+            """)
+    Page<Product> searchSoldAt(@Param("companyId") Long companyId,
+                               @Param("q") String q,
+                               @Param("category") String category,
+                               @Param("branchId") Long branchId,
+                               Pageable pageable);
+
+    /** {@link #findCategories} counting only the items sold at {@code branchId} (ADR-0073). */
+    @Query("""
+            SELECT DISTINCT TRIM(p.category) FROM Product p
+            WHERE p.companyId = :companyId AND p.sellable = true
+              AND p.status = com.erp.platform.common.domain.MasterStatus.ACTIVE
+              AND p.category IS NOT NULL AND TRIM(p.category) <> ''
+              AND (NOT EXISTS (SELECT 1 FROM ProductBranch anyRow WHERE anyRow.product = p)
+                   OR EXISTS (SELECT 1 FROM ProductBranch here
+                              WHERE here.product = p AND here.branchId = :branchId
+                                AND here.active = true))
+            """)
+    List<String> findCategoriesSoldAt(@Param("companyId") Long companyId,
+                                      @Param("branchId") Long branchId);
+
     /** The categories of the company's active, sellable products, trimmed (may differ in case). */
     @Query("""
             SELECT DISTINCT TRIM(p.category) FROM Product p

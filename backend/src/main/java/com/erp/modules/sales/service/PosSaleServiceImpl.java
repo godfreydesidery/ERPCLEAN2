@@ -1,6 +1,7 @@
 package com.erp.modules.sales.service;
 
 import com.erp.modules.products.repository.ProductRepository;
+import com.erp.modules.products.service.BranchMenuService;
 import com.erp.modules.products.repository.UnitOfMeasureRepository;
 import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.AddPaymentRequest;
@@ -128,6 +129,7 @@ public class PosSaleServiceImpl implements PosSaleService {
      * falling back to {@code erp.pos.session.max-open-age}.
      */
     private final PosSessionAgePolicy sessionAgePolicy;
+    private final BranchMenuService   branchMenu;
 
     public PosSaleServiceImpl(PosSessionRepository posSessionRepo,
                                SalesInvoiceRepository invoiceRepo,
@@ -146,7 +148,8 @@ public class PosSaleServiceImpl implements PosSaleService {
                                ComplimentaryGlSeeder complimentaryGl,
                                @Value("${erp.pos.sale.replay-max-age:PT15M}") Duration replayMaxAge,
                                @Value("${erp.pos.sale.max-age:PT12H}") Duration saleMaxAge,
-                               PosSessionAgePolicy sessionAgePolicy) {
+                               PosSessionAgePolicy sessionAgePolicy,
+                               BranchMenuService branchMenu) {
         this.agents            = agents;
         this.posSessionRepo    = posSessionRepo;
         this.invoiceRepo       = invoiceRepo;
@@ -165,6 +168,36 @@ public class PosSaleServiceImpl implements PosSaleService {
         this.replayMaxAge      = replayMaxAge;
         this.saleMaxAge        = saleMaxAge;
         this.sessionAgePolicy  = sessionAgePolicy;
+        this.branchMenu        = branchMenu;
+    }
+
+    @Override
+    public SalesInvoiceDto processTillSale(String idempotencyKey, PosSaleRequest req) {
+        // ADR-0073 D-3: a till sells only what its branch sells. Checked here, not in processSale,
+        // because a restaurant bill reaches processSale too and its lines were checked when they
+        // were ordered — a menu change mid-service must not make an open table unpayable.
+        var session = posSessionRepo.findByUid(req.sessionUid()).orElse(null);
+        if (session != null) {
+            scopeGuard.assertCanActIn(RequestContext.get(), session.getCompanyId());
+            boolean answered = idempotencyKey != null && !idempotencyKey.isBlank()
+                    && idempotency.findByCompanyIdAndIdemKey(session.getCompanyId(), idempotencyKey)
+                            .isPresent();
+            // A key that already names a sale is answered by processSale exactly as before: the
+            // menu may have changed since that sale posted.
+            if (!answered && req.lines() != null) {
+                for (var line : req.lines()) {
+                    var product = products.findByCompanyIdAndId(session.getCompanyId(),
+                            line.productId()).orElse(null);
+                    if (product != null
+                            && !branchMenu.isSoldAt(product.getId(), session.getBranchId())) {
+                        throw PosSaleFlowException.rejected(product.getName()
+                                + " is not sold at this branch. Remove it from the sale, or ask a"
+                                + " manager to turn it on for this branch in Product Master.");
+                    }
+                }
+            }
+        }
+        return processSale(idempotencyKey, req);
     }
 
     @Override
