@@ -159,6 +159,22 @@ void main() {
     });
   });
 
+  group('when the section shows', () {
+    test('hidden for a user with one branch (or none)', () {
+      expect(showBranchMenu(branchCount: 1, canView: true), isFalse);
+      expect(showBranchMenu(branchCount: 0, canView: true), isFalse);
+    });
+
+    test('shown with two or more branches', () {
+      expect(showBranchMenu(branchCount: 2, canView: true), isTrue);
+      expect(showBranchMenu(branchCount: 5, canView: true), isTrue);
+    });
+
+    test('hidden without PRODUCT.VIEW', () {
+      expect(showBranchMenu(branchCount: 3, canView: false), isFalse);
+    });
+  });
+
   group('done sheet title', () {
     test('names what did not save', () {
       expect(

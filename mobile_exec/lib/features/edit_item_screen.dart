@@ -101,7 +101,12 @@ class _EditItemScreenState extends State<EditItemScreen> {
     }
 
     // The branch menu is extra: a failure here never blocks editing the item.
-    final branch = session.can('PRODUCT.VIEW') ? session.activeBranch : null;
+    final branch = showBranchMenu(
+      branchCount: session.branches.length,
+      canView: session.can('PRODUCT.VIEW'),
+    )
+        ? session.activeBranch
+        : null;
     BranchMenuEntry? menu;
     String? menuNote;
     if (branch != null) {
@@ -511,6 +516,12 @@ class _EditFormState extends State<_EditForm> {
     );
   }
 }
+
+/// Whether the "At (branch name)" section is shown. Hidden for a user with
+/// only one branch (owner ruling, 2026-11-24): there "Sold here" off would
+/// just be a second way to deactivate the item.
+bool showBranchMenu({required int branchCount, required bool canView}) =>
+    canView && branchCount >= 2;
 
 /// The done sheet's title after a save. The item itself has saved by the time
 /// this is shown; the price and the branch entry are separate records and may
