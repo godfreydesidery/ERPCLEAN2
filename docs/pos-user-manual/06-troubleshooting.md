@@ -213,6 +213,8 @@ The big green button changes to **Retry this sale**. If the server did give a re
 | **No sales agent could be determined for this sale…** | See **"No sales agent could be determined"** below. |
 | The payments do not cover the total | The server's total is higher than the payments you added. Add a tender for the difference. |
 
+**"… is not sold at this branch."** when completing a sale or adding to a restaurant order: the item is not on this branch's menu (usually a till that had not refreshed yet). Remove it from the sale. If it should be sold here, ask a manager to turn it on for your branch. Prices also follow your branch: an item can cost more or less here than at another branch.
+
 ### "Select a customer before completing the sale."
 
 **What it is.** Every sale needs a customer. Normally the till uses your company's walk-in (cash) customer automatically. If it could not find one, it asks you to choose.
@@ -262,6 +264,7 @@ The big green button changes to **Retry this sale**. If the server did give a re
 | The item is found by name, but its barcode always says no match | The barcode is not registered against the product in the ERP — sometimes it was typed into the product's code instead of its barcodes. Tell your supervisor; master-data staff need to add the barcode to the product. Meanwhile, add the item by name. |
 | **Price-embedded labels aren't supported yet — enter … manually.** | The label carries a price inside the barcode, which the till cannot use. Search for the item by name and enter the quantity. |
 | Still nothing for an item on the shelf | The product may not be in the catalogue. Tell your supervisor. |
+| **This item is not sold at this branch.** | The item exists, but your branch does not sell it — each branch can have its own menu. The till only shows this branch's items. If it should be sold here, a manager ticks **Sold here** for your branch in Product Master (or OrbixHQ, Edit item). |
 
 ### The scan adds the wrong item
 
