@@ -205,3 +205,38 @@ describe('ProductService — barcode lookup', () => {
     expect(status).toBe(404);
   });
 });
+
+describe('ProductService — branch menu (ADR-0073)', () => {
+  let service: ProductService;
+  let httpMock: HttpTestingController;
+  const base = `${environment.apiBaseUrl}/products`;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    service = TestBed.inject(ProductService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('setBranchMenu PUTs the request to /uid/{uid}/branch-menu and returns all rows', () => {
+    let rows: unknown;
+    service.setBranchMenu('P1', { branchUid: 'B1', soldHere: false, clearPrice: true }).subscribe((r) => (rows = r));
+    const req = httpMock.expectOne(`${base}/uid/P1/branch-menu`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ branchUid: 'B1', soldHere: false, clearPrice: true });
+    req.flush([{ branchId: '1', active: false }, { branchId: '2', active: true }]);
+    expect((rows as unknown[]).length).toBe(2);
+  });
+
+  it('list adds soldHere=true only when asked', () => {
+    service.list('7', '', 0, 20, true).subscribe();
+    const req = httpMock.expectOne((r) => r.url === base);
+    expect(req.request.params.get('soldHere')).toBe('true');
+    req.flush({ data: [], meta: {} });
+    service.list('7').subscribe();
+    const req2 = httpMock.expectOne((r) => r.url === base);
+    expect(req2.request.params.has('soldHere')).toBe(false);
+    req2.flush({ data: [], meta: {} });
+  });
+});

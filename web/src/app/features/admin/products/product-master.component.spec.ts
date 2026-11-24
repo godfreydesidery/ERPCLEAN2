@@ -472,7 +472,7 @@ describe('ProductMasterComponent — all-branches toggle', () => {
     expect(comp.allBranchesToggle()).toBe(false);
   });
 
-  it('calls assignBranch only for selected branch when toggle=false', async () => {
+  it('sends EVERY branch row when toggle=false, the unticked one with active=false (ADR-0073)', async () => {
     const fixture = TestBed.createComponent(ProductMasterComponent);
     const comp = fixture.componentInstance;
     await vi.runAllTimersAsync();
@@ -480,15 +480,35 @@ describe('ProductMasterComponent — all-branches toggle', () => {
     comp.fName.set('Widget');
     comp.fBaseUnitUid.set('U1');
     comp.updateBranchRow(0, { active: false }); // deselect B1
-    // toggle is now false; only B2 remains active
 
     comp.save();
     await vi.runAllTimersAsync();
 
     const svc = asMock(TestBed.inject(ProductService));
     const calls = svc['assignBranch'].mock.calls as unknown[][];
-    expect(calls.length).toBe(1);
-    expect((calls[0]![1] as Record<string, unknown>)['branchUid']).toBe('B2');
+    expect(calls.length).toBe(2);
+    const byUid = new Map(calls.map((c) => [(c[1] as Record<string, unknown>)['branchUid'], c[1] as Record<string, unknown>]));
+    expect(byUid.get('B1')!['active']).toBe(false);
+    expect(byUid.get('B2')!['active']).toBe(true);
+  });
+
+  it('sends clearBranchPrice when a saved branch price is emptied', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.branchRows.update((rows) => rows.map((r, i) => (i === 0 ? { ...r, hadPrice: true, branchPrice: '' } : r)));
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    const calls = svc['assignBranch'].mock.calls as unknown[][];
+    const b1 = calls.map((c) => c[1] as Record<string, unknown>).find((r) => r['branchUid'] === 'B1')!;
+    const b2 = calls.map((c) => c[1] as Record<string, unknown>).find((r) => r['branchUid'] === 'B2')!;
+    expect(b1['clearBranchPrice']).toBe(true);
+    expect(b2['clearBranchPrice']).toBeUndefined();
   });
 });
 

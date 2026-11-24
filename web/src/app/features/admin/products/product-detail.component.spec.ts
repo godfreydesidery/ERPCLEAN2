@@ -668,3 +668,50 @@ describe('ProductDetailComponent — addBarcode() unit binding (PRD-06)', () => 
     expect('unitUid' in request).toBe(false);
   });
 });
+
+describe('ProductDetailComponent — branch menu card (ADR-0073)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); TestBed.resetTestingModule(); });
+
+  const BRANCH = { id: '5', uid: 'B5', code: 'BR5', name: 'Mikocheni' };
+
+  async function setup(setBranchMenu: ReturnType<typeof vi.fn>) {
+    makeBed({
+      listBranches: vi.fn(() => of([{ branchId: '5', assignedAt: null, assignedBy: null, active: true, branchPrice: 2500 }])),
+      setBranchMenu,
+    });
+    TestBed.overrideProvider(BranchService, { useValue: { list: vi.fn(() => of([BRANCH])) } });
+    return createDetail();
+  }
+
+  it('labels the Sold here / Price here inputs and shows the saved price', async () => {
+    const fixture = await setup(vi.fn(() => of([])));
+    const price: HTMLInputElement | null = fixture.nativeElement.querySelector('#priceHere_5');
+    expect(price?.value).toBe('2500');
+    expect(fixture.nativeElement.querySelector('label[for="priceHere_5"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('label[for="soldHere_5"]')).not.toBeNull();
+  });
+
+  it('saves through PUT branch-menu, clearing the price when emptied', async () => {
+    const setBranchMenu = vi.fn(() => of([{ branchId: '5', assignedAt: null, assignedBy: null, active: false }]));
+    const fixture = await setup(setBranchMenu);
+    const comp = fixture.componentInstance;
+    const pb = comp.branches()[0]!;
+
+    comp.editBranch(pb, { sold: false, price: '' });
+    comp.saveBranchMenu(pb);
+
+    expect(setBranchMenu).toHaveBeenCalledWith(expect.any(String), { branchUid: 'B5', soldHere: false, clearPrice: true });
+    expect(comp.branches()[0]!.active).toBe(false);
+    expect(comp.branchDirty(comp.branches()[0]!)).toBe(false);
+  });
+
+  it('sends the typed price', async () => {
+    const setBranchMenu = vi.fn(() => of([]));
+    const fixture = await setup(setBranchMenu);
+    const comp = fixture.componentInstance;
+    comp.editBranch(comp.branches()[0]!, { price: '3000' });
+    comp.saveBranchMenu(comp.branches()[0]!);
+    expect(setBranchMenu).toHaveBeenCalledWith(expect.any(String), { branchUid: 'B5', soldHere: true, price: '3000' });
+  });
+});

@@ -355,10 +355,10 @@ export class RestaurantSetupComponent {
     if (!companyId || !this.canEditProducts()) return;
     const size = 200;
     this.products
-      .list(companyId, '', 0, size)
+      .list(companyId, '', 0, size, true)
       .pipe(
         expand((res) => (res.meta.hasNext && res.meta.page < 9
-          ? this.products.list(companyId, '', res.meta.page + 1, size)
+          ? this.products.list(companyId, '', res.meta.page + 1, size, true)
           : EMPTY)),
         reduce((all, res) => all.concat(res.rows), [] as ProductModel[]),
       )

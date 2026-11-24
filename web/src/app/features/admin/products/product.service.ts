@@ -8,6 +8,7 @@ import {
   AddBarcodeRequest,
   AddComponentRequest,
   AssignProductBranchRequest,
+  SetBranchMenuRequest,
   CreateBulkPackRequest,
   CreatePriceListRequest,
   CreateProductRequest,
@@ -56,12 +57,13 @@ export class ProductService {
 
   // ── Product CRUD ──────────────────────────────────────────────────────────
 
-  list(companyId: string, q?: string, page = 0, size = 20): Observable<ProductPage> {
+  list(companyId: string, q?: string, page = 0, size = 20, soldHere = false): Observable<ProductPage> {
     let params = new HttpParams()
       .set('companyId', companyId)
       .set('page', String(page))
       .set('size', String(size));
     if (q?.trim()) params = params.set('q', q.trim());
+    if (soldHere) params = params.set('soldHere', 'true');
 
     const context = new HttpContext().set(SKIP_UNWRAP, true);
     return this.http
@@ -223,6 +225,11 @@ export class ProductService {
 
   assignBranch(uid: string, request: AssignProductBranchRequest): Observable<ProductBranchDto> {
     return this.http.post<ProductBranchDto>(`${this.base}/uid/${uid}/branches`, request);
+  }
+
+  /** Edits one branch's menu entry; returns every row of the item (ADR-0073). */
+  setBranchMenu(uid: string, request: SetBranchMenuRequest): Observable<ProductBranchDto[]> {
+    return this.http.put<ProductBranchDto[]>(`${this.base}/uid/${uid}/branch-menu`, request);
   }
 
   removeBranch(uid: string, branchUid: string): Observable<void> {

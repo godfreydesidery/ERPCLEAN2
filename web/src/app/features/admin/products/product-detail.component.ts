@@ -12,6 +12,7 @@ import {
   AddBarcodeRequest,
   AddComponentRequest,
   AssignProductBranchRequest,
+  SetBranchMenuRequest,
   CreateBulkPackRequest,
   Money,
   PriceListDto,
@@ -249,6 +250,8 @@ export class ProductDetailComponent {
   readonly branches = signal<ProductBranchDto[]>([]);
   readonly branchesState = signal<LoadState>('loading');
   readonly rowBusyBranchId = signal<string | null>(null);
+  /** Unsaved "Sold here" / "Price here" edits per branchId (ADR-0073). */
+  readonly branchEdits = signal<Record<string, { sold: boolean; price: string }>>({});
 
   // ── Branch assign form ─────────────────────────────────────────────────────
   readonly companies = signal<Company[]>([]);
@@ -764,6 +767,7 @@ export class ProductDetailComponent {
     this.productService.listBranches(this.uid()).subscribe({
       next: (rows) => {
         this.branches.set(rows);
+        this.branchEdits.set({});
         this.branchesState.set('idle');
       },
       error: () => this.branchesState.set('error'),
@@ -842,6 +846,50 @@ export class ProductDetailComponent {
       error: (err) => {
         this.assignError.set(this.messageFrom(err, 'Could not assign branch.'));
         this.assigning.set(false);
+      },
+    });
+  }
+
+  branchSold(pb: ProductBranchDto): boolean {
+    return this.branchEdits()[pb.branchId]?.sold ?? pb.active !== false;
+  }
+
+  branchPriceText(pb: ProductBranchDto): string {
+    const e = this.branchEdits()[pb.branchId];
+    if (e) return e.price;
+    return pb.branchPrice != null ? String(pb.branchPrice) : '';
+  }
+
+  branchDirty(pb: ProductBranchDto): boolean {
+    return this.branchEdits()[pb.branchId] !== undefined;
+  }
+
+  editBranch(pb: ProductBranchDto, patch: { sold?: boolean; price?: string }): void {
+    const cur = { sold: this.branchSold(pb), price: this.branchPriceText(pb) };
+    this.branchEdits.update((m) => ({ ...m, [pb.branchId]: { ...cur, ...patch } }));
+  }
+
+  /** Saves Sold here / Price here for one branch through PUT /branch-menu. */
+  saveBranchMenu(pb: ProductBranchDto): void {
+    if (this.rowBusyBranchId() !== null) return;
+    const branch = this.branchById().get(pb.branchId);
+    const edit = this.branchEdits()[pb.branchId];
+    if (!branch || !edit) return;
+    const price = edit.price.trim();
+    const req: SetBranchMenuRequest = { branchUid: branch.uid, soldHere: edit.sold };
+    if (price) req.price = price;
+    else if (pb.branchPrice != null) req.clearPrice = true;
+    this.rowBusyBranchId.set(pb.branchId);
+    this.productService.setBranchMenu(this.uid(), req).subscribe({
+      next: (rows) => {
+        this.rowBusyBranchId.set(null);
+        this.branches.set(rows);
+        this.branchEdits.set({});
+        this.alerts.success('Branch menu saved', branch.name);
+      },
+      error: (err) => {
+        this.rowBusyBranchId.set(null);
+        this.assignError.set(this.messageFrom(err, 'Could not save the branch menu.'));
       },
     });
   }
