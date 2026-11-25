@@ -263,9 +263,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             asOf: view.report.priceListName == null
                                 ? 'Live from the server'
                                 : 'Prices from ${view.report.priceListName}',
-                            coverage: view.report.branchName ??
-                                session.activeBranch?.name ??
-                                '',
+                            coverage: view.report.branchName ?? session.scopeLabel,
                           ),
                         ],
                       );

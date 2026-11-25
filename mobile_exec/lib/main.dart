@@ -21,6 +21,7 @@ import 'features/stock_valuation_screen.dart';
 import 'features/restaurant_dashboard_screen.dart';
 import 'features/restaurant_reports_screen.dart';
 import 'features/till_report_screen.dart';
+import 'widgets/branch_picker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,7 +110,22 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _tab = 0;
 
-  void _navigate(String route) {
+  /// Actions that change stock at one branch. In the all-branches view they
+  /// ask which branch first, rather than acting at whichever branch happens
+  /// to anchor the session.
+  static const _atOneBranch = {
+    'receive': 'Receive goods',
+    'adjust': 'Stock adjustment',
+  };
+
+  Future<void> _navigate(String route) async {
+    final session = AppScope.of(context).session;
+    final action = _atOneBranch[route];
+    if (action != null && session.allBranches) {
+      final picked = await showBranchPicker(context, session, forAction: action);
+      if (!picked || !mounted || session.allBranches) return;
+    }
+    if (!mounted) return;
     final screen = switch (route) {
       'sales' => const SalesReportScreen(),
       'stock' => const StockReportScreen(),
@@ -131,10 +147,14 @@ class _ShellState extends State<_Shell> {
 
   @override
   Widget build(BuildContext context) {
+    // Keyed on the company + branch: the tabs live in an IndexedStack, so
+    // without this a branch switch left the dashboard showing the old branch's
+    // figures under the new branch's name until the user pulled to refresh.
+    final scope = AppScope.of(context).session.scopeKey;
     final pages = <Widget>[
-      DashboardScreen(onNavigate: _navigate),
-      ReportsScreen(onNavigate: _navigate),
-      OperationsScreen(onNavigate: _navigate),
+      DashboardScreen(key: ValueKey('dash|$scope'), onNavigate: _navigate),
+      ReportsScreen(key: ValueKey('reports|$scope'), onNavigate: _navigate),
+      OperationsScreen(key: ValueKey('ops|$scope'), onNavigate: _navigate),
       SettingsScreen(onSignOut: widget.onSignOut),
     ];
 

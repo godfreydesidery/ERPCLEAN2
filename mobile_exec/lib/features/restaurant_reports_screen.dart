@@ -59,7 +59,7 @@ class _RestaurantReportsScreenState extends State<RestaurantReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final session = AppScope.of(context).session;
-    final branch = session.activeBranch?.name ?? '';
+    final branch = session.scopeLabel;
 
     return Scaffold(
       backgroundColor: HqColors.bg,

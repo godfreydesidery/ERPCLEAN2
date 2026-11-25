@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/theme.dart';
 import '../core/api/api_exception.dart';
+import '../core/scope.dart';
 
 /// Loads a future and renders exactly one of: loading, error-with-retry,
 /// empty, or the data.
@@ -106,6 +107,13 @@ class _ErrorState extends StatelessWidget {
 
   ({String title, String detail, IconData icon}) get _copy {
     final e = error;
+    if (e is AllBranchesUnavailable) {
+      return (
+        title: kAllBranchesUnavailable,
+        detail: kAllBranchesUnavailableDetail,
+        icon: Icons.account_tree_outlined,
+      );
+    }
     if (e is ApiException) {
       if (e.isNetwork) {
         return (
@@ -163,7 +171,9 @@ class _ErrorState extends StatelessWidget {
         const SizedBox(height: 6),
         Text(c.detail, textAlign: TextAlign.center, style: HqText.body),
         const SizedBox(height: 22),
-        Center(
+        // Retrying cannot help: the view itself has no such figure.
+        if (error is! AllBranchesUnavailable)
+          Center(
           child: SizedBox(
             width: 180,
             child: OutlinedButton.icon(

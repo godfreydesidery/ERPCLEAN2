@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/app_scope.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
+import '../core/scope.dart';
 import '../core/api/api_exception.dart';
 import '../core/export/report_doc.dart';
 import '../services/catalog_service.dart';
@@ -30,6 +31,9 @@ class _StockReportScreenState extends State<StockReportScreen> {
 
   Future<StockView> _load() async {
     final scope = AppScope.of(context);
+    // Stock on hand is per branch on the server; say so up front instead of
+    // loading the catalogue for a list that cannot come.
+    if (scope.session.allBranches) throw const AllBranchesUnavailable();
     final results = await Future.wait([
       scope.stock.onHand(),
       scope.catalog.productsByCode(),
@@ -152,7 +156,7 @@ class _StockReportScreenState extends State<StockReportScreen> {
   @override
   Widget build(BuildContext context) {
     final session = AppScope.of(context).session;
-    final branch = session.activeBranch?.name ?? '';
+    final branch = session.scopeLabel;
 
     return Scaffold(
       backgroundColor: HqColors.bg,
