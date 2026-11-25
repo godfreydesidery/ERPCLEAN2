@@ -5,6 +5,7 @@ import '../app/brand.dart';
 import '../app/theme.dart';
 import '../app/version.dart';
 import '../core/session.dart';
+import '../widgets/branch_picker.dart';
 import '../widgets/common.dart';
 
 /// Profile, branch and server. Short by design.
@@ -36,7 +37,9 @@ class SettingsScreen extends StatelessWidget {
                   _Row(
                     icon: Icons.storefront_outlined,
                     title: 'Branch',
-                    value: session.activeBranch?.name ?? 'None assigned',
+                    value: session.activeBranch == null
+                        ? 'None assigned'
+                        : session.scopeLabel,
                     onTap: session.branches.length < 2
                         ? null
                         : () => _pickBranch(context, session),
@@ -148,63 +151,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _pickBranch(BuildContext context, Session session) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Container(
-        decoration: const BoxDecoration(
-          color: HqColors.panel,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Choose a branch', style: HqText.title),
-              const SizedBox(height: 4),
-              Text(
-                'Reports and stock follow the branch you pick.',
-                style: HqText.tiny,
-              ),
-              const SizedBox(height: 12),
-              for (final b in session.branches)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    b.uid == session.activeBranch?.uid
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    color: b.uid == session.activeBranch?.uid
-                        ? HqColors.brand
-                        : HqColors.ink3,
-                  ),
-                  title: Text(
-                    b.name,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: b.uid == session.activeBranch?.uid
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      color: HqColors.ink,
-                    ),
-                  ),
-                  subtitle: b.isDefault
-                      ? Text('Your default', style: HqText.tiny)
-                      : null,
-                  onTap: () {
-                    session.switchBranch(b);
-                    Navigator.of(sheetContext).pop();
-                  },
-                ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
+    showBranchPicker(context, session);
   }
 }
 

@@ -61,6 +61,7 @@ class SessionRow {
     this.expectedCash,
     this.sessionNumber = '',
     this.branchName,
+    this.branchId,
     this.closedAt,
     this.reconciledAt,
     this.countedCash,
@@ -78,6 +79,7 @@ class SessionRow {
         expectedCash: asNum(j['expectedCashAmount']),
         sessionNumber: asStrOr(j['sessionNumber']),
         branchName: asStr(j['branchName']),
+        branchId: asStr(j['branchId']),
         closedAt: asStr(j['closedAt']),
         reconciledAt: asStr(j['reconciledAt']),
         countedCash: asNum(j['countedCashAmount']),
@@ -94,6 +96,9 @@ class SessionRow {
   final double? expectedCash;
   final String sessionNumber;
   final String? branchName;
+
+  /// Numeric branch id (a JSON string, like every id).
+  final String? branchId;
   final String? closedAt;
   final String? reconciledAt;
   final double? countedCash;
@@ -254,30 +259,56 @@ class OperationsService {
 
   // -- till sessions -------------------------------------------------------
 
+  /// Open tills at the active branch.
+  ///
+  /// `/pos/sessions` answers for the whole company and takes no branch filter,
+  /// so the rows are narrowed here — otherwise a manager on one branch saw (and
+  /// could close) another branch's tills under their own branch's name.
   Future<List<SessionRow>> openSessions() async {
     final companyId = session.companyId;
     if (companyId == null) return const [];
     final res = await session.api.get('/pos/sessions', query: {
       'companyId': companyId,
       'status': 'OPEN',
+      'size': 200,
     });
-    return asList(res, SessionRow.fromJson)
+    final rows = asList(res, SessionRow.fromJson)
         .where((s) => s.isOpen)
         .toList(growable: false);
+    return _inScope(rows);
   }
 
-  /// Sessions in [status] (CLOSED or RECONCILED), newest first. The list is
-  /// paged on the server; the app shows the most recent page.
+  /// Sessions in [status] (CLOSED or RECONCILED) at the active branch, newest
+  /// first. The server pages over the whole company, so a larger page is read
+  /// and the first [size] at this branch are kept.
   Future<List<SessionRow>> sessionsIn(String status, {int size = 30}) async {
     final companyId = session.companyId;
     if (companyId == null) return const [];
     final res = await session.api.get('/pos/sessions', query: {
       'companyId': companyId,
       'status': status,
-      'size': size,
+      'size': size * 5,
       'sort': status == 'RECONCILED' ? 'reconciledAt,desc' : 'closedAt,desc',
     });
-    return asList(res, SessionRow.fromJson);
+    final rows = await _inScope(asList(res, SessionRow.fromJson));
+    return rows.take(size).toList(growable: false);
+  }
+
+  /// The tills the user picked: the active branch's, or in the all-branches
+  /// view those of the user's branches in this company — never a branch
+  /// they are not assigned to, which the company-wide list would include.
+  Future<List<SessionRow>> _inScope(List<SessionRow> rows) async {
+    if (session.allBranches) {
+      return sessionsAtBranches(
+        rows,
+        branchNames: [for (final b in session.branchesInCompany) b.name],
+      );
+    }
+    return sessionsAtBranch(
+      rows,
+      branchId: await session.activeBranchId(),
+      branchName: session.activeBranch?.name,
+    );
   }
 
   /// Reconcile a CLOSED session: posts the over/short to the ledger and
@@ -320,4 +351,39 @@ class OperationsService {
     );
     return SessionRow.fromJson(asMap(res));
   }
+}
+
+/// The rows that belong to one branch. Matched on the numeric id when both
+/// sides have it, else on the branch name. With nothing to match on (no
+/// active branch) the rows are returned as they came.
+List<SessionRow> sessionsAtBranch(
+  List<SessionRow> rows, {
+  String? branchId,
+  String? branchName,
+}) {
+  if ((branchId == null || branchId.isEmpty) &&
+      (branchName == null || branchName.isEmpty)) {
+    return rows;
+  }
+  String norm(String? v) => (v ?? '').trim().toLowerCase();
+  return rows.where((r) {
+    if (branchId != null &&
+        branchId.isNotEmpty &&
+        r.branchId != null &&
+        r.branchId!.isNotEmpty) {
+      return r.branchId == branchId;
+    }
+    return branchName != null && norm(r.branchName) == norm(branchName);
+  }).toList(growable: false);
+}
+
+/// The rows at any of [branchNames] (matched case-insensitively).
+List<SessionRow> sessionsAtBranches(
+  List<SessionRow> rows, {
+  required List<String> branchNames,
+}) {
+  final wanted = {for (final n in branchNames) n.trim().toLowerCase()};
+  return rows
+      .where((r) => wanted.contains((r.branchName ?? '').trim().toLowerCase()))
+      .toList(growable: false);
 }

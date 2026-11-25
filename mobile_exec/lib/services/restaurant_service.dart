@@ -251,7 +251,7 @@ class RestaurantService {
       final res = await session.api.get('/reports/restaurant/$path', query: {
         if (from != null) 'fromDate': _d(from),
         if (to != null) 'toDate': _d(to),
-        if (session.activeBranch != null) 'branchUid': session.activeBranch!.uid,
+        'branchUid': session.reportBranchUid,
       });
       return asMap(res);
     } on ApiException catch (e) {

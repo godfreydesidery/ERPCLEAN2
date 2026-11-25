@@ -101,10 +101,13 @@ class _EditItemScreenState extends State<EditItemScreen> {
     }
 
     // The branch menu is extra: a failure here never blocks editing the item.
-    final branch = showBranchMenu(
-      branchCount: session.branches.length,
-      canView: session.can('PRODUCT.VIEW'),
-    )
+    // It belongs to one branch, so the all-branches view leaves it out rather
+    // than editing whichever branch happens to anchor the session.
+    final branch = !session.allBranches &&
+            showBranchMenu(
+              branchCount: session.branches.length,
+              canView: session.can('PRODUCT.VIEW'),
+            )
         ? session.activeBranch
         : null;
     BranchMenuEntry? menu;
@@ -488,6 +491,16 @@ class _EditFormState extends State<_EditForm> {
                 (_canEditBranchMenu
                     ? null
                     : 'You can see, but not change, what this branch sells.'),
+          ),
+        ] else if (AppScope.of(context).session.allBranches) ...[
+          // What a branch sells is set per branch; there is no all-branches
+          // version of it to show or edit.
+          const SizedBox(height: 20),
+          const SectionLabel(text: 'BRANCH MENU'),
+          const SizedBox(height: 8),
+          Text(
+            '$kAllBranchesUnavailable. $kAllBranchesUnavailableDetail',
+            style: HqText.tiny,
           ),
         ],
         const SizedBox(height: 22),

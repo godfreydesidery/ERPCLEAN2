@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/app_scope.dart';
 import '../app/format.dart';
 import '../app/theme.dart';
+import '../core/scope.dart';
 import '../services/sales_service.dart';
 import '../services/stock_service.dart';
 import '../widgets/async_view.dart';
@@ -16,12 +17,39 @@ class _Overview {
     required this.month,
     required this.stock,
     required this.valuation,
+    this.stockByBranchOnly = false,
   });
 
   final SalesReport? today;
   final SalesReport? month;
   final List<StockRow> stock;
   final ValuationResult? valuation;
+
+  /// All-branches view: stock on hand exists per branch only on the server,
+  /// so the low-stock list (and, without valuation, the item count) is shown
+  /// as not available rather than guessed.
+  final bool stockByBranchOnly;
+
+  /// Products with stock, counted from the same report as the stock value
+  /// beside it so the two always describe the same shelf (one branch, or every
+  /// branch). Without valuation access, counted from stock on hand — by
+  /// product, not by row: a product in two locations is one item.
+  int? get itemsOnHand {
+    final v = valuation;
+    if (v != null) {
+      return v.rows
+          .where((r) => r.quantity > 0)
+          .map((r) => r.code.isNotEmpty ? r.code : r.label)
+          .toSet()
+          .length;
+    }
+    if (stockByBranchOnly) return null;
+    return stock
+        .where((r) => r.quantity > 0)
+        .map((r) => r.productCode.isNotEmpty ? r.productCode : r.uid)
+        .toSet()
+        .length;
+  }
 
   List<StockRow> get needsAttention {
     final rows = stock.where((r) => r.low || r.negative).toList()
@@ -51,7 +79,8 @@ class DashboardScreen extends StatelessWidget {
     }
 
     var stock = <StockRow>[];
-    if (session.can('STOCK.VIEW')) {
+    final byBranchOnly = session.allBranches;
+    if (session.can('STOCK.VIEW') && !byBranchOnly) {
       stock = await scope.stock.onHand();
     }
 
@@ -69,6 +98,7 @@ class DashboardScreen extends StatelessWidget {
       month: month,
       stock: stock,
       valuation: valuation,
+      stockByBranchOnly: byBranchOnly,
     );
   }
 
@@ -87,7 +117,7 @@ class DashboardScreen extends StatelessWidget {
             children: [
               _Greeting(
                 name: session.displayName ?? session.username ?? 'there',
-                branch: session.activeBranch?.name ?? 'No branch',
+                branch: session.scopeLabel,
               ),
               const SizedBox(height: 18),
               if (data.today == null)
@@ -101,10 +131,20 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 10),
               _StockCard(
                 valuation: data.valuation,
-                itemCount: data.stock.length,
+                itemCount: data.itemsOnHand,
                 onTap: () => onNavigate('valuation'),
               ),
-              if (data.needsAttention.isNotEmpty) ...[
+              if (data.stockByBranchOnly &&
+                  session.can('STOCK.VIEW')) ...[
+                const SizedBox(height: 22),
+                const SectionLabel(text: 'NEEDS ATTENTION'),
+                const SizedBox(height: 10),
+                const _Locked(
+                  text: '$kAllBranchesUnavailable. '
+                      '$kAllBranchesUnavailableDetail',
+                  icon: Icons.account_tree_outlined,
+                ),
+              ] else if (data.needsAttention.isNotEmpty) ...[
                 const SizedBox(height: 22),
                 SectionLabel(
                   text: 'NEEDS ATTENTION',
@@ -120,7 +160,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 20),
               AsOfLine(
                 asOf: 'Loaded ${_clock()}',
-                coverage: session.activeBranch?.name ?? '',
+                coverage: session.scopeLabel,
               ),
             ],
           ),
@@ -315,7 +355,8 @@ class _StockCard extends StatelessWidget {
 
   /// Null when the user may not see valuation, or it failed to load.
   final ValuationResult? valuation;
-  final int itemCount;
+  /// Null when it cannot be counted in this view.
+  final int? itemCount;
   final VoidCallback onTap;
 
   @override
@@ -378,7 +419,9 @@ class _StockCard extends StatelessWidget {
   }
 
   String _footer(ValuationResult? v) {
-    final parts = <String>['$itemCount items on hand'];
+    final parts = <String>[
+      if (itemCount != null) '$itemCount items on hand',
+    ];
     final profit = v?.potentialProfit;
     if (profit != null) parts.add('profit on shelf ${tzs(profit)}');
     if (v != null && v.unpricedCount > 0) {
@@ -469,9 +512,11 @@ class _LowStockCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          rows[i].negative
-                              ? 'Below zero — needs a count'
-                              : 'Below reorder level',
+                          [
+                            rows[i].negative
+                                ? 'Below zero — needs a count'
+                                : 'Below reorder level',
+                          ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: HqText.tiny,
@@ -529,17 +574,17 @@ class _QuickActions extends StatelessWidget {
 }
 
 class _Locked extends StatelessWidget {
-  const _Locked({required this.text});
+  const _Locked({required this.text, this.icon = Icons.lock_outline_rounded});
 
   final String text;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return HqCard(
       child: Row(
         children: [
-          const Icon(Icons.lock_outline_rounded,
-              size: 20, color: HqColors.ink3),
+          Icon(icon, size: 20, color: HqColors.ink3),
           const SizedBox(width: 12),
           Expanded(child: Text(text, style: HqText.body)),
         ],
