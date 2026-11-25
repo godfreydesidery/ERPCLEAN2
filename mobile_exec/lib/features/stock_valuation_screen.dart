@@ -305,7 +305,7 @@ class _StockValuationScreenState extends State<StockValuationScreen> {
                           const SizedBox(height: 16),
                           AsOfLine(
                             asOf: 'Valued at moving average cost',
-                            coverage: session.activeBranch?.name ?? '',
+                            coverage: session.scopeLabel,
                           ),
                         ],
                       );

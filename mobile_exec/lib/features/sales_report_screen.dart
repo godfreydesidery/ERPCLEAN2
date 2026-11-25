@@ -194,7 +194,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                           asOf: data.generatedAt == null
                               ? 'Live from the server'
                               : 'Generated ${data.generatedAt}',
-                          coverage: session.activeBranch?.name ?? '',
+                          coverage: session.scopeLabel,
                         ),
                       ],
                     ),

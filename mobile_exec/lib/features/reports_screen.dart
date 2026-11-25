@@ -113,7 +113,7 @@ class ReportsScreen extends StatelessWidget {
           const SizedBox(height: 18),
           AsOfLine(
             asOf: 'Live from the server',
-            coverage: session.activeBranch?.name ?? '',
+            coverage: session.scopeLabel,
           ),
         ],
       ),

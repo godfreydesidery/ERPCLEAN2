@@ -23,6 +23,14 @@ class _Overview {
   final List<StockRow> stock;
   final ValuationResult? valuation;
 
+  /// Distinct products with stock at this branch. Counted by product, not by
+  /// row: a product held in two locations is one item on the shelf.
+  int get itemsOnHand => stock
+      .where((r) => r.quantity > 0)
+      .map((r) => r.productCode.isNotEmpty ? r.productCode : r.uid)
+      .toSet()
+      .length;
+
   List<StockRow> get needsAttention {
     final rows = stock.where((r) => r.low || r.negative).toList()
       ..sort((a, b) => a.quantity.compareTo(b.quantity));
@@ -87,7 +95,7 @@ class DashboardScreen extends StatelessWidget {
             children: [
               _Greeting(
                 name: session.displayName ?? session.username ?? 'there',
-                branch: session.activeBranch?.name ?? 'No branch',
+                branch: session.scopeLabel,
               ),
               const SizedBox(height: 18),
               if (data.today == null)
@@ -101,7 +109,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 10),
               _StockCard(
                 valuation: data.valuation,
-                itemCount: data.stock.length,
+                itemCount: data.itemsOnHand,
                 onTap: () => onNavigate('valuation'),
               ),
               if (data.needsAttention.isNotEmpty) ...[
@@ -120,7 +128,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 20),
               AsOfLine(
                 asOf: 'Loaded ${_clock()}',
-                coverage: session.activeBranch?.name ?? '',
+                coverage: session.scopeLabel,
               ),
             ],
           ),

@@ -131,10 +131,14 @@ class _ShellState extends State<_Shell> {
 
   @override
   Widget build(BuildContext context) {
+    // Keyed on the company + branch: the tabs live in an IndexedStack, so
+    // without this a branch switch left the dashboard showing the old branch's
+    // figures under the new branch's name until the user pulled to refresh.
+    final scope = AppScope.of(context).session.scopeKey;
     final pages = <Widget>[
-      DashboardScreen(onNavigate: _navigate),
-      ReportsScreen(onNavigate: _navigate),
-      OperationsScreen(onNavigate: _navigate),
+      DashboardScreen(key: ValueKey('dash|$scope'), onNavigate: _navigate),
+      ReportsScreen(key: ValueKey('reports|$scope'), onNavigate: _navigate),
+      OperationsScreen(key: ValueKey('ops|$scope'), onNavigate: _navigate),
       SettingsScreen(onSignOut: widget.onSignOut),
     ];
 

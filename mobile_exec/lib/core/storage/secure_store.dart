@@ -62,6 +62,21 @@ class SecureStore {
     );
   }
 
+  /// The branch [userUid] last chose on this device. Kept across sign-outs:
+  /// it is a preference, not a credential, and the app only honours it while
+  /// the user is still assigned to that branch.
+  Future<String?> readBranchUid(String? userUid) async {
+    if (userUid == null) return null;
+    return (await _p).getString('$_kBranchPrefix$userUid');
+  }
+
+  Future<void> saveBranchUid(String? userUid, String branchUid) async {
+    if (userUid == null) return;
+    await (await _p).setString('$_kBranchPrefix$userUid', branchUid);
+  }
+
+  static const _kBranchPrefix = 'hq.branch.';
+
   Future<void> clear() async {
     final p = await _p;
     await p.remove(_kAccess);
