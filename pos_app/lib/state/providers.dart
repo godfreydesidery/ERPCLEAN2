@@ -61,12 +61,19 @@ final contextServiceProvider =
     Provider<ContextService>((ref) => ContextService(ref.watch(apiClientProvider)));
 
 /// Catalogue reads. Offline (ERP ADR-0068) they are answered from the offline
-/// cache, so the registers keep searching, scanning and pricing unchanged.
-final catalogServiceProvider = Provider<CatalogService>((ref) => OfflineAwareCatalogService(
-      ref.watch(apiClientProvider),
-      cache: ref.watch(offlineCatalogProvider),
-      isOffline: () => ref.read(offlineControllerProvider).offline,
-    ));
+/// cache, so the registers keep searching, scanning and pricing unchanged —
+/// but only when that cache was built for the active branch (ERP ADR-0073).
+final catalogServiceProvider = Provider<CatalogService>((ref) {
+  final api = ref.watch(apiClientProvider);
+  return OfflineAwareCatalogService(
+    api,
+    cache: ref.watch(offlineCatalogProvider),
+    isOffline: () => ref.read(offlineControllerProvider).offline,
+    // The branch the API client scopes every call to (`X-Branch-Uid`), set at
+    // online and offline sign-in alike — the branch the server filtered for.
+    activeBranchUid: () => api.branchUidOverride,
+  );
+});
 
 final partyServiceProvider =
     Provider<PartyService>((ref) => PartyService(ref.watch(apiClientProvider)));

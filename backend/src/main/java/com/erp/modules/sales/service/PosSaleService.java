@@ -40,6 +40,14 @@ public interface PosSaleService {
     SalesInvoiceDto processSale(String idempotencyKey, PosSaleRequest request);
 
     /**
+     * {@link #processSale(String, PosSaleRequest)} for a sale rung on a till: first refuses
+     * (REJECTED) an item that is not sold at the session's branch (ADR-0073 D-3). Restaurant bills
+     * call {@link #processSale(String, PosSaleRequest)} directly — their lines were checked when
+     * they were ordered.
+     */
+    SalesInvoiceDto processTillSale(String idempotencyKey, PosSaleRequest request);
+
+    /**
      * Answer "did the sale I sent under this reference actually post?" without re-running the sale.
      *
      * <p>Reads only the idempotency marker for the caller's active company, so it stays cheap and

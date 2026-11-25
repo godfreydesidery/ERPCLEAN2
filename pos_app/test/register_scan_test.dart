@@ -136,6 +136,32 @@ void main() {
     expect(find.textContaining('No match'), findsNothing);
     await tester.pump(const Duration(seconds: 4)); // let the toast expire
   });
+
+  testWidgets("a scan refused as not sold here shows the server's words (ADR-0073)",
+      (tester) async {
+    await pumpRegister(tester);
+    catalog.refusals['3333333333333'] = 'This item is not sold at this branch.';
+
+    await scan(tester, '3333333333333');
+    await settle(tester);
+
+    expect(cartNames(tester), isEmpty);
+    expect(find.text('This item is not sold at this branch.'), findsOneWidget);
+    expect(find.textContaining('No match'), findsNothing);
+    await tester.pump(const Duration(seconds: 4)); // let the toast expire
+  });
+
+  testWidgets('an unknown barcode with no server words still reads "No match"',
+      (tester) async {
+    await pumpRegister(tester);
+
+    await scan(tester, '4444444444444');
+    await settle(tester);
+
+    expect(cartNames(tester), isEmpty);
+    expect(find.text('No match for "4444444444444".'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4)); // let the toast expire
+  });
 }
 
 class _TestApp extends AppController {
@@ -170,10 +196,19 @@ class _FakeCatalog implements CatalogService {
   ApiException get _down => ApiException(
       statusCode: null, isNetwork: true, message: 'Cannot reach the ERP.');
 
+  /// Barcodes the server refuses with its own words (a 404 with `errors`), e.g.
+  /// "This item is not sold at this branch." (ERP ADR-0073).
+  final refusals = <String, String>{};
+
   @override
   Future<ProductBarcode> lookupBarcode(String companyId, String barcode) async {
     await Future<void>.delayed(const Duration(milliseconds: 40));
-    final p = byBarcode[barcode]!;
+    final refusal = refusals[barcode];
+    if (refusal != null) {
+      throw ApiException(statusCode: 404, message: refusal, errors: [ApiError('', refusal)]);
+    }
+    final p = byBarcode[barcode];
+    if (p == null) throw ApiException(statusCode: 404, message: 'Not found.');
     return ProductBarcode(
         uid: 'BC-$barcode', productId: p.id, productUid: p.uid,
         barcode: barcode, barcodeType: 'EAN13', uomId: null, primary: true,

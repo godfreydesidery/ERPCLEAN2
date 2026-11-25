@@ -23,8 +23,16 @@ import 'providers.dart';
 /// therefore remembers which queries have **successfully completed**: absent
 /// from a completed query means zero, and is rendered as "Out of stock".
 class StockCache {
-  StockCache(this._svc);
+  StockCache(this._svc, {String? Function()? branchUid}) : _branchUid = branchUid ?? _noBranch;
   final CatalogService _svc;
+
+  /// The active branch (`X-Branch-Uid`). Stock is the branch's own, so what was
+  /// learnt at one branch is forgotten the moment another is active.
+  final String? Function() _branchUid;
+  static String? _noBranch() => null;
+
+  /// The branch [_byProduct] describes.
+  String? _filledFor;
 
   final Map<String, StockLevel> _byProduct = {};
 
@@ -45,6 +53,7 @@ class StockCache {
   /// stock reads are denied). Returns a zero [StockLevel] — i.e. out of stock —
   /// when [query] has completed and the product had no on-hand row.
   StockLevel? levelFor(String productId, {required String query}) {
+    _checkBranch();
     final known = _byProduct[productId];
     if (known != null) return known;
     if (_denied) return null;
@@ -56,16 +65,35 @@ class StockCache {
   /// What the branch holds of [productId] regardless of any query — used for
   /// cart lines, which were added from a search that has since been cleared.
   /// Null when nothing is known about the product.
-  StockLevel? levelForProduct(String productId) => _byProduct[productId];
+  StockLevel? levelForProduct(String productId) {
+    _checkBranch();
+    return _byProduct[productId];
+  }
+
+  /// Forgets everything learnt at another branch (a sign-in elsewhere). The
+  /// permission latch is per user, so it is reset too.
+  void _checkBranch() {
+    final now = _branchUid();
+    if (now == _filledFor) return;
+    _byProduct.clear();
+    _completedQueries.clear();
+    _denied = false;
+    _filledFor = now;
+  }
 
   /// Refreshes stock for products matching [q] and merges the result. Called as
   /// the cashier searches so visible rows stay fresh. Errors are swallowed —
   /// the row just shows no hint.
   Future<void> refreshFor(String q) async {
+    _checkBranch();
     final query = q.trim();
     if (query.isEmpty || _denied) return;
+    final branch = _filledFor;
     try {
-      _byProduct.addAll(await _svc.stockByProduct(q: query, size: 200));
+      final rows = await _svc.stockByProduct(q: query, size: 200);
+      // The branch changed while this was in flight: those are its stock levels.
+      if (_branchUid() != branch) return;
+      _byProduct.addAll(rows);
       _completedQueries.add(query);
     } on ApiException catch (e) {
       // A 403 is permanent for this session; anything else may be transient, so
@@ -77,5 +105,7 @@ class StockCache {
   }
 }
 
-final stockCacheProvider =
-    Provider<StockCache>((ref) => StockCache(ref.read(catalogServiceProvider)));
+final stockCacheProvider = Provider<StockCache>((ref) => StockCache(
+      ref.read(catalogServiceProvider),
+      branchUid: () => ref.read(apiClientProvider).branchUidOverride,
+    ));

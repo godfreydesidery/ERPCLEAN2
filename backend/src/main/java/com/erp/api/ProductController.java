@@ -8,6 +8,7 @@ import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.ProductBarcodeDto;
 import com.erp.modules.products.domain.dto.ProductBranchDto;
+import com.erp.modules.products.domain.dto.SetBranchMenuRequest;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
@@ -70,16 +71,23 @@ public class ProductController {
     public ApiResponse<List<ProductDto>> list(@RequestParam Long companyId,
                                               @RequestParam(required = false) String q,
                                               @RequestParam(required = false) String category,
+                                              @RequestParam(defaultValue = "false") boolean soldHere,
                                               Pageable pageable) {
-        Page<ProductDto> page = productService.list(companyId, q, category, pageable);
+        // soldHere (ADR-0073): only the items sold at the caller's active branch — the till's view.
+        Page<ProductDto> page = soldHere
+                ? productService.listSoldHere(companyId, q, category, pageable)
+                : productService.list(companyId, q, category, pageable);
         return ApiResponse.ok(page.getContent(), PageMeta.from(page));
     }
 
     /** The product categories (departments) in use, for the till's category buttons. */
     @GetMapping("/categories")
     @PreAuthorize("@perm.hasOrMember('PRODUCT.VIEW')")
-    public List<String> categories(@RequestParam Long companyId) {
-        return productService.listCategories(companyId);
+    public List<String> categories(@RequestParam Long companyId,
+                                   @RequestParam(defaultValue = "false") boolean soldHere) {
+        return soldHere
+                ? productService.listCategoriesSoldHere(companyId)
+                : productService.listCategories(companyId);
     }
 
     @GetMapping("/uid/{uid}")
@@ -140,6 +148,14 @@ public class ProductController {
     public ProductBranchDto assignBranch(@PathVariable String uid,
                                          @Valid @RequestBody AssignProductBranchRequest request) {
         return productService.assignBranch(uid, request);
+    }
+
+    /** One branch's entry on the item's branch menu — sold there, and its price there (ADR-0073). */
+    @PutMapping("/uid/{uid}/branch-menu")
+    @PreAuthorize("@perm.scoped(#uid,'product','PRODUCT.BRANCH.ASSIGN')")
+    public List<ProductBranchDto> setBranchMenu(@PathVariable String uid,
+                                                @Valid @RequestBody SetBranchMenuRequest request) {
+        return productService.setBranchMenu(uid, request);
     }
 
     @DeleteMapping("/uid/{uid}/branches/{branchUid}")
@@ -228,8 +244,9 @@ public class ProductController {
     @GetMapping("/barcode-lookup")
     @PreAuthorize("@perm.has('PRODUCT.VIEW')")
     public ProductBarcodeDto lookupBarcode(@RequestParam Long companyId,
-                                           @RequestParam String barcode) {
-        return productService.lookupBarcode(companyId, barcode);
+                                           @RequestParam String barcode,
+                                           @RequestParam(defaultValue = "false") boolean soldHere) {
+        return productService.lookupBarcode(companyId, barcode, soldHere);
     }
 
     // -------------------------------------------------------------------------

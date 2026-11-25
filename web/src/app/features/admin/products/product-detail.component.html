@@ -990,6 +990,8 @@
                   <thead>
                     <tr>
                       <th scope="col">Branch</th>
+                      <th scope="col">Sold here</th>
+                      <th scope="col">Price here</th>
                       <th scope="col">Assigned at</th>
                       @if (canAssign()) {
                         <th scope="col"><span class="sr-only">Actions</span></th>
@@ -1000,9 +1002,40 @@
                     @for (pb of branches(); track pb.branchId) {
                       <tr>
                         <td>{{ branchDisplay(pb.branchId) }}</td>
+                        <td>
+                          <div class="form-check form-switch mb-0">
+                            <input [id]="'soldHere_' + pb.branchId" [name]="'soldHere_' + pb.branchId"
+                                   type="checkbox" class="form-check-input" role="switch"
+                                   [ngModel]="branchSold(pb)"
+                                   (ngModelChange)="editBranch(pb, { sold: $event })"
+                                   [disabled]="!canAssign() || rowBusyBranchId() !== null" />
+                            <label [for]="'soldHere_' + pb.branchId" class="form-check-label sr-only">
+                              Sold in {{ branchDisplay(pb.branchId) }}
+                            </label>
+                          </div>
+                        </td>
+                        <td>
+                          <label [for]="'priceHere_' + pb.branchId" class="sr-only">
+                            Price here for {{ branchDisplay(pb.branchId) }}
+                          </label>
+                          <input [id]="'priceHere_' + pb.branchId" [name]="'priceHere_' + pb.branchId"
+                                 type="text" class="form-control form-control-sm" style="width:110px"
+                                 placeholder="company price"
+                                 [ngModel]="branchPriceText(pb)"
+                                 (ngModelChange)="editBranch(pb, { price: $event })"
+                                 [disabled]="!canAssign() || rowBusyBranchId() !== null" />
+                        </td>
                         <td class="text-muted" style="font-size:0.85rem">{{ pb.assignedAt ?? '—' }}</td>
                         @if (canAssign()) {
                           <td>
+                            @if (branchDirty(pb)) {
+                              <button type="button" class="btn btn-sm btn-primary me-1"
+                                      [disabled]="rowBusyBranchId() !== null"
+                                      (click)="saveBranchMenu(pb)"
+                                      [attr.aria-label]="'Save branch menu for ' + branchDisplay(pb.branchId)">
+                                Save
+                              </button>
+                            }
                             <button type="button" class="btn btn-sm btn-outline-danger"
                                     [disabled]="rowBusyBranchId() !== null"
                                     (click)="removeBranch(pb)"
@@ -1019,6 +1052,10 @@
                   </tbody>
                 </table>
               </div>
+              <p class="text-muted small mb-3">
+                An item with no branch settings is sold at every branch. Once set, only the ticked branches sell it,
+                and a price here replaces the company price at that branch (per base unit; packs scale).
+              </p>
             }
           }
         }

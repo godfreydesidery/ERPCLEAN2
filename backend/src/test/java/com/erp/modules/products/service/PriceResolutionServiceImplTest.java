@@ -64,6 +64,8 @@ class PriceResolutionServiceImplTest {
     private ProductBulkPackRepository bulkPacks;
     private ProductRepository products;
     private PriceListRepository priceLists;
+    private com.erp.modules.products.repository.ProductBranchRepository productBranches;
+    private com.erp.modules.iam.repository.CompanyRepository companies;
     private PriceResolutionServiceImpl service;
 
     private Product product;
@@ -84,9 +86,12 @@ class PriceResolutionServiceImplTest {
         bulkPacks = mock(ProductBulkPackRepository.class);
         products = mock(ProductRepository.class);
         priceLists = mock(PriceListRepository.class);
+        productBranches = mock(com.erp.modules.products.repository.ProductBranchRepository.class);
+        companies = mock(com.erp.modules.iam.repository.CompanyRepository.class);
 
         service = new PriceResolutionServiceImpl(
-                customerPrices, promotions, priceTiers, productPrices, bulkPacks, products, priceLists, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
+                customerPrices, promotions, priceTiers, productPrices, bulkPacks, products, priceLists,
+                productBranches, companies, com.erp.platform.common.time.CompanyCalendar.fixed(com.erp.platform.common.time.BusinessZone.DEFAULT, java.time.Clock.systemUTC()));
 
         baseUnit = unitWithId(1L, "BASEUID0000000000000040", "PCS");
         boxUnit = unitWithId(2L, "BOXUID00000000000000040", "BOX");
@@ -509,6 +514,173 @@ class PriceResolutionServiceImplTest {
     // -------------------------------------------------------------------------
     // Fixture helpers
     // -------------------------------------------------------------------------
+
+    // ---- ADR-0073 branch price ------------------------------------------------------
+
+    private static final Long BRANCH_ID = 7L;
+
+    private void branchRow(boolean active, String price) {
+        com.erp.modules.products.domain.entity.ProductBranch pb =
+                new com.erp.modules.products.domain.entity.ProductBranch(product, BRANCH_ID, 1L);
+        pb.setActive(active);
+        pb.setBranchPrice(price == null ? null : new BigDecimal(price));
+        when(productBranches.findByProductIdAndBranchId(product.getId(), BRANCH_ID))
+                .thenReturn(Optional.of(pb));
+    }
+
+    private UnitPriceQuoteResult atBranch(Long unitId, Long customerId, Long customerListId) {
+        return service.findSellingPriceQuote(new SellingPriceQuery(COMPANY_ID, product.getId(),
+                unitId, customerId, customerListId, "TZS", null, TODAY, BRANCH_ID));
+    }
+
+    @Test
+    void branchPrice_replacesTheCompanyList_andKeepsItsVatStanceAndCurrency() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        retail.setPriceIncludesVat(true);
+        row(retail, null, "8000.0000");
+        branchRow(true, "9000");
+
+        UnitPriceQuoteDto quote = atBranch(baseUnit.getId(), null, null).price();
+
+        assertThat(quote.amount()).isEqualByComparingTo("9000");
+        assertThat(quote.source()).isEqualTo(PriceSource.BRANCH_PRICE);
+        assertThat(quote.vatInclusive()).isTrue();
+        assertThat(quote.currency()).isEqualTo("TZS");
+        assertThat(quote.priceListName()).isEqualTo("Branch price");
+    }
+
+    @Test
+    void branchPrice_isPerBaseUnit_soAPackPaysTimesFactor_evenOverAnExplicitCompanyPackPrice() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        row(retail, null, "1000.0000");
+        row(retail, boxUnit, "11000.0000");    // non-linear company box price
+        branchRow(true, "1100");
+
+        assertThat(atBranch(boxUnit.getId(), null, null).price().amount())
+                .isEqualByComparingTo("13200");  // 1,100 x 12
+    }
+
+    @Test
+    void noBranchInTheQuery_orNoPriceOnTheRow_orRowSwitchedOff_companyPriceStands() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        row(retail, null, "8000.0000");
+
+        branchRow(true, "9000");
+        assertThat(walkInBase().amount()).isEqualByComparingTo("8000");   // no branch in view
+
+        branchRow(true, null);
+        assertThat(atBranch(baseUnit.getId(), null, null).price().source())
+                .isEqualTo(PriceSource.LIST_PRICE);
+
+        branchRow(false, "9000");
+        assertThat(atBranch(baseUnit.getId(), null, null).price().amount())
+                .isEqualByComparingTo("8000");
+    }
+
+    @Test
+    void customersOwnList_beatsTheBranchPrice() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        row(retail, null, "8000.0000");
+        PriceList wholesale = list(300L, "WHOLESALE");
+        row(wholesale, null, "7000.0000");
+        when(priceLists.findByCompanyIdAndId(COMPANY_ID, 300L)).thenReturn(Optional.of(wholesale));
+        branchRow(true, "9000");
+
+        UnitPriceQuoteDto quote = atBranch(baseUnit.getId(), CUSTOMER_ID, 300L).price();
+
+        assertThat(quote.amount()).isEqualByComparingTo("7000");
+        assertThat(quote.priceListName()).isEqualTo("WHOLESALE list");
+    }
+
+    @Test
+    void customerWhoseListDoesNotCarryTheItem_paysTheBranchPrice() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        row(retail, null, "8000.0000");
+        PriceList wholesale = list(300L, "WHOLESALE");
+        when(priceLists.findByCompanyIdAndId(COMPANY_ID, 300L)).thenReturn(Optional.of(wholesale));
+        branchRow(true, "9000");
+
+        assertThat(atBranch(baseUnit.getId(), CUSTOMER_ID, 300L).price().amount())
+                .isEqualByComparingTo("9000");
+    }
+
+    @Test
+    void customerContract_beatsTheBranchPrice_andInheritsTheBranchPricesVatStance() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        retail.setPriceIncludesVat(true);
+        row(retail, null, "8000.0000");
+        branchRow(true, "9000");
+        contract("6500.0000", "TZS");
+
+        UnitPriceQuoteDto quote = atBranch(baseUnit.getId(), CUSTOMER_ID, null).price();
+
+        assertThat(quote.amount()).isEqualByComparingTo("6500");
+        assertThat(quote.source()).isEqualTo(PriceSource.CUSTOMER_PRICE);
+        assertThat(quote.vatInclusive()).isTrue();
+    }
+
+    @Test
+    void itemWithNoCompanyPrice_isPricedByItsBranchPrice_onTheCompanyDefaultListsStance() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        retail.setPriceIncludesVat(true);
+        when(priceLists.findDefaultsOfCompany(COMPANY_ID)).thenReturn(List.of(retail));
+        branchRow(true, "4500");
+
+        UnitPriceQuoteResult result = atBranch(baseUnit.getId(), null, null);
+
+        assertThat(result.status()).isEqualTo(UnitPriceStatus.RESOLVED);
+        assertThat(result.price().amount()).isEqualByComparingTo("4500");
+        assertThat(result.price().vatInclusive()).isTrue();
+    }
+
+    @Test
+    void documentInAnotherCurrency_keepsItsOwnListPrice_neverTheBranchPriceInTheWrongCurrency() {
+        com.erp.modules.iam.domain.entity.Company tzs =
+                org.mockito.Mockito.mock(com.erp.modules.iam.domain.entity.Company.class);
+        when(tzs.getBaseCurrency()).thenReturn("TZS");
+        when(companies.findScopedById(COMPANY_ID)).thenReturn(Optional.of(tzs));
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        row(retail, null, "8000.0000", "TZS");
+        row(list(200L, "EXPORT"), null, "4.0000", "USD");
+        branchRow(true, "9000");
+
+        UnitPriceQuoteDto usd = service.findSellingPriceQuote(new SellingPriceQuery(COMPANY_ID,
+                product.getId(), baseUnit.getId(), null, null, "USD", null, TODAY, BRANCH_ID)).price();
+        UnitPriceQuoteDto tzsQuote = atBranch(baseUnit.getId(), null, null).price();
+
+        assertThat(usd.amount()).isEqualByComparingTo("4");
+        assertThat(usd.currency()).isEqualTo("USD");
+        assertThat(tzsQuote.amount()).isEqualByComparingTo("9000");
+        assertThat(tzsQuote.currency()).isEqualTo("TZS");
+    }
+
+    @Test
+    void customerWhoseOwnListIsTheCompanyDefault_paysTheBranchPriceLikeAWalkIn() {
+        PriceList retail = list(100L, "RETAIL");
+        retail.setDefault(true);
+        row(retail, null, "8000.0000");
+        when(priceLists.findByCompanyIdAndId(COMPANY_ID, 100L)).thenReturn(Optional.of(retail));
+        branchRow(true, "9000");
+
+        assertThat(atBranch(baseUnit.getId(), CUSTOMER_ID, 100L).price().amount())
+                .isEqualByComparingTo("9000");
+    }
+
+    @Test
+    void branchPrice_cannotMakeAnUnconfiguredUnitSellable() {
+        branchRow(true, "4500");
+
+        assertThat(atBranch(unconfiguredUnit.getId(), null, null).status())
+                .isEqualTo(UnitPriceStatus.UNIT_NOT_APPLICABLE);
+    }
 
     private UnitPriceQuoteDto walkInBase() {
         return quote(baseUnit.getId(), null);

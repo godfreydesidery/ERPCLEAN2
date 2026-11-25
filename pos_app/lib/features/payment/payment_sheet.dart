@@ -617,10 +617,15 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     // and only when there is in fact an unapproved discount it could be about.
     // Offering it after a 403 or a validation error would be a guess dressed up
     // as a remedy — the till does not know the ceiling and must not pretend to.
-    final canApprove = status == PosSaleFlowStatus.rejected &&
-        (_resto == null
-            ? ref.read(cartProvider).linesNeedingDiscountApproval.isNotEmpty
-            : (_quote?.discountTotal ?? 0) > 0 && _discAuthoriserUid == null);
+    // Never for a refusal the server pinned on another rule (an item not on this
+    // branch's menu, ADR-0073): the server's own words are the whole answer.
+    final canApprove = refusalOffersDiscountApproval(
+      status: status,
+      errorCode: e.errorCode,
+      hasUnapprovedDiscount: _resto == null
+          ? ref.read(cartProvider).linesNeedingDiscountApproval.isNotEmpty
+          : (_quote?.discountTotal ?? 0) > 0 && _discAuthoriserUid == null,
+    );
     // A refused complimentary approval is asked for again on the next attempt.
     if (!undecided) _compAuthoriserUid = null;
 

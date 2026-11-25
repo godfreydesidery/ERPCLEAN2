@@ -56,7 +56,7 @@ public class PosSaleController {
     public SalesInvoiceDto processSale(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody PosSaleRequest request) {
-        return posSaleService.processSale(idempotencyKey, request);
+        return posSaleService.processTillSale(idempotencyKey, request);
     }
 
     /**

@@ -7,6 +7,7 @@ import com.erp.modules.products.domain.dto.CreateBulkPackRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.ProductBarcodeDto;
 import com.erp.modules.products.domain.dto.ProductBranchDto;
+import com.erp.modules.products.domain.dto.SetBranchMenuRequest;
 import com.erp.modules.products.domain.dto.ProductBulkPackDto;
 import com.erp.modules.products.domain.dto.ProductComponentDto;
 import com.erp.modules.products.domain.dto.ProductDto;
@@ -41,6 +42,15 @@ public interface ProductService {
     /** The categories of the company's active, sellable products, one per name, sorted. */
     List<String> listCategories(Long companyId);
 
+    /**
+     * {@link #list(Long, String, String, Pageable)} limited to the items sold at the caller's active
+     * branch (ADR-0073). With no active branch it is the plain list.
+     */
+    Page<ProductDto> listSoldHere(Long companyId, String q, String category, Pageable pageable);
+
+    /** {@link #listCategories} counting only the items sold at the caller's active branch. */
+    List<String> listCategoriesSoldHere(Long companyId);
+
     ProductDto updateByUid(String uid, UpdateProductRequest req);
 
     /**
@@ -55,6 +65,13 @@ public interface ProductService {
 
     // --- Branches ---
     ProductBranchDto assignBranch(String uid, AssignProductBranchRequest req);
+
+    /**
+     * Sets one branch's entry on the item's branch menu (ADR-0073) and returns all its rows. The
+     * first entry ever written for an item first records every other branch as sold-there, so
+     * turning an item off (or pricing it) at one branch never takes it off the rest.
+     */
+    List<ProductBranchDto> setBranchMenu(String uid, SetBranchMenuRequest req);
 
     void removeBranch(String uid, String branchUid);
 
@@ -83,6 +100,12 @@ public interface ProductService {
     List<ProductBarcodeDto> listBarcodes(String uid);
 
     ProductBarcodeDto lookupBarcode(Long companyId, String barcode);
+
+    /**
+     * {@link #lookupBarcode(Long, String)}; with {@code soldHere} an item not sold at the caller's
+     * active branch answers 404 "not sold at this branch" (ADR-0073), so a scan cannot ring it.
+     */
+    ProductBarcodeDto lookupBarcode(Long companyId, String barcode, boolean soldHere);
 
     // --- Prices ---
     ProductPriceDto setPrice(String uid, SetProductPriceRequest req);

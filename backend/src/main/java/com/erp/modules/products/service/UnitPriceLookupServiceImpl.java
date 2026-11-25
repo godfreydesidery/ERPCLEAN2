@@ -99,7 +99,7 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
         // is the one that customer's invoice will carry — their contract prices and default list.
         // Absent = the walk-in question, exactly what every client before this field asked.
         PriceAudience audience = audienceOf(companyId, trimToNull(request.customerUid()),
-                normaliseCurrency(request.currency()));
+                normaliseCurrency(request.currency()), activeBranchId());
 
         Map<String, Product> byUid = new LinkedHashMap<>();
         for (Product product : products.findByCompanyIdAndUidIn(companyId, requestedUids)) {
@@ -122,19 +122,26 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
 
     // ---- helpers ---------------------------------------------------------------
 
-    /** Who is buying, and in which currency — fixed for the whole batch. */
-    private record PriceAudience(Long customerId, Long customerPriceListId, String currency) {
+    /**
+     * Who is buying, in which currency and at which branch — fixed for the whole batch. The branch
+     * is the caller's active one ({@code X-Branch-Uid}), the branch the sale will post at, so a
+     * branch price (ADR-0073) shows on the till exactly as it will be charged.
+     */
+    private record PriceAudience(Long customerId, Long customerPriceListId, String currency,
+                                 Long branchId) {
     }
 
-    private PriceAudience audienceOf(Long companyId, String customerUid, String currency) {
+    private PriceAudience audienceOf(Long companyId, String customerUid, String currency,
+                                     Long branchId) {
         if (customerUid == null) {
-            return new PriceAudience(null, null, currency);
+            return new PriceAudience(null, null, currency, branchId);
         }
         // A customer uid that is not in the caller's company reads as "not found", never as another
         // tenant's prices.
         Customer customer = customers.findByCompanyIdAndUid(companyId, customerUid)
                 .orElseThrow(() -> new NotFoundException("Customer not found."));
-        return new PriceAudience(customer.getId(), customer.getDefaultPriceListId(), currency);
+        return new PriceAudience(customer.getId(), customer.getDefaultPriceListId(), currency,
+                branchId);
     }
 
     /**
@@ -160,7 +167,7 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
         UnitPriceQuoteResult result = priceResolution.findSellingPriceQuote(new SellingPriceQuery(
                 product.getCompanyId(), product.getId(), unitId,
                 audience.customerId(), audience.customerPriceListId(), audience.currency(),
-                null, calendar.today(product.getCompanyId())));
+                null, calendar.today(product.getCompanyId()), audience.branchId()));
         Optional<UnitPriceQuoteDto> quote = result.quote();
         if (quote.isEmpty()) {
             // NO_PRICE (no usable price row) or UNIT_NOT_APPLICABLE (the requested unit is neither
@@ -183,6 +190,12 @@ public class UnitPriceLookupServiceImpl implements UnitPriceLookupService {
             throw new ForbiddenException("No active company for this session.");
         }
         return principal.companyId();
+    }
+
+    /** The caller's active branch, or null when the session has none (prices then ignore branches). */
+    private static Long activeBranchId() {
+        RequestContext.Principal principal = RequestContext.get();
+        return principal == null ? null : principal.branchId();
     }
 
     private static String normaliseCurrency(String value) {

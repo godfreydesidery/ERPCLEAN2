@@ -380,8 +380,8 @@ export interface ProductBranchDto {
   active?: boolean;
   /** Per-branch reorder override (confirmed contract). */
   reorderLevel?: string;
-  /** Per-branch price override (confirmed contract). */
-  branchPrice?: string;
+  /** Per-branch price override per base unit; null/absent = company price. */
+  branchPrice?: string | number | null;
 }
 
 export interface AssignProductBranchRequest {
@@ -392,6 +392,16 @@ export interface AssignProductBranchRequest {
   reorderLevel?: string;
   /** Per-branch selling price override. */
   branchPrice?: string;
+  /** Remove the stored branch price (a null branchPrice leaves it unchanged). */
+  clearBranchPrice?: boolean;
+}
+
+/** PUT /products/uid/{uid}/branch-menu — edit one branch's menu entry (ADR-0073). */
+export interface SetBranchMenuRequest {
+  branchUid: string;
+  soldHere?: boolean;
+  price?: string;
+  clearPrice?: boolean;
 }
 
 // ── PriceListDto ──────────────────────────────────────────────────────────────

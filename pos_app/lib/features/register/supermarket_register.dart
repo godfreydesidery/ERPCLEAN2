@@ -270,6 +270,11 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
       // actually looks like a scanned barcode. A typed name ("oil", "cement")
       // always 404s here, so skip straight to the search below. The product is
       // then fetched FRESH by uid (no local catalogue).
+      //
+      // The server's own words for a refused scan — "This item is not sold at
+      // this branch." (ERP ADR-0073) — are kept for when the search below finds
+      // nothing either (it only searches this branch's menu).
+      String? scanRefusal;
       if (looksLikeBarcode(value)) {
         try {
           final bc = await ref
@@ -306,6 +311,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
           }
         } on ApiException catch (e) {
           if (!e.isNotFound) rethrow;
+          if (e.errors.isNotEmpty) scanRefusal = e.message;
         }
         if (!mounted) return;
       }
@@ -336,7 +342,7 @@ class _SupermarketRegisterState extends ConsumerState<SupermarketRegister> {
         _addProduct(hits.first);
         _resetSearch();
       } else if (hits.isEmpty) {
-        showToast(context, 'No match for "$value".');
+        showToast(context, scanRefusal ?? 'No match for "$value".');
       } else {
         _setResults(hits, value);
         _refreshStock(value);

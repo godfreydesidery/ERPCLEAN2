@@ -103,6 +103,8 @@ export interface BranchAssignRow {
   active: boolean;
   reorderLevel: string;
   branchPrice: string;
+  /** True when a branch price was saved server-side — blanking it must send clearBranchPrice. */
+  hadPrice?: boolean;
 }
 
 // ── Price row (UI model) ───────────────────────────────────────────────────────
@@ -625,18 +627,21 @@ export class ProductMasterComponent implements OnInit {
         const branchIdSet = new Set(rows.map((r) => r.branchId));
         // PRD-09: show the saved branch overrides (BigDecimal → JSON number; coerce to string).
         const byBranch = new Map(rows.map((r) => [r.branchId, r]));
+        const noRows = rows.length === 0; // no rows = sold at every branch (ADR-0073 D-1)
         this.branchRows.set(
           this.companyBranches().map((b) => {
             const saved = byBranch.get(b.id);
             return {
               branch: b,
-              active: branchIdSet.has(b.id),
+              active: noRows ? true : saved?.active !== false && branchIdSet.has(b.id),
               reorderLevel: saved?.reorderLevel != null ? String(saved.reorderLevel) : '',
               branchPrice: saved?.branchPrice != null ? String(saved.branchPrice) : '',
+              hadPrice: saved?.branchPrice != null,
             };
           }),
         );
-        if (branchIdSet.size > 0) {
+        // "All branches" stays on only when every branch has an active row (or none exist).
+        if (!noRows && this.branchRows().some((r) => !r.active)) {
           this.allBranchesToggle.set(false);
         }
       },
@@ -1249,9 +1254,9 @@ export class ProductMasterComponent implements OnInit {
 
   private runBranches(productUid: string): Promise<void> {
     const rows = this.branchRows();
-    const toAssign = this.allBranchesToggle()
-      ? rows
-      : rows.filter((r) => r.active);
+    // Every row is sent: an unticked branch must be recorded as not sold there (ADR-0073 D-4).
+    const allOn = this.allBranchesToggle();
+    const toAssign = rows.map((r) => (allOn ? { ...r, active: true } : r));
 
     if (toAssign.length === 0) {
       this.setSection(4, 'done');
@@ -1272,6 +1277,7 @@ export class ProductMasterComponent implements OnInit {
           reorderLevel: String(row.reorderLevel ?? '').trim() || undefined,
           branchPrice: String(row.branchPrice ?? '').trim() || undefined,
         };
+        if (!req.branchPrice && row.hadPrice) req.clearBranchPrice = true;
         this.productService.assignBranch(productUid, req).subscribe({
           next: () => runNext(idx + 1),
           error: (err) => {
