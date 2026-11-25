@@ -116,17 +116,17 @@ class SalesService {
   /// `/reports/sales` over a date range. This is the endpoint behind the
   /// client's "range of date" request.
   ///
-  /// Scoped to the active branch. Without `branchUid` the server reports every
-  /// branch the caller may see, while the screen is labelled with one branch —
-  /// the dashboard's sales then disagreed with its stock figures, and with the
-  /// same report on the web for that branch.
+  /// Scoped to what the user picked: one branch, or (in the all-branches view)
+  /// no `branchUid`, so the server reports every branch the caller may see.
+  /// Sending nothing while a single branch was picked made the dashboard's
+  /// sales disagree with its stock figures.
   Future<SalesReport> report({
     required DateTime from,
     required DateTime to,
   }) async {
     final res = await session.api.get('/reports/sales', query: {
       if (session.companyId != null) 'companyId': session.companyId,
-      if (session.activeBranch != null) 'branchUid': session.activeBranch!.uid,
+      'branchUid': session.reportBranchUid,
       'fromDate': _d(from),
       'toDate': _d(to),
     });

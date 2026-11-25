@@ -275,11 +275,7 @@ class OperationsService {
     final rows = asList(res, SessionRow.fromJson)
         .where((s) => s.isOpen)
         .toList(growable: false);
-    return sessionsAtBranch(
-      rows,
-      branchId: await session.activeBranchId(),
-      branchName: session.activeBranch?.name,
-    );
+    return _inScope(rows);
   }
 
   /// Sessions in [status] (CLOSED or RECONCILED) at the active branch, newest
@@ -294,11 +290,25 @@ class OperationsService {
       'size': size * 5,
       'sort': status == 'RECONCILED' ? 'reconciledAt,desc' : 'closedAt,desc',
     });
+    final rows = await _inScope(asList(res, SessionRow.fromJson));
+    return rows.take(size).toList(growable: false);
+  }
+
+  /// The tills the user picked: the active branch's, or in the all-branches
+  /// view those of the user's branches in this company — never a branch
+  /// they are not assigned to, which the company-wide list would include.
+  Future<List<SessionRow>> _inScope(List<SessionRow> rows) async {
+    if (session.allBranches) {
+      return sessionsAtBranches(
+        rows,
+        branchNames: [for (final b in session.branchesInCompany) b.name],
+      );
+    }
     return sessionsAtBranch(
-      asList(res, SessionRow.fromJson),
+      rows,
       branchId: await session.activeBranchId(),
       branchName: session.activeBranch?.name,
-    ).take(size).toList(growable: false);
+    );
   }
 
   /// Reconcile a CLOSED session: posts the over/short to the ledger and
@@ -365,4 +375,15 @@ List<SessionRow> sessionsAtBranch(
     }
     return branchName != null && norm(r.branchName) == norm(branchName);
   }).toList(growable: false);
+}
+
+/// The rows at any of [branchNames] (matched case-insensitively).
+List<SessionRow> sessionsAtBranches(
+  List<SessionRow> rows, {
+  required List<String> branchNames,
+}) {
+  final wanted = {for (final n in branchNames) n.trim().toLowerCase()};
+  return rows
+      .where((r) => wanted.contains((r.branchName ?? '').trim().toLowerCase()))
+      .toList(growable: false);
 }

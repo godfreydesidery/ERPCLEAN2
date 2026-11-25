@@ -4,8 +4,8 @@ import '../app/app_scope.dart';
 import '../app/brand.dart';
 import '../app/theme.dart';
 import '../app/version.dart';
-import '../core/scope.dart';
 import '../core/session.dart';
+import '../widgets/branch_picker.dart';
 import '../widgets/common.dart';
 
 /// Profile, branch and server. Short by design.
@@ -151,90 +151,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _pickBranch(BuildContext context, Session session) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Container(
-        decoration: const BoxDecoration(
-          color: HqColors.panel,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Choose a branch', style: HqText.title),
-              const SizedBox(height: 4),
-              Text(
-                session.spansCompanies
-                    ? 'Every figure follows the branch you pick, and the '
-                        'company it belongs to.'
-                    : 'Every figure follows the branch you pick.',
-                style: HqText.tiny,
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final g in branchesByCompany(session.branches)) ...[
-                        // Two companies can each have a "Main" branch: name
-                        // the company whenever the list spans more than one.
-                        if (session.spansCompanies)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10, bottom: 2),
-                            child: Text(
-                              (session.companies[g.companyUid]?.name ?? '')
-                                      .isNotEmpty
-                                  ? session.companies[g.companyUid]!.name
-                                      .toUpperCase()
-                                  : 'COMPANY',
-                              style: HqText.label,
-                            ),
-                          ),
-                        for (final b in g.branches)
-                          _branchTile(sheetContext, session, b),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _branchTile(BuildContext sheetContext, Session session, BranchRef b) {
-    final active = b.uid == session.activeBranch?.uid;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        active ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-        color: active ? HqColors.brand : HqColors.ink3,
-      ),
-      title: Text(
-        b.name,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-          color: HqColors.ink,
-        ),
-      ),
-      subtitle:
-          b.isDefault ? Text('Your default', style: HqText.tiny) : null,
-      onTap: () {
-        Navigator.of(sheetContext).pop();
-        session.switchBranch(b);
-      },
-    );
+    showBranchPicker(context, session);
   }
 }
 

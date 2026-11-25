@@ -10,7 +10,13 @@ import 'jwt.dart';
 import 'scope.dart';
 import 'storage/secure_store.dart';
 
-export 'scope.dart' show BranchRef, CompanyRef;
+export 'scope.dart'
+    show
+        AllBranchesUnavailable,
+        BranchRef,
+        CompanyRef,
+        kAllBranchesUnavailable,
+        kAllBranchesUnavailableDetail;
 
 /// The signed-in user, their permissions and the active company/branch.
 ///
@@ -61,18 +67,42 @@ class Session extends ChangeNotifier {
   bool get spansCompanies =>
       branches.map((b) => b.companyUid).toSet().length > 1;
 
-  /// "Company · Branch" when the user works across companies, else the branch.
+  /// True while the user looks at every branch of the active company.
+  ///
+  /// [activeBranch] then stays set as the *anchor*: it is still sent as
+  /// `X-Branch-Uid`, because the server takes the request's company from it,
+  /// but reports are asked for without a branch so they cover the company
+  /// (as far as the user may see it — the server applies its own branch rule).
+  bool allBranches = false;
+
+  /// The user's branches in the active company.
+  List<BranchRef> get branchesInCompany =>
+      branches.where((b) => b.companyUid == companyUid).toList(growable: false);
+
+  /// Whether "All branches" is offered for [company]: only when the user has
+  /// more than one branch there — with one it would be the same figures.
+  bool canSeeAllBranchesOf(String company) =>
+      branches.where((b) => b.companyUid == company).length > 1;
+
+  /// The `branchUid` a report should be asked for: the active branch, or null
+  /// (every branch) in the all-branches view.
+  String? get reportBranchUid => allBranches ? null : activeBranch?.uid;
+
+  /// What the figures on screen cover, e.g. "Mbezi", "All branches", or
+  /// "Shayo Ltd · All branches" when the user works across companies.
   String get scopeLabel {
-    final branch = activeBranch?.name ?? 'No branch';
+    final where =
+        allBranches ? 'All branches' : (activeBranch?.name ?? 'No branch');
     final company = companyName;
     return spansCompanies && company != null && company.isNotEmpty
-        ? '$company · $branch'
-        : branch;
+        ? '$company · $where'
+        : where;
   }
 
-  /// Changes whenever the company or branch does. The shell keys its pages on
-  /// it so every screen reloads in the new scope.
-  String get scopeKey => scopeKeyOf(companyUid, activeBranch?.uid);
+  /// Changes whenever the company, branch or all-branches view does. The shell
+  /// keys its pages on it so every screen reloads in the new scope.
+  String get scopeKey =>
+      scopeKeyOf(companyUid, allBranches ? '*' : activeBranch?.uid);
 
   bool get signedIn => _api != null && userUid != null;
 
@@ -136,11 +166,15 @@ class Session extends ChangeNotifier {
     // Land where the user last worked on this device, if still assigned.
     final saved = await _store.readBranchUid(userUid);
     final initial = pickInitialBranch(branches, saved);
+    final savedAll = await _store.readAllBranches(userUid);
 
     // Ask in the branch's scope, so "my organisation" is the branch's one.
     _api?.branchUidOverride = initial?.uid;
     await _loadCompanies();
     await _enter(initial);
+    allBranches = savedAll &&
+        initial != null &&
+        canSeeAllBranchesOf(initial.companyUid);
     notifyListeners();
   }
 
@@ -241,10 +275,30 @@ class Session extends ChangeNotifier {
     }
   }
 
+  /// Work in one branch.
   Future<void> switchBranch(BranchRef branch) async {
-    if (branch.uid == activeBranch?.uid) return;
-    await _enter(branch);
+    if (branch.uid == activeBranch?.uid && !allBranches) return;
+    allBranches = false;
+    if (branch.uid != activeBranch?.uid) await _enter(branch);
     await _store.saveBranchUid(userUid, branch.uid);
+    await _store.saveAllBranches(userUid, false);
+    notifyListeners();
+  }
+
+  /// Look at every branch of [company]. The anchor branch is the current one
+  /// if it is in that company, else the user's default there, else the first.
+  Future<void> showAllBranches(String company) async {
+    if (!canSeeAllBranchesOf(company)) return;
+    final inCompany =
+        branches.where((b) => b.companyUid == company).toList(growable: false);
+    final current = activeBranch;
+    final anchor = current != null && current.companyUid == company
+        ? current
+        : pickInitialBranch(inCompany, null)!;
+    if (anchor.uid != activeBranch?.uid) await _enter(anchor);
+    allBranches = true;
+    await _store.saveBranchUid(userUid, anchor.uid);
+    await _store.saveAllBranches(userUid, true);
     notifyListeners();
   }
 
@@ -274,6 +328,7 @@ class Session extends ChangeNotifier {
     permissions = const [];
     branches = const [];
     activeBranch = null;
+    allBranches = false;
     companies = const {};
     notifyListeners();
   }

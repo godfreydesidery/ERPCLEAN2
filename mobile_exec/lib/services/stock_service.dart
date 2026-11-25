@@ -241,10 +241,14 @@ class StockService {
   /// Stock on hand at the active branch (the server scopes it by the
   /// `X-Branch-Uid` header), every page of it.
   ///
+  /// The server answers for one branch only, so there is no all-branches
+  /// version: screens show "not available" in that view instead of calling.
+  ///
   /// This used to read one page of 200: past 200 lines the dashboard's item
   /// count stopped at 200 and anything low on stock beyond the first page was
   /// never flagged. [maxPages] only bounds a runaway loop.
   Future<List<StockRow>> onHand({String? search, int maxPages = 50}) async {
+    if (session.allBranches) throw const AllBranchesUnavailable();
     const size = 200;
     final all = <StockRow>[];
     for (var page = 0; page < maxPages; page++) {
@@ -282,11 +286,11 @@ class StockService {
   /// (it reads the caller's context) and no product filter: it returns every
   /// product, which is what lets the screen search without a round trip.
   ///
-  /// [branchUid] defaults to the active branch, so the list matches every
-  /// other screen; without it the server answers for all branches.
+  /// [branchUid] defaults to what the user picked — the active branch, or
+  /// every branch in the all-branches view — so it matches every other screen.
   Future<ProductListReport> productList({String? branchUid}) async {
     final res = await session.api.get('/stock/reports/product-list', query: {
-      'branchUid': branchUid ?? session.activeBranch?.uid,
+      'branchUid': branchUid ?? session.reportBranchUid,
     });
 
     final map = asMap(res);
@@ -305,11 +309,11 @@ class StockService {
   /// The endpoint takes no companyId (it reads the caller's context) and no
   /// as-at date: it always values stock as it stands now.
   ///
-  /// [branchUid] defaults to the active branch: the dashboard put an
-  /// all-branches stock value beside one branch's items and sales.
+  /// [branchUid] defaults to what the user picked: the dashboard used to put
+  /// an all-branches stock value beside one branch's items and sales.
   Future<ValuationResult> valuation({String? branchUid}) async {
     final res = await session.api.get('/stock/reports/stock-value', query: {
-      'branchUid': branchUid ?? session.activeBranch?.uid,
+      'branchUid': branchUid ?? session.reportBranchUid,
     });
 
     return ValuationResult.fromJson(asMap(res));

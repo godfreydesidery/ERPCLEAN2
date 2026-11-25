@@ -115,7 +115,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
             final data = _viewKey.currentState?.data;
             return data == null
                 ? null
-                : _doc(data, session.activeBranch?.name ?? '');
+                : _doc(data, session.scopeLabel);
           }),
           const SizedBox(width: 6),
         ],
@@ -184,7 +184,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                         FilledButton.icon(
                           onPressed: () => showShareSheet(
                             context,
-                            _doc(data, session.activeBranch?.name ?? ''),
+                            _doc(data, session.scopeLabel),
                           ),
                           icon: const Icon(Icons.ios_share_rounded, size: 19),
                           label: const Text('Export and share'),

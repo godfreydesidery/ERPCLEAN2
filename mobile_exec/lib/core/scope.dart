@@ -94,3 +94,17 @@ List<({String companyUid, List<BranchRef> branches})> branchesByCompany(
 /// under the new branch's name.
 String scopeKeyOf(String? companyUid, String? branchUid) =>
     '${companyUid ?? '-'}|${branchUid ?? '-'}';
+
+/// Thrown instead of calling the server when a figure has no all-branches
+/// version on the server yet (stock on hand is per branch only). Screens show
+/// [kAllBranchesUnavailable] rather than stitching branches together in the
+/// app, so a missing server report stays visible and gets added there.
+class AllBranchesUnavailable implements Exception {
+  const AllBranchesUnavailable();
+
+  @override
+  String toString() => kAllBranchesUnavailable;
+}
+
+const kAllBranchesUnavailable = 'Not available for all branches';
+const kAllBranchesUnavailableDetail = 'Pick one branch to see this.';

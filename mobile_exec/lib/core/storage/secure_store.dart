@@ -77,6 +77,19 @@ class SecureStore {
 
   static const _kBranchPrefix = 'hq.branch.';
 
+  /// Whether [userUid] last chose "All branches".
+  Future<bool> readAllBranches(String? userUid) async {
+    if (userUid == null) return false;
+    return (await _p).getBool('$_kAllPrefix$userUid') ?? false;
+  }
+
+  Future<void> saveAllBranches(String? userUid, bool all) async {
+    if (userUid == null) return;
+    await (await _p).setBool('$_kAllPrefix$userUid', all);
+  }
+
+  static const _kAllPrefix = 'hq.allbranches.';
+
   Future<void> clear() async {
     final p = await _p;
     await p.remove(_kAccess);
