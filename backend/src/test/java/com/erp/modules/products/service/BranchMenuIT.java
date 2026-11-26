@@ -62,6 +62,7 @@ class BranchMenuIT extends PostgresIntegrationTest {
     @Autowired private AppUserRepository users;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private IamTestData testData;
+    @Autowired private com.erp.platform.audit.AuditRepository auditRepository;
 
     private Organisation org;
     private Company company;
@@ -233,7 +234,72 @@ class BranchMenuIT extends PostgresIntegrationTest {
                 .satisfies(row -> assertThat(row.branchPrice()).isNull());
     }
 
+    // ---- audit trail: product_branch keeps no history, so the trail must ---------------
+
+    @Test
+    void branchPriceChange_recordsThePreviousPriceAndSoldHere() {
+        productService.setBranchMenu(latte.uid(),
+                new SetBranchMenuRequest(arusha.getUid(), null, new BigDecimal("9000"), null));
+        productService.setBranchMenu(latte.uid(),
+                new SetBranchMenuRequest(arusha.getUid(), null, new BigDecimal("9500"), null));
+
+        assertThat(details("PRODUCT.UPDATE")).last().asString()
+                .contains("BRANCH_MENU")
+                .contains("\"branchPrice\": \"9500\"")
+                // The previous value is the STORED one (numeric(19,4)), hence the scale.
+                .contains("\"previousBranchPrice\": \"9000.0000\"")
+                .contains("\"previousSoldHere\": \"true\"");
+    }
+
+    @Test
+    void firstBranchRow_recordsItsValues_andHowManyOtherBranchesWereKeptSelling() {
+        productService.setBranchMenu(latte.uid(),
+                new SetBranchMenuRequest(arusha.getUid(), null, new BigDecimal("9000"), null));
+
+        assertThat(details("PRODUCT.UPDATE")).last().asString()
+                // No rows before = sold everywhere, so it WAS sold here, at no branch price.
+                .contains("\"previousSoldHere\": \"true\"")
+                .contains("\"previousBranchPrice\": \"null\"")
+                .contains("\"otherBranchesRecorded\": \"1\"");
+    }
+
+    @Test
+    void productMasterUpsert_recordsPreviousValues_andTheAddRecordsItsPrice() {
+        productService.assignBranch(latte.uid(),
+                new AssignProductBranchRequest(arusha.getUid(), true, null, new BigDecimal("9100")));
+        assertThat(details("PRODUCT.BRANCH.ADD")).last().asString()
+                .contains("\"active\": \"true\"")
+                .contains("\"branchPrice\": \"9100\"")
+                .contains("\"otherBranchesRecorded\": \"1\"");
+
+        productService.assignBranch(latte.uid(),
+                new AssignProductBranchRequest(arusha.getUid(), false, null, new BigDecimal("9200")));
+        assertThat(details("PRODUCT.UPDATE")).last().asString()
+                .contains("BRANCH_OVERRIDES")
+                .contains("\"active\": \"false\"")
+                .contains("\"previousActive\": \"true\"")
+                .contains("\"previousBranchPrice\": \"9100.0000\"");
+    }
+
+    @Test
+    void removeBranch_recordsWhetherItWasSellingBefore() {
+        arushaOnlyAsLegacyData(mandazi);
+        productService.removeBranch(mandazi.uid(), arusha.getUid());
+
+        assertThat(details("PRODUCT.BRANCH.REMOVE")).last().asString()
+                .contains("\"previousActive\": \"true\"");
+    }
+
     // ---- helpers -------------------------------------------------------------------
+
+    /** Audit details of one action, oldest first. */
+    private List<String> details(String action) {
+        return auditRepository.findAll().stream()
+                .filter(a -> action.equals(a.getAction()))
+                .sorted(java.util.Comparator.comparing(com.erp.platform.audit.AuditLog::getId))
+                .map(com.erp.platform.audit.AuditLog::getDetail)
+                .toList();
+    }
 
     /** A row for Arusha and none for Moshi — what Product Master with "All branches" off saved. */
     private void arushaOnlyAsLegacyData(ProductDto item) {

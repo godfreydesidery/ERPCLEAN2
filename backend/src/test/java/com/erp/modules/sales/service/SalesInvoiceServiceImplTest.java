@@ -24,6 +24,7 @@ import com.erp.modules.sales.domain.dto.AddInvoiceLineRequest;
 import com.erp.modules.sales.domain.dto.CreateSalesInvoiceRequest;
 import com.erp.modules.sales.domain.dto.SalesInvoiceLineDto;
 import com.erp.modules.sales.domain.entity.SalesInvoice;
+import com.erp.modules.sales.domain.entity.SalesInvoiceLine;
 import com.erp.modules.sales.domain.entity.TaxRate;
 import com.erp.platform.common.time.BusinessZone;
 import com.erp.platform.common.time.CompanyCalendar;
@@ -205,6 +206,39 @@ class SalesInvoiceServiceImplTest {
                 .orElseThrow(() -> new AssertionError("no line-add audit event was recorded"));
         assertThat(lineAdd.detail()).containsEntry("priceSource", "CUSTOMER_PRICE");
         assertThat(lineAdd.detail()).containsEntry("unitPrice", "650.0000");
+    }
+
+    @Test
+    void addLine_stampsThePriceSourceOnTheLineItself_branchPrice_ADR0073() {
+        SalesInvoice inv = invoiceWithId(562L, "INVUID0000000000000000562");
+        when(invoices.findByUid(inv.getUid())).thenReturn(Optional.of(inv));
+        UnitOfMeasure cup = unitWithId(982L, "BASEUID0000000000000982", "CUP");
+        Product latte = productWithId(972L, "PRODUID00000000000000972", "LATTE", "Latte", cup);
+        when(products.findByCompanyIdAndUid(COMPANY_ID, latte.getUid())).thenReturn(Optional.of(latte));
+        when(units.findByCompanyIdAndUid(COMPANY_ID, cup.getUid())).thenReturn(Optional.of(cup));
+        when(priceResolutionService.resolveSellingPrice(sellingQuery(COMPANY_ID, 972L, 982L)))
+                .thenReturn(new UnitListPriceDto(new BigDecimal("8000.0000"), true,
+                        com.erp.modules.products.domain.enums.PriceSource.BRANCH_PRICE));
+        when(taxRates.findByCompanyIdAndVatStatus(COMPANY_ID, VatStatus.STANDARD))
+                .thenReturn(Optional.of(new TaxRate(COMPANY_ID, VatStatus.STANDARD,
+                        new BigDecimal("0.1800"), 1L)));
+        when(lines.findMaxLineNo(562L)).thenReturn(0);
+        java.util.List<SalesInvoiceLine> saved = new java.util.ArrayList<>();
+        when(lines.save(any())).thenAnswer(a -> {
+            SalesInvoiceLine l = a.getArgument(0);
+            saved.add(l);
+            return l;
+        });
+
+        service.addLine(inv.getUid(), new AddInvoiceLineRequest(
+                "PRODUID00000000000000972", "BASEUID0000000000000982", BigDecimal.ONE, null, null));
+
+        assertThat(saved).singleElement().satisfies(l -> {
+            assertThat(l.getPriceSource())
+                    .isEqualTo(com.erp.modules.products.domain.enums.PriceSource.BRANCH_PRICE);
+            // Diagnostic only: the amounts are exactly what they were before the column was written.
+            assertThat(l.getUnitPriceAmount()).isEqualByComparingTo("8000");
+        });
     }
 
     @Test

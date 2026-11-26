@@ -878,6 +878,10 @@ public class SalesInvoiceServiceImpl implements SalesInvoiceService {
                 product.getVatStatus(), vatRate,
                 actorId());
         line.setPriceInclusive(offline ? offlineInclusive : resolvedPrice.vatInclusive());
+        // Which rule priced the line (ADR-0029 D-6): the column existed since V42 but was never
+        // written, so "was this charged the branch price?" could only be read from the audit trail.
+        // Diagnostic only — nothing reads it to compute an amount. Null when the resolver had none.
+        line.setPriceSource(resolvedPrice.source());
         // Stamp the override marks exactly as the dedicated override-price endpoint does, so a price
         // changed at add-line time is as visible on the document as one changed afterwards.
         if (overridesListPrice) {
