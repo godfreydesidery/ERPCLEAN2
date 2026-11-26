@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/app_scope.dart';
 import '../app/format.dart';
@@ -8,6 +9,7 @@ import '../services/sales_service.dart';
 import '../widgets/async_view.dart';
 import '../widgets/common.dart';
 import '../widgets/kit.dart';
+import 'sales_report_view.dart';
 
 /// Sales report over a date range — the client's "range of date".
 class SalesReportScreen extends StatefulWidget {
@@ -23,10 +25,16 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
   int _period = 2;
   late DateTimeRange _range = _presetRange(2);
 
+  /// Search, food/drinks and order of the item list. The report itself is
+  /// never changed - this only chooses and orders what is shown.
+  SalesFilter _filter = const SalesFilter();
+  final _search = TextEditingController();
+
   static const _periods = [
     'Today',
     'This week',
     'This month',
+    'Last month',
     'This year',
     'Custom',
   ];
@@ -40,18 +48,86 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           start: today.subtract(Duration(days: today.weekday - 1)),
           end: today),
       2 => DateTimeRange(start: DateTime(now.year, now.month, 1), end: today),
-      3 => DateTimeRange(start: DateTime(now.year, 1, 1), end: today),
+      // Day 0 of this month is the last day of the previous one.
+      3 => DateTimeRange(
+          start: DateTime(now.year, now.month - 1, 1),
+          end: DateTime(now.year, now.month, 0)),
+      4 => DateTimeRange(start: DateTime(now.year, 1, 1), end: today),
       _ => DateTimeRange(start: today, end: today),
     };
   }
 
   String get _rangeLabel => formatRange(_range);
 
-  ExportDoc _doc(SalesReport data, String branch) => ExportDoc(
+  bool _drinksLoaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Needs the session (an inherited widget), so not in initState; once only.
+    if (!_drinksLoaded) {
+      _drinksLoaded = true;
+      _loadDrinkCategories();
+    }
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Drink categories are kept per company on this device: categories are a
+  /// company's own words, and the choice is one owner's view, not a setting.
+  String get _drinksKey =>
+      'hq.salesReport.drinkCategories.${AppScope.of(context).session.companyId ?? ''}';
+
+  Future<void> _loadDrinkCategories() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final saved = p.getStringList(_drinksKey) ?? const <String>[];
+      setState(() => _filter = _filter.copyWith(drinkCategories: saved.toSet()));
+    } catch (_) {
+      // No storage (a private browser window): Food / Drinks just starts empty.
+    }
+  }
+
+  Future<void> _chooseDrinkCategories(List<String> categories) async {
+    final picked = await showModalBottomSheet<Set<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _DrinkCategoriesSheet(
+        categories: categories,
+        selected: _filter.drinkCategories,
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _filter = _filter.copyWith(drinkCategories: picked));
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setStringList(_drinksKey, picked.toList()..sort());
+    } catch (_) {
+      // Kept for this visit only.
+    }
+  }
+
+  String _filterLabel() => [
+        if (_filter.query.trim().isNotEmpty) '"${_filter.query.trim()}"',
+        if (_filter.kind != SalesKind.all) _filter.kind.label,
+      ].join(' · ');
+
+  ExportDoc _doc(SalesReport data, String branch) {
+    final shown = applySalesFilter(data.rows, _filter);
+    final m = SalesMatches.of(shown);
+    return ExportDoc(
         title: 'Sales report',
         subtitle: _rangeLabel,
         meta: [
           if (branch.isNotEmpty) branch,
+          if (_filter.narrows)
+            'Showing ${m.items} of ${data.rows.length} items: ${_filterLabel()}',
+          'Ordered by ${_filter.sort.label.toLowerCase()}',
           if (data.generatedAt != null) 'Generated ${data.generatedAt}',
           if (data.marginIsPartial) _marginNote(data),
         ],
@@ -65,7 +141,7 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
           'Margin',
         ],
         rows: [
-          for (final r in data.rows)
+          for (final r in shown)
             [
               Cell.text(r.productName.isEmpty ? r.productCode : r.productName),
               Cell.text(r.productCode),
@@ -79,19 +155,31 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                   : Cell.money(r.margin!, currency: data.currency),
             ],
         ],
-        totals: [
-          DocTotal('Sales', Cell.money(data.total, currency: data.currency)),
-          DocTotal('Discount',
-              Cell.money(data.discount, currency: data.currency)),
-          DocTotal('VAT', Cell.money(data.vat, currency: data.currency)),
-          DocTotal(
-              data.marginIsPartial ? 'Margin (partial)' : 'Margin',
-              data.marginUnknown
-                  ? const Cell.unknown()
-                  : Cell.money(data.margin, currency: data.currency)),
-          DocTotal('Items sold', Cell.number(data.qtySold)),
-        ],
+        // Narrowed: the totals are those of the items shown, and say so - a
+        // whole-report total under a filtered list would be misread.
+        totals: _filter.narrows
+            ? [
+                DocTotal('Sales (shown)',
+                    Cell.money(m.amount, currency: data.currency)),
+                DocTotal('Items sold (shown)', Cell.number(m.qtySold)),
+                DocTotal('Sales (whole report)',
+                    Cell.money(data.total, currency: data.currency)),
+              ]
+            : [
+                DocTotal(
+                    'Sales', Cell.money(data.total, currency: data.currency)),
+                DocTotal('Discount',
+                    Cell.money(data.discount, currency: data.currency)),
+                DocTotal('VAT', Cell.money(data.vat, currency: data.currency)),
+                DocTotal(
+                    data.marginIsPartial ? 'Margin (partial)' : 'Margin',
+                    data.marginUnknown
+                        ? const Cell.unknown()
+                        : Cell.money(data.margin, currency: data.currency)),
+                DocTotal('Items sold', Cell.number(data.qtySold)),
+              ],
       );
+  }
 
   void _applyPreset(int i) {
     if (i == _periods.length - 1) return;
@@ -159,23 +247,141 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                     emptyIcon: Icons.receipt_long_outlined,
                     emptyTitle: 'No sales in this period',
                     emptyDetail: 'Try a different date range.',
-                    builder: (context, data) => ListView(
+                    builder: (context, data) {
+                      final shown = applySalesFilter(data.rows, _filter);
+                      final matches = SalesMatches.of(shown);
+                      final withCategories = reportHasCategories(data.rows);
+                      return ListView(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
                       children: [
                         _Totals(period: _rangeLabel, report: data),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _search,
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            hintText: 'Search items, e.g. matcha',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: _filter.query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear search',
+                                    icon: const Icon(Icons.close_rounded),
+                                    onPressed: () {
+                                      _search.clear();
+                                      setState(() => _filter =
+                                          _filter.copyWith(query: ''));
+                                    },
+                                  ),
+                          ),
+                          onChanged: (v) => setState(
+                              () => _filter = _filter.copyWith(query: v)),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            if (withCategories) ...[
+                              Expanded(
+                                child: FilterChipsRow(
+                                  options: [
+                                    for (final k in SalesKind.values) k.label
+                                  ],
+                                  selected: _filter.kind.index,
+                                  onSelected: (i) {
+                                    final kind = SalesKind.values[i];
+                                    if (kind != SalesKind.all &&
+                                        _filter.drinkCategories.isEmpty) {
+                                      // First use: say which categories are drinks.
+                                      _chooseDrinkCategories(
+                                              categoriesOf(data.rows))
+                                          .then((_) {
+                                        if (mounted) {
+                                          setState(() => _filter =
+                                              _filter.copyWith(kind: kind));
+                                        }
+                                      });
+                                      return;
+                                    }
+                                    setState(() =>
+                                        _filter = _filter.copyWith(kind: kind));
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Choose drink categories',
+                                icon: const Icon(Icons.tune_rounded),
+                                onPressed: () => _chooseDrinkCategories(
+                                    categoriesOf(data.rows)),
+                              ),
+                            ] else
+                              const Spacer(),
+                            PopupMenuButton<SalesSort>(
+                              tooltip: 'Order',
+                              initialValue: _filter.sort,
+                              onSelected: (s) => setState(
+                                  () => _filter = _filter.copyWith(sort: s)),
+                              itemBuilder: (_) => [
+                                for (final s in SalesSort.values)
+                                  PopupMenuItem(value: s, child: Text(s.label)),
+                              ],
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 8),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.sort_rounded, size: 18),
+                                    const SizedBox(width: 4),
+                                    Text(_filter.sort.label,
+                                        style: HqText.tiny),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_filter.narrows) ...[
+                          const SizedBox(height: 10),
+                          HqCard(
+                            child: Column(
+                              children: [
+                                FigureRow(
+                                  label: 'Matching items',
+                                  value: '${matches.items}',
+                                ),
+                                const Divider(height: 14),
+                                FigureRow(
+                                  label: 'Quantity sold',
+                                  value: qty(matches.qtySold),
+                                ),
+                                const Divider(height: 14),
+                                FigureRow(
+                                  label: 'Sales',
+                                  value: tzs(matches.amount),
+                                  emphasise: true,
+                                  valueColor: HqColors.brand,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 20),
                         SectionLabel(
                           text: 'BY PRODUCT',
-                          trailing: '${data.rows.length} ITEMS',
+                          trailing: _filter.narrows
+                              ? '${shown.length} OF ${data.rows.length} ITEMS'
+                              : '${data.rows.length} ITEMS',
                         ),
                         const SizedBox(height: 10),
                         HqCard(
                           padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                           child: Column(
                             children: [
-                              for (var i = 0; i < data.rows.length; i++) ...[
+                              if (shown.isEmpty)
+                                Text('No item matches.', style: HqText.body),
+                              for (var i = 0; i < shown.length; i++) ...[
                                 if (i > 0) const Divider(height: 18),
-                                _Row(row: data.rows[i], total: data.total),
+                                _Row(row: shown[i], total: data.total),
                               ],
                             ],
                           ),
@@ -197,7 +403,8 @@ class _SalesReportScreenState extends State<SalesReportScreen> {
                           coverage: session.scopeLabel,
                         ),
                       ],
-                    ),
+                    );
+                    },
                   ),
                 ),
               ],
@@ -380,6 +587,78 @@ class _Row extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Tick the categories that are drinks; everything else counts as food.
+class _DrinkCategoriesSheet extends StatefulWidget {
+  const _DrinkCategoriesSheet({
+    required this.categories,
+    required this.selected,
+  });
+
+  final List<String> categories;
+  final Set<String> selected;
+
+  @override
+  State<_DrinkCategoriesSheet> createState() => _DrinkCategoriesSheetState();
+}
+
+class _DrinkCategoriesSheetState extends State<_DrinkCategoriesSheet> {
+  late final Set<String> _keys = {
+    for (final s in widget.selected) s.trim().toLowerCase()
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 4),
+              child: Text('Which categories are drinks?', style: HqText.title),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Everything else counts as food. Saved on this phone.',
+                style: HqText.tiny,
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final c in widget.categories)
+                    CheckboxListTile(
+                      title: Text(c),
+                      value: _keys.contains(c.trim().toLowerCase()),
+                      onChanged: (on) => setState(() => on == true
+                          ? _keys.add(c.trim().toLowerCase())
+                          : _keys.remove(c.trim().toLowerCase())),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop({
+                  for (final c in widget.categories)
+                    if (_keys.contains(c.trim().toLowerCase())) c
+                }),
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

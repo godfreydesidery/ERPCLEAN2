@@ -51,8 +51,24 @@ class _RestaurantReportsScreenState extends State<RestaurantReportsScreen> {
   String get _subtitle =>
       _report.hasDates ? formatRange(_range) : 'Unpaid right now';
 
-  ExportDoc _doc(RestaurantTable t, String branch) =>
-      restaurantReportDoc(_title, _subtitle, t, branch);
+  /// Narrows the lines shown (customer, item, receipt, waiter …). The totals
+  /// stay the report's own; the list and the export say how many match.
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  ExportDoc _doc(RestaurantTable t, String branch) => restaurantReportDoc(
+      _title,
+      _query.trim().isEmpty
+          ? _subtitle
+          : '$_subtitle · lines matching "${_query.trim()}"',
+      matchingLines(t, _query),
+      branch);
 
   void _reload() => _viewKey.currentState?.reload();
 
@@ -152,16 +168,43 @@ class _RestaurantReportsScreenState extends State<RestaurantReportsScreen> {
                     emptyDetail: _report.hasDates
                         ? 'Try a different date range.'
                         : 'Every table has paid.',
-                    builder: (context, t) => ListView(
+                    builder: (context, all) {
+                      final t = matchingLines(all, _query);
+                      final narrowed = _query.trim().isNotEmpty;
+                      return ListView(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
                       children: [
-                        _Totals(table: t),
+                        _Totals(table: all),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _search,
+                          textInputAction: TextInputAction.search,
+                          decoration: InputDecoration(
+                            hintText: 'Search: customer, item, receipt…',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: _query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear search',
+                                    icon: const Icon(Icons.close_rounded),
+                                    onPressed: () {
+                                      _search.clear();
+                                      setState(() => _query = '');
+                                    },
+                                  ),
+                          ),
+                          onChanged: (v) => setState(() => _query = v),
+                        ),
                         const SizedBox(height: 16),
                         SectionLabel(
                           text: _title.toUpperCase(),
-                          trailing: '${t.rows.length} LINES',
+                          trailing: narrowed
+                              ? '${t.rows.length} OF ${all.rows.length} LINES'
+                              : '${all.rows.length} LINES',
                         ),
                         const SizedBox(height: 10),
+                        if (t.rows.isEmpty)
+                          Text('No line matches.', style: HqText.body),
                         for (final r in t.rows) ...[
                           _RowCard(table: t, row: r),
                           const SizedBox(height: 8),
@@ -184,13 +227,35 @@ class _RestaurantReportsScreenState extends State<RestaurantReportsScreen> {
                           coverage: branch,
                         ),
                       ],
-                    ),
+                    );
+                    },
                   ),
                 ),
               ],
             ),
     );
   }
+}
+
+/// The lines of [t] that contain [query] in any cell, ignoring case. A blank
+/// query keeps every line. The totals are left as the report's own: they are
+/// the period's figures, not the search's.
+RestaurantTable matchingLines(RestaurantTable t, String query) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return t;
+  return RestaurantTable(
+    columns: t.columns,
+    rows: [
+      for (final r in t.rows)
+        if (r.any((c) => '$c'.toLowerCase().contains(q))) r,
+    ],
+    totals: t.totals,
+    currency: t.currency,
+    money: t.money,
+    counts: t.counts,
+    notes: t.notes,
+    generatedAt: t.generatedAt,
+  );
 }
 
 /// A restaurant report as a document: the same rows the screen lists.

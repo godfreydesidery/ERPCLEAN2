@@ -347,8 +347,16 @@ class RestaurantService {
           generatedAt: at,
         );
       case 'bills':
+        // What each bill bought and whose it was (ERP 2026-11-26+). Appended
+        // after Amount so every older column keeps its place, and left out
+        // altogether against an older server rather than shown empty.
+        final hasItems =
+            asList(j['rows'], (r) => r).any((r) => r.containsKey('items'));
         return RestaurantTable(
-          columns: const ['Paid', 'Table', 'Waiter', 'Receipt', 'Paid by', 'Amount'],
+          columns: [
+            'Paid', 'Table', 'Waiter', 'Receipt', 'Paid by', 'Amount',
+            if (hasItems) ...['Items', 'Customer'],
+          ],
           rows: asList(j['rows'], (r) {
             final voided = asStrOr(r['invoiceStatus']) != 'FINALISED';
             return <Object>[
@@ -356,7 +364,11 @@ class RestaurantService {
               asStrOr(r['waiterName']),
               '${asStrOr(r['invoiceNumber'])}${voided ? ' (void)' : ''}',
               asStrOr(r['tenders']).split(', ').map(tenderLabel).join(', '),
-              asNumOr(r['amount'])];
+              asNumOr(r['amount']),
+              if (hasItems) ...[
+                asStrOr(r['items']),
+                asStrOr(r['customerName']),
+              ]];
           }),
           totals: [
             ('Bills', qty(asNumOr(j['billCount']))),
