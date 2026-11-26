@@ -227,6 +227,18 @@ public class PosSessionServiceImpl implements PosSessionService {
         this.outbox = outbox;
     }
 
+    /**
+     * The Z-read's sales sections (summary, categories, departments, team members) — read-only.
+     * Setter-injected like {@link #setOutbox} so the existing constructor and the hand-built unit
+     * tests are unchanged; null there means the Z-read carries no breakdown (an additive field).
+     */
+    private ZReadBreakdownQuery zReadBreakdown;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setZReadBreakdown(ZReadBreakdownQuery zReadBreakdown) {
+        this.zReadBreakdown = zReadBreakdown;
+    }
+
     public PosSessionServiceImpl(PosSessionRepository sessions,
                                   PosTillRepository tills,
                                   PosSessionPayoutRepository payouts,
@@ -815,7 +827,9 @@ public class PosSessionServiceImpl implements PosSessionService {
                 session.getVarianceJournalId(),
                 countPosInvoices(session),
                 computeTenderSubtotals(session),
-                computePayoutSubtotals(session));
+                computePayoutSubtotals(session),
+                zReadBreakdown == null ? null
+                        : zReadBreakdown.forSession(session.getCompanyId(), session.getId()));
     }
 
     /**

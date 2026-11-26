@@ -49,5 +49,29 @@ public record ZReadDto(
         Long varianceJournalId,
         long invoiceCount,
         List<TenderSubtotalDto> tenderSubtotals,
-        List<PayoutSubtotalDto> payoutSubtotals
-) {}
+        List<PayoutSubtotalDto> payoutSubtotals,
+        /**
+         * The shift's sales sections — summary, categories, departments, team members (see
+         * {@link ZReadBreakdownDto}). Additive: every field above is unchanged, and a till or app
+         * that does not know this field ignores it. Null only where the service runs without it.
+         */
+        ZReadBreakdownDto breakdown
+) {
+
+    /** The shape before {@code breakdown}. */
+    public ZReadDto(String sessionUid, Long posTillId, String tillName, Long cashierId,
+                    String cashierName, Long branchId, String branchName, String openedAt,
+                    String closedAt, String reconciledAt, BigDecimal openingFloatAmount,
+                    BigDecimal totalSalesAmount, BigDecimal cashTenderAmount,
+                    BigDecimal totalPayoutsNetAmount, BigDecimal expectedCashAmount,
+                    BigDecimal countedCashAmount, BigDecimal varianceAmount,
+                    Long varianceJournalId, long invoiceCount,
+                    List<TenderSubtotalDto> tenderSubtotals,
+                    List<PayoutSubtotalDto> payoutSubtotals) {
+        this(sessionUid, posTillId, tillName, cashierId, cashierName, branchId, branchName,
+                openedAt, closedAt, reconciledAt, openingFloatAmount, totalSalesAmount,
+                cashTenderAmount, totalPayoutsNetAmount, expectedCashAmount, countedCashAmount,
+                varianceAmount, varianceJournalId, invoiceCount, tenderSubtotals, payoutSubtotals,
+                null);
+    }
+}

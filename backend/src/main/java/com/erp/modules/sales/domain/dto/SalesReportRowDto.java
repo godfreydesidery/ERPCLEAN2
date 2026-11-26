@@ -26,12 +26,26 @@ public record SalesReportRowDto(
         BigDecimal margin,
         BigDecimal amount,
         /** The unit {@code qtySold} is counted in (the product's base unit). Additive. */
-        String     baseUnit) {
+        String     baseUnit,
+        /**
+         * The product's category (department) as it is now, or null when it has none. Additive:
+         * lets a client filter or group the report (e.g. food vs drinks) without another call.
+         */
+        String     category) {
+
+    /** The shape before {@code category}. */
+    public SalesReportRowDto(String productCode, String productName, BigDecimal currentStock,
+                             BigDecimal qtySold, BigDecimal discount, BigDecimal vat,
+                             BigDecimal margin, BigDecimal amount, String baseUnit) {
+        this(productCode, productName, currentStock, qtySold, discount, vat, margin, amount,
+                baseUnit, null);
+    }
 
     /** The original shape, without the base-unit label. */
     public SalesReportRowDto(String productCode, String productName, BigDecimal currentStock,
                              BigDecimal qtySold, BigDecimal discount, BigDecimal vat,
                              BigDecimal margin, BigDecimal amount) {
-        this(productCode, productName, currentStock, qtySold, discount, vat, margin, amount, null);
+        this(productCode, productName, currentStock, qtySold, discount, vat, margin, amount, null,
+                null);
     }
 }

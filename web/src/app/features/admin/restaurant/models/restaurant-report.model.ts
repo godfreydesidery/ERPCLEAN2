@@ -39,6 +39,10 @@ export interface RestaurantBillRowDto {
   paidAt: string | null;
   amount: number;
   tenders: string | null;
+  /** What the bill bought, e.g. "2× Burger, Coffee" (newer servers; absent on older ones). */
+  items?: string | null;
+  /** The customer name typed on the bill at the till, if any (newer servers). */
+  customerName?: string | null;
 }
 
 export interface RestaurantBillsReportDto {

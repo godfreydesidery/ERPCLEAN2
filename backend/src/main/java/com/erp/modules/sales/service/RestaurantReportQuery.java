@@ -271,7 +271,12 @@ public class RestaurantReportQuery {
                        """ + returned + """
                  AS returned,
                        (SELECT string_agg(DISTINCT p.tender_type, ', ' ORDER BY p.tender_type)
-                          FROM sales_invoice_payments p WHERE p.invoice_id = i.id) AS tenders
+                          FROM sales_invoice_payments p WHERE p.invoice_id = i.id) AS tenders,
+                       (SELECT string_agg(CASE WHEN l.quantity = 1 THEN l.product_name
+                                               ELSE trim_scale(l.quantity) || '× ' || l.product_name
+                                          END, ', ' ORDER BY l.line_no)
+                          FROM sales_invoice_lines l WHERE l.invoice_id = i.id) AS items,
+                       NULLIF(TRIM(o.customer_name), '') AS customer_name
                 FROM restaurant_orders o
                 JOIN sales_invoices i       ON i.id = o.sales_invoice_id
                 JOIN app_users u            ON u.id = COALESCE(o.served_by, o.opened_by)
@@ -293,7 +298,8 @@ public class RestaurantReportQuery {
                         rs.getString("invoice_status"), intOrNull(rs, "guest_count"),
                         when(rs, "opened_at", zone), when(rs, "paid_at", zone),
                         rs.getBigDecimal("amount"), rs.getString("tenders"),
-                        rs.getBigDecimal("returned")),
+                        rs.getBigDecimal("returned"), rs.getString("items"),
+                        rs.getString("customer_name")),
                 params.toArray());
 
         long count = 0;

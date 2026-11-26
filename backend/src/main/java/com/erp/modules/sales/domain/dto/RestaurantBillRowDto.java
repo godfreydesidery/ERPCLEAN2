@@ -20,4 +20,21 @@ public record RestaurantBillRowDto(
         String     paidAt,
         BigDecimal amount,
         String     tenders,
-        BigDecimal returned) {}
+        BigDecimal returned,
+        /**
+         * What was bought, as sold: "2× Burger, Coffee, Cake" in line order (a quantity of 1 is left
+         * unwritten). Additive — the daily sales log reads each bill at a glance.
+         */
+        String     items,
+        /** The customer name typed on the bill at the till, or null when none was entered. Additive. */
+        String     customerName) {
+
+    /** The shape before {@code items} and {@code customerName}. */
+    public RestaurantBillRowDto(String orderUid, String orderNumber, String servedAt,
+                                String waiterName, String cashierName, String invoiceNumber,
+                                String invoiceStatus, Integer guests, String openedAt, String paidAt,
+                                BigDecimal amount, String tenders, BigDecimal returned) {
+        this(orderUid, orderNumber, servedAt, waiterName, cashierName, invoiceNumber, invoiceStatus,
+                guests, openedAt, paidAt, amount, tenders, returned, null, null);
+    }
+}
