@@ -15,6 +15,10 @@ public interface ProductBranchRepository extends JpaRepository<ProductBranch, Lo
 
     void deleteByProductIdAndBranchId(Long productId, Long branchId);
 
+    /** Every branch row of one company's items — the branch-menu sheet's export, in one query. */
+    @Query("SELECT pb FROM ProductBranch pb WHERE pb.product.companyId = :companyId")
+    List<ProductBranch> findByProductCompanyId(@Param("companyId") Long companyId);
+
     /**
      * ADR-0073 D-1 in one query: an item with no branch rows is sold everywhere; an item with rows
      * is sold only where its row is active. Both probes use the unique (product_id, branch_id) index.

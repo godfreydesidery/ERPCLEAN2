@@ -172,7 +172,8 @@ export const ADMIN_ROUTES: Routes = [
     // "Product prices & cost" import and STOCK.IMPORT for the "Stock on-hand levels" import that live
     // in this wizard, so a role holding only one code can reach it. The endpoint itself 403s when the
     // caller can import nothing, which the component renders as its own calm "no permission" state
-    // rather than a hard route bounce for a role holding only one code.
+    // rather than a hard route bounce for a role holding only one code. PRODUCT.BRANCH.ASSIGN admits
+    // the "Branch menu & prices" import (ADR-0073) — the code its single-item endpoints already use.
     path: 'bulk-import',
     canActivate: [
       requireAnyPermission(
@@ -181,6 +182,7 @@ export const ADMIN_ROUTES: Routes = [
         'SUPPLIER.IMPORT',
         'PRICE.MASS_UPDATE',
         'STOCK.IMPORT',
+        'PRODUCT.BRANCH.ASSIGN',
       ),
     ],
     loadComponent: () =>
