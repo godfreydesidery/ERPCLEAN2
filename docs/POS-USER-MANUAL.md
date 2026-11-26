@@ -762,6 +762,17 @@ The dialog now shows the **Z-read** report:
 
 The footer shows the invoice count for the session.
 
+Below these, the Z-read also shows **what the shift sold** (when the server is up to date):
+
+| Section | What it shows |
+|---|---|
+| **Summary** | Gross sales, discounts, net sales, the VAT inside them, and the number of transactions. |
+| **Categories** | Sales per item category. |
+| **Departments** | Sales per kitchen or bar station the items were sent to. Items never sent to a station (for example counter sales) show as **Unassigned**. |
+| **Team members** | Sales per waiter — or the cashier, for counter sales — with how many sales each one made. |
+
+Each section adds up to the shift's total sales. A section with nothing in it is left out.
+
 5. To print the Z-read, click **Print**. Printing a Z-read is a manager's job, and since you are allowed to reconcile tills (a Branch Manager is, by default), you are that manager: it prints straight away, with no approval dialog. (A cashier who prints a Z-read *reprint* is asked for a manager's approval instead — see **Reprinting the Z-read** below.)
 6. Click **Finish shift**. The session is RECONCILED and OrbixPOS returns you to the **Open shift** screen, ready for the next shift.
 
