@@ -183,6 +183,11 @@ describe('ShellComponent — sidebar navigation', () => {
     expect(routes(fixture)).toContain('/admin/bulk-import');
   });
 
+  it('shows Bulk Import to a role holding only PRODUCT.BRANCH.ASSIGN (branch menu sheet)', () => {
+    const fixture = shellWithPermissions(['PRODUCT.BRANCH.ASSIGN']);
+    expect(routes(fixture)).toContain('/admin/bulk-import');
+  });
+
   it('points the logo and an always-present Home link at the launchpad (ADM-18)', () => {
     const fixture = shellWithPermissions([]);
     const el = fixture.nativeElement as HTMLElement;

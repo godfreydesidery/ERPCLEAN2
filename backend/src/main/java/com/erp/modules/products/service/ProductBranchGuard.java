@@ -45,6 +45,21 @@ public class ProductBranchGuard {
         return branch.getId();
     }
 
+    /** A branch as the products module needs to name it (no IAM entity leaves this guard). */
+    public record BranchRef(Long id, String uid, String code, String name) {
+    }
+
+    /**
+     * The ACTIVE branches of {@code companyId}, by name — the branch columns of the branch-menu
+     * sheet. Scoped by the company the caller already resolved, never by a request value.
+     */
+    public java.util.List<BranchRef> activeBranchesOf(Long companyId) {
+        return branches.findByCompanyIdOrderByName(companyId).stream()
+                .filter(b -> b.getStatus() == com.erp.platform.common.domain.MasterStatus.ACTIVE)
+                .map(b -> new BranchRef(b.getId(), b.getUid(), b.getCode(), b.getName()))
+                .toList();
+    }
+
     /** Ids of every branch of {@code companyId} (ADR-0073: materialising "sold everywhere"). */
     public java.util.List<Long> branchIdsOf(Long companyId) {
         return branches.findByCompanyIdOrderByName(companyId).stream()

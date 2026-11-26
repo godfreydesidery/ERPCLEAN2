@@ -207,13 +207,15 @@ export class ShellComponent {
           available: true,
           // Includes PRICE.MASS_UPDATE so a price-only role sees the link to the "Product prices &
           // cost" import that lives in this wizard, and STOCK.IMPORT for the "Stock on-hand levels"
-          // import (LRB-07) — matching the route guard (admin.routes.ts).
+          // import (LRB-07), and PRODUCT.BRANCH.ASSIGN for "Branch menu & prices" (ADR-0073) —
+          // matching the route guard (admin.routes.ts).
           anyPermission: [
             'PRODUCT.IMPORT',
             'CUSTOMER.IMPORT',
             'SUPPLIER.IMPORT',
             'PRICE.MASS_UPDATE',
             'STOCK.IMPORT',
+            'PRODUCT.BRANCH.ASSIGN',
           ],
         },
         {
