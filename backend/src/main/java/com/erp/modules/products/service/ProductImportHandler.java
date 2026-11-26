@@ -2,6 +2,7 @@ package com.erp.modules.products.service;
 
 import com.erp.modules.iam.repository.CompanyRepository;
 import com.erp.modules.products.domain.dto.AddBarcodeRequest;
+import com.erp.modules.products.domain.dto.AssignProductBranchRequest;
 import com.erp.modules.products.domain.dto.CreateProductRequest;
 import com.erp.modules.products.domain.dto.ProductDto;
 import com.erp.modules.products.domain.dto.UpdateProductRequest;
@@ -19,6 +20,7 @@ import com.erp.platform.bulk.ImportContext;
 import com.erp.platform.bulk.ImportMode;
 import com.erp.platform.bulk.ImportParsers;
 import com.erp.platform.bulk.ImportRow;
+import com.erp.platform.bulk.RowAction;
 import com.erp.platform.bulk.RowOutcome;
 import com.erp.platform.common.domain.MasterStatus;
 import com.erp.platform.common.money.MoneyDto;
@@ -73,23 +75,28 @@ public class ProductImportHandler implements BulkImportHandler {
     private static final String COL_DEPARTMENT = "Department";
     private static final String COL_BRAND = "Brand";
     private static final String COL_RESTRICTED = "Age Restriction";
+    // ADR-0073: appended last, so sheets downloaded before it still map; blank = every branch.
+    private static final String COL_SOLD_AT = "Sold At";
 
     private final ProductService productService;
     private final ProductRepository products;
     private final ProductBarcodeRepository barcodes;
     private final UnitOfMeasureRepository units;
     private final CompanyRepository companies;
+    private final ProductBranchGuard branchGuard;
 
     public ProductImportHandler(ProductService productService,
                                 ProductRepository products,
                                 ProductBarcodeRepository barcodes,
                                 UnitOfMeasureRepository units,
-                                CompanyRepository companies) {
+                                CompanyRepository companies,
+                                ProductBranchGuard branchGuard) {
         this.productService = productService;
         this.products = products;
         this.barcodes = barcodes;
         this.units = units;
         this.companies = companies;
+        this.branchGuard = branchGuard;
     }
 
     @Override
@@ -144,7 +151,12 @@ public class ProductImportHandler implements BulkImportHandler {
                 ColumnSpec.choice(COL_RESTRICTED, false,
                         "NONE, AGE_18 or AGE_21. The till asks for ID on restricted items.",
                         List.of(RestrictedKind.NONE.name(), RestrictedKind.AGE_18.name(),
-                                RestrictedKind.AGE_21.name())));
+                                RestrictedKind.AGE_21.name())),
+                ColumnSpec.of(COL_SOLD_AT, false,
+                        "NEW items only. Branch code(s) that sell the item, comma-separated, e.g. "
+                      + "BR-02, BR-03. Blank = sold at every branch, including branches opened "
+                      + "later. To change an existing item's branches, use the 'Branch menu & "
+                      + "prices' import."));
     }
 
     @Override
@@ -176,14 +188,46 @@ public class ProductImportHandler implements BulkImportHandler {
         if (existing != null) {
             productService.updateByUid(existing.getUid(), buildUpdate(companyId, existing, row));
             applyBarcodeToExisting(existing, barcode);
+            if (row.has(COL_SOLD_AT)) {
+                // Never re-scopes an existing item from this sheet: that is the branch-menu sheet's
+                // job, with its own "blank = unchanged" rules. Say so rather than ignore silently.
+                return new RowOutcome(row.rowNumber(), RowAction.UPDATE, existing.getCode(),
+                        "'" + COL_SOLD_AT + "' applies to new items only — use the 'Branch menu & "
+                      + "prices' import to change where an existing item is sold.");
+            }
             return RowOutcome.update(row.rowNumber(), existing.getCode());
         }
 
-        ProductDto created = productService.create(buildCreate(companyId, code, row));
+        // Resolve every branch code BEFORE creating anything, so a typo rejects the row whole.
+        List<String> soldAt = soldAtBranchUids(companyId, row);
+        ProductDto created = productService.create(
+                buildCreate(companyId, code, row, soldAt.isEmpty() ? null : soldAt.get(0)));
+        for (String branchUid : soldAt.subList(Math.min(1, soldAt.size()), soldAt.size())) {
+            // The item already has its first row, so this adds a branch without materialising.
+            productService.assignBranch(created.uid(), new AssignProductBranchRequest(branchUid));
+        }
         if (barcode != null) {
             productService.addBarcode(created.uid(), new AddBarcodeRequest(barcode, true));
         }
         return RowOutcome.create(row.rowNumber(), created.code());
+    }
+
+    /** "Sold At" → active branch uids of this company, in sheet order, without repeats. */
+    private List<String> soldAtBranchUids(Long companyId, ImportRow row) {
+        if (!row.has(COL_SOLD_AT)) {
+            return List.of();
+        }
+        java.util.LinkedHashSet<String> uids = new java.util.LinkedHashSet<>();
+        for (String part : row.get(COL_SOLD_AT).split("[,;]")) {
+            String branchCode = part.trim();
+            if (branchCode.isEmpty()) {
+                continue;
+            }
+            uids.add(branchGuard.activeBranchUidByCode(companyId, branchCode)
+                    .orElseThrow(() -> new IllegalArgumentException("'" + COL_SOLD_AT + "': '"
+                            + branchCode + "' is not an active branch code of this company.")));
+        }
+        return List.copyOf(uids);
     }
 
     // -- barcode ------------------------------------------------------------------------------------
@@ -228,7 +272,8 @@ public class ProductImportHandler implements BulkImportHandler {
 
     // -- request building ---------------------------------------------------------------------------
 
-    private CreateProductRequest buildCreate(Long companyId, String code, ImportRow row) {
+    private CreateProductRequest buildCreate(Long companyId, String code, ImportRow row,
+                                             String soldOnlyAtBranchUid) {
         return new CreateProductRequest(
                 resolveCompanyUid(companyId),
                 code.isEmpty() ? null : code,
@@ -250,7 +295,8 @@ public class ProductImportHandler implements BulkImportHandler {
                 ImportParsers.text(row, COL_DEPARTMENT),
                 ImportParsers.text(row, COL_BRAND),
                 null, null, null, null,
-                null, null, null);
+                null, null, null,
+                soldOnlyAtBranchUid);
     }
 
     private UpdateProductRequest buildUpdate(Long companyId, Product existing, ImportRow row) {

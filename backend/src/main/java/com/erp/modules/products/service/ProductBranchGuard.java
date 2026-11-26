@@ -51,4 +51,17 @@ public class ProductBranchGuard {
                 .map(com.erp.modules.iam.domain.entity.Branch::getId)
                 .toList();
     }
+
+    /**
+     * The uid of the ACTIVE branch of {@code companyId} whose code is {@code code} (ignoring case
+     * and surrounding space), if any — the product import's "Sold At" column.
+     */
+    public java.util.Optional<String> activeBranchUidByCode(Long companyId, String code) {
+        String wanted = code == null ? "" : code.trim();
+        return branches.findByCompanyIdOrderByName(companyId).stream()
+                .filter(b -> b.getStatus() == com.erp.platform.common.domain.MasterStatus.ACTIVE)
+                .filter(b -> b.getCode() != null && b.getCode().trim().equalsIgnoreCase(wanted))
+                .map(com.erp.modules.iam.domain.entity.Branch::getUid)
+                .findFirst();
+    }
 }

@@ -391,6 +391,8 @@ export class ProductMasterComponent implements OnInit {
   readonly branchesState = signal<'loading' | 'idle' | 'error'>('idle');
   readonly allBranchesToggle = signal(true);
   readonly branchRows = signal<BranchAssignRow[]>([]);
+  /** True when the item being edited already has branch rows on the server (ADR-0073 D-1). */
+  readonly savedBranchRows = signal(false);
 
   // ── Save orchestration ────────────────────────────────────────────────────
   readonly saving = signal(false);
@@ -628,6 +630,7 @@ export class ProductMasterComponent implements OnInit {
         // PRD-09: show the saved branch overrides (BigDecimal → JSON number; coerce to string).
         const byBranch = new Map(rows.map((r) => [r.branchId, r]));
         const noRows = rows.length === 0; // no rows = sold at every branch (ADR-0073 D-1)
+        this.savedBranchRows.set(!noRows);
         this.branchRows.set(
           this.companyBranches().map((b) => {
             const saved = byBranch.get(b.id);
@@ -706,6 +709,7 @@ export class ProductMasterComponent implements OnInit {
     this.fWeighed.set(false);
     this.priceRows.set([]);
     this.branchRows.set([]);
+    this.savedBranchRows.set(false);
   }
 
   // ── Base unit change ─────────────────────────────────────────────────────────
@@ -1257,6 +1261,19 @@ export class ProductMasterComponent implements OnInit {
     // Every row is sent: an unticked branch must be recorded as not sold there (ADR-0073 D-4).
     const allOn = this.allBranchesToggle();
     const toAssign = rows.map((r) => (allOn ? { ...r, active: true } : r));
+
+    // "All branches" with nothing branch-specific, on an item with no branch rows yet: write
+    // nothing. No rows = sold at every branch, INCLUDING ones opened later (ADR-0073 D-1). Writing
+    // a sold-here row for each existing branch instead would hide the item at the next branch
+    // until someone ticks it there — how a newly opened branch ended up missing items.
+    const nothingBranchSpecific = toAssign.every(
+      (r) =>
+        !String(r.branchPrice ?? '').trim() && !String(r.reorderLevel ?? '').trim() && !r.hadPrice,
+    );
+    if (allOn && !this.savedBranchRows() && nothingBranchSpecific) {
+      this.setSection(4, 'done');
+      return Promise.resolve();
+    }
 
     if (toAssign.length === 0) {
       this.setSection(4, 'done');

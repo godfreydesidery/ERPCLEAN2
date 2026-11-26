@@ -449,13 +449,63 @@ describe('ProductMasterComponent — all-branches toggle', () => {
     expect(comp.branchRows().length).toBe(2);
   });
 
-  it('calls assignBranch for all 2 branches when toggle=true on save', async () => {
+  it('writes NO branch rows for a new item on "All branches" with nothing branch-specific (ADR-0073 D-1)', async () => {
+    // No rows = sold at every branch, including branches opened later. A row per existing branch
+    // would hide the item at the next branch opened.
     const fixture = TestBed.createComponent(ProductMasterComponent);
     const comp = fixture.componentInstance;
     await vi.runAllTimersAsync();
 
     comp.fName.set('Widget');
     comp.fBaseUnitUid.set('U1');
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['assignBranch']).not.toHaveBeenCalled();
+    expect(comp.sectionResults().find((s) => s.status === 'failed')).toBeUndefined();
+  });
+
+  it('still sends every branch on "All branches" when a branch price is entered', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.updateBranchRow(1, { branchPrice: '9000' });
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    const calls = svc['assignBranch'].mock.calls as unknown[][];
+    expect(calls.length).toBe(2);
+    expect(calls.every((c) => (c[1] as Record<string, unknown>)['active'] === true)).toBe(true);
+  });
+
+  it('still sends every branch on "All branches" when a reorder level is entered', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.updateBranchRow(0, { reorderLevel: '5' });
+    comp.save();
+    await vi.runAllTimersAsync();
+
+    const svc = asMock(TestBed.inject(ProductService));
+    expect(svc['assignBranch'].mock.calls.length).toBe(2);
+  });
+
+  it('keeps sending rows for an item that already has branch rows on the server', async () => {
+    const fixture = TestBed.createComponent(ProductMasterComponent);
+    const comp = fixture.componentInstance;
+    await vi.runAllTimersAsync();
+
+    comp.fName.set('Widget');
+    comp.fBaseUnitUid.set('U1');
+    comp.savedBranchRows.set(true);   // as loaded for an item restricted earlier
     comp.save();
     await vi.runAllTimersAsync();
 
@@ -723,7 +773,8 @@ describe('ProductMasterComponent — full happy-path', () => {
     expect(svc['setPrice']).toHaveBeenCalledOnce();
     expect(svc['addBarcode']).toHaveBeenCalledOnce();
     expect(svc['addBulkPack']).toHaveBeenCalledOnce();
-    expect(svc['assignBranch'].mock.calls.length).toBe(2); // both branches
+    // "All branches", nothing branch-specific: no rows = sold everywhere (ADR-0073 D-1).
+    expect(svc['assignBranch']).not.toHaveBeenCalled();
   });
 
   // PRD-06: the backend AddBarcodeRequest reads `unitUid`; `uomUid` was silently dropped, so a
