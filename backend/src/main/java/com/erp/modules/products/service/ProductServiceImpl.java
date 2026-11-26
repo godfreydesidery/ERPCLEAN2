@@ -53,6 +53,7 @@ import com.erp.platform.security.ScopeGuard;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -604,6 +605,60 @@ public class ProductServiceImpl implements ProductService {
         return productBranches.findByProductId(p.getId()).stream()
                 .map(ProductBranchDto::from)
                 .toList();
+    }
+
+    @Override
+    public com.erp.modules.products.domain.dto.CopyBranchMenuResultDto copyBranchMenu(
+            com.erp.modules.products.domain.dto.CopyBranchMenuRequest req) {
+        // Scope from the LOADED target branch, never from the caller (ADR-0069 D-5); the source
+        // must be a branch of that same company.
+        Long companyId = branchGuard.companyIdOf(req.targetBranchUid());
+        scopeGuard.assertCanActIn(RequestContext.get(), companyId);
+        Long targetId = branchGuard.resolveAndAssertSameCompany(companyId, req.targetBranchUid());
+        Long sourceId = branchGuard.resolveAndAssertSameCompany(companyId, req.sourceBranchUid());
+        if (sourceId.equals(targetId)) {
+            throw new IllegalArgumentException("Choose a different branch to copy from.");
+        }
+
+        // Only items that HAVE branch rows matter: an item with none is already sold everywhere
+        // (ADR-0073 D-1), the new branch included, at the company price.
+        Map<Long, List<ProductBranch>> rowsByProduct = new java.util.HashMap<>();
+        for (ProductBranch pb : productBranches.findByProductCompanyId(companyId)) {
+            rowsByProduct.computeIfAbsent(pb.getProduct().getId(), k -> new ArrayList<>()).add(pb);
+        }
+
+        int nowSold = 0;
+        int pricesCopied = 0;
+        int alreadySet = 0;
+        for (List<ProductBranch> rows : rowsByProduct.values()) {
+            if (rows.stream().anyMatch(r -> r.getBranchId().equals(targetId))) {
+                alreadySet++;   // the target's own choice stands — never overwritten
+                continue;
+            }
+            var source = rows.stream()
+                    .filter(r -> r.getBranchId().equals(sourceId) && r.isActive())
+                    .findFirst();
+            if (source.isEmpty()) {
+                continue;       // not sold at the source: the target stays without it, as now
+            }
+            Product p = source.get().getProduct();
+            ProductBranch copy = new ProductBranch(p, targetId, actorId());
+            copy.setActive(true);
+            copy.setBranchPrice(source.get().getBranchPrice());
+            productBranches.save(copy);
+            nowSold++;
+            if (copy.getBranchPrice() != null) {
+                pricesCopied++;
+            }
+            audit.record(AuditEvent.of(AuditActions.PRODUCT_BRANCH_ADD, "products",
+                            p.getId(), p.getUid())
+                    .detail(Map.of("branchUid", req.targetBranchUid(),
+                            "active", "true",
+                            "branchPrice", String.valueOf(copy.getBranchPrice()),
+                            "copiedFromBranchUid", req.sourceBranchUid())));
+        }
+        return new com.erp.modules.products.domain.dto.CopyBranchMenuResultDto(
+                nowSold, pricesCopied, alreadySet);
     }
 
     // -------------------------------------------------------------------------

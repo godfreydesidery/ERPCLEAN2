@@ -35,10 +35,90 @@
         </button>
       </div>
     </div>
+    @if (canCopyMenu() && activeBranches().length > 0) {
+      <div class="row g-2 mt-1">
+        <div class="col-sm-6">
+          <label class="form-label small text-muted mb-1" for="startFrom">
+            Start menu &amp; prices from (optional)
+          </label>
+          <select id="startFrom" name="startFrom" class="form-select"
+                  aria-describedby="startFromHelp"
+                  [(ngModel)]="startFrom" [disabled]="saving()">
+            <option value="">— Don't copy —</option>
+            @for (b of activeBranches(); track b.uid) {
+              <option [value]="b.uid">{{ b.name }}</option>
+            }
+          </select>
+          <p id="startFromHelp" class="small text-muted mt-1 mb-0">
+            Items sold only at some branches are not sold at a new branch until it is ticked there.
+            Copying from a branch starts this one with that branch's items and prices.
+          </p>
+        </div>
+      </div>
+    }
     @if (formError(); as msg) {
       <p class="form-error text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
     }
   </form>
+
+  @if (copyTarget(); as target) {
+    <section class="card card-body mb-3" [attr.aria-label]="'Copy into ' + target.name">
+      <h2 class="h6 mb-1">Copy into {{ target.name }}</h2>
+      <p class="small text-muted mb-2">
+        Only fills what {{ target.name }} has not set yet — nothing it already has is changed.
+      </p>
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-4">
+          <label class="form-label small text-muted mb-1" for="copySource">Copy from</label>
+          <select id="copySource" class="form-select" [(ngModel)]="copySource"
+                  [disabled]="copying()">
+            <option value="">— Choose a branch —</option>
+            @for (b of copySources(); track b.uid) {
+              <option [value]="b.uid">{{ b.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="col-sm-5">
+          @if (canCopyMenu()) {
+            <div class="form-check">
+              <input id="copyMenu" type="checkbox" class="form-check-input"
+                     [(ngModel)]="copyMenuChecked" [disabled]="copying()" />
+              <label class="form-check-label small" for="copyMenu">Menu &amp; prices</label>
+            </div>
+          }
+          @if (canCopyRouting()) {
+            <div class="form-check">
+              <input id="copyRouting" type="checkbox" class="form-check-input"
+                     [(ngModel)]="copyRoutingChecked" [disabled]="copying()" />
+              <label class="form-check-label small" for="copyRouting">
+                Kitchen routing — only to stations {{ target.name }} already has
+              </label>
+            </div>
+          }
+        </div>
+        <div class="col-sm-3 d-flex gap-2">
+          <button type="button" class="btn btn-primary" [disabled]="copying()" (click)="runCopy()">
+            @if (copying()) {
+              <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            Copy
+          </button>
+          <button type="button" class="btn btn-outline-secondary" [disabled]="copying()"
+                  (click)="closeCopy()">Close</button>
+        </div>
+      </div>
+      @if (copyError(); as msg) {
+        <p class="text-danger small mt-2 mb-0" role="alert">{{ msg }}</p>
+      }
+      @if (copyResult().length) {
+        <ul class="small mt-2 mb-0" aria-live="polite">
+          @for (line of copyResult(); track $index) {
+            <li>{{ line }}</li>
+          }
+        </ul>
+      }
+    </section>
+  }
 
   @switch (state()) {
     @case ('loading') {
@@ -118,6 +198,14 @@
                       <button type="button" class="btn btn-sm btn-outline-secondary"
                               [disabled]="savingEdit()" (click)="cancelEdit()">Cancel</button>
                     } @else {
+                      @if (canCopy() && b.status === 'ACTIVE' && activeBranches().length > 1) {
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-1"
+                                [disabled]="busyUid() !== null || editingUid() !== null || copying()"
+                                (click)="openCopy(b)"
+                                [attr.aria-label]="'Copy menu or kitchen routing into ' + b.name">
+                          Copy from…
+                        </button>
+                      }
                       @if (canManage()) {
                         <button type="button" class="btn btn-sm btn-outline-secondary me-1"
                                 [disabled]="editingUid() !== null || busyUid() !== null"

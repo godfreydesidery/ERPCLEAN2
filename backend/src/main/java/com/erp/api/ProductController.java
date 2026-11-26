@@ -165,6 +165,17 @@ public class ProductController {
         productService.removeBranch(uid, branchUid);
     }
 
+    /**
+     * Start a branch's menu and branch prices from another branch's (ADR-0073). Fills gaps only:
+     * nothing the target branch already has is changed. Gated on the target branch's company.
+     */
+    @PostMapping("/branch-menu/copy")
+    @PreAuthorize("@perm.scoped(#request.targetBranchUid,'branch','PRODUCT.BRANCH.ASSIGN')")
+    public com.erp.modules.products.domain.dto.CopyBranchMenuResultDto copyBranchMenu(
+            @Valid @RequestBody com.erp.modules.products.domain.dto.CopyBranchMenuRequest request) {
+        return productService.copyBranchMenu(request);
+    }
+
     // -------------------------------------------------------------------------
     // Valid transaction units
     // -------------------------------------------------------------------------

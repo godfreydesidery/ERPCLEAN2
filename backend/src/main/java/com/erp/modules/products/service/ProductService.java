@@ -77,6 +77,15 @@ public interface ProductService {
 
     List<ProductBranchDto> listBranches(String uid);
 
+    /**
+     * Starts the target branch's menu from the source branch's (ADR-0073): every item that is
+     * restricted to certain branches, sold at the source, and has NO entry yet at the target becomes
+     * sold at the target, with the source's branch price. Fills gaps only — an item the target
+     * already has an entry for is never changed, and items sold everywhere need nothing.
+     */
+    com.erp.modules.products.domain.dto.CopyBranchMenuResultDto copyBranchMenu(
+            com.erp.modules.products.domain.dto.CopyBranchMenuRequest req);
+
     // --- Bulk packs ---
     ProductBulkPackDto addBulkPack(String uid, CreateBulkPackRequest req);
 
