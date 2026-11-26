@@ -11,9 +11,15 @@ class SalesReportRow {
     required this.margin,
     required this.vat,
     required this.discount,
+    this.category,
   });
 
   factory SalesReportRow.fromJson(Map<String, dynamic> j) => SalesReportRow(
+        // The item's category (ERP 2026-11-26+); an older server sends none,
+        // and a blank one is the same as none.
+        category: (asStr(j['category']) ?? '').trim().isEmpty
+            ? null
+            : asStr(j['category'])!.trim(),
         productCode: asStrOr(j['productCode']),
         productName: asStrOr(j['productName']),
         qtySold: asNumOr(j['qtySold']),
@@ -35,6 +41,9 @@ class SalesReportRow {
   final double? margin;
   final double vat;
   final double discount;
+
+  /// Null = the item has no category, or the server is older than categories.
+  final String? category;
 }
 
 class SalesReport {

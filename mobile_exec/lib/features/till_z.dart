@@ -153,6 +153,60 @@ class ZReadView extends StatelessWidget {
             ],
           ),
         ),
+        if (z.breakdown case final b?) ...[
+          const SizedBox(height: 18),
+          const SectionLabel(text: 'SUMMARY'),
+          const SizedBox(height: 10),
+          HqCard(
+            child: Column(
+              children: [
+                FigureRow(label: 'Gross sales', value: tzs(b.gross)),
+                const Divider(height: 14),
+                FigureRow(
+                  label: 'Discounts',
+                  value: tzs(b.discount),
+                  valueColor: b.discount > 0 ? HqColors.bad : null,
+                ),
+                const Divider(height: 14),
+                FigureRow(label: 'of which VAT', value: tzs(b.vat)),
+                const Divider(height: 14),
+                FigureRow(label: 'Transactions', value: '${b.transactions}'),
+                const Divider(height: 16, thickness: 1.4),
+                FigureRow(
+                  label: 'Net sales',
+                  value: tzs(b.net),
+                  emphasise: true,
+                  valueColor: HqColors.brand,
+                ),
+              ],
+            ),
+          ),
+          for (final (title, lines, counts) in [
+            ('CATEGORIES', b.categories, false),
+            ('DEPARTMENTS', b.departments, false),
+            ('TEAM MEMBERS', b.team, true),
+          ])
+            if (lines.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              SectionLabel(text: title),
+              const SizedBox(height: 10),
+              HqCard(
+                child: Column(
+                  children: [
+                    for (var i = 0; i < lines.length; i++) ...[
+                      if (i > 0) const Divider(height: 14),
+                      FigureRow(
+                        label: counts
+                            ? '${lines[i].name} (${lines[i].count})'
+                            : lines[i].name,
+                        value: tzs(lines[i].amount),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+        ],
         const SizedBox(height: 18),
         OutlinedButton.icon(
           onPressed: () => showShareSheet(context, zReadDoc(z)),
@@ -194,6 +248,20 @@ ExportDoc zReadDoc(ZRead z) {
       DocTotal('Expected in the drawer', Cell.money(read.expectedCash)),
       DocTotal('Counted', Cell.money(z.countedCash)),
       DocTotal('Over (+) / short (-)', Cell.money(z.variance)),
+      // The sales sections, when the server sends them (appended: the lines
+      // above are exactly as before).
+      if (z.breakdown case final b?) ...[
+        DocTotal('Gross sales', Cell.money(b.gross)),
+        DocTotal('Discounts', Cell.money(b.discount)),
+        DocTotal('Net sales', Cell.money(b.net)),
+        DocTotal('of which VAT', Cell.money(b.vat)),
+        for (final c in b.categories)
+          DocTotal('Category · ${c.name}', Cell.money(c.amount)),
+        for (final d in b.departments)
+          DocTotal('Department · ${d.name}', Cell.money(d.amount)),
+        for (final m in b.team)
+          DocTotal('Team · ${m.name} (${m.count})', Cell.money(m.amount)),
+      ],
     ],
   );
 }

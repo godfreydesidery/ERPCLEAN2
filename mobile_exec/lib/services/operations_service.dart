@@ -186,6 +186,55 @@ class TillRead {
   final List<TenderSubtotal> tenders;
 }
 
+/// One named total in a Z read's sales sections, e.g. a category.
+class ZLine {
+  const ZLine(this.name, this.amount, this.count);
+
+  factory ZLine.fromJson(Map<String, dynamic> j) => ZLine(
+      asStrOr(j['name']), asNumOr(j['amount']), asIntOr(j['count']));
+
+  final String name;
+  final double amount;
+
+  /// The number of sales it covers.
+  final int count;
+}
+
+/// The sales sections of a Z read (`ZReadBreakdownDto`, ERP 2026-11-26+):
+/// what the shift sold, how, and by whom. Each list sums to [net].
+class ZBreakdown {
+  const ZBreakdown({
+    required this.gross,
+    required this.discount,
+    required this.net,
+    required this.vat,
+    required this.transactions,
+    required this.categories,
+    required this.departments,
+    required this.team,
+  });
+
+  factory ZBreakdown.fromJson(Map<String, dynamic> j) => ZBreakdown(
+        gross: asNumOr(j['grossSalesAmount']),
+        discount: asNumOr(j['discountAmount']),
+        net: asNumOr(j['netSalesAmount']),
+        vat: asNumOr(j['vatAmount']),
+        transactions: asIntOr(j['transactionCount']),
+        categories: asList(j['categories'], ZLine.fromJson),
+        departments: asList(j['departments'], ZLine.fromJson),
+        team: asList(j['teamMembers'], ZLine.fromJson),
+      );
+
+  final double gross;
+  final double discount;
+  final double net;
+  final double vat;
+  final int transactions;
+  final List<ZLine> categories;
+  final List<ZLine> departments;
+  final List<ZLine> team;
+}
+
 /// The Z read (`ZReadDto`): the final figures of a RECONCILED session.
 class ZRead {
   const ZRead({
@@ -195,6 +244,7 @@ class ZRead {
     this.branchName,
     this.closedAt,
     this.reconciledAt,
+    this.breakdown,
   });
 
   factory ZRead.fromJson(Map<String, dynamic> j) => ZRead(
@@ -204,7 +254,13 @@ class ZRead {
         branchName: asStr(j['branchName']),
         closedAt: asStr(j['closedAt']),
         reconciledAt: asStr(j['reconciledAt']),
+        breakdown: j['breakdown'] is Map
+            ? ZBreakdown.fromJson(asMap(j['breakdown']))
+            : null,
       );
+
+  /// The sales sections; null against a server older than them.
+  final ZBreakdown? breakdown;
 
   /// Takings, tenders and expected cash: the same shape as an X read.
   final TillRead read;
