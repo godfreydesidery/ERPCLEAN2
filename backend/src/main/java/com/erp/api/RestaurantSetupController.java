@@ -129,6 +129,17 @@ public class RestaurantSetupController {
         return setup.setCategoryRoute(request);
     }
 
+    /**
+     * Copies another branch's routing into a branch, only onto stations the target already has by
+     * name; never creates stations, moves routes or changes the default station.
+     */
+    @PostMapping("/category-routes/copy")
+    @PreAuthorize("@perm.has('RESTAURANT.SETUP.MANAGE')")
+    public com.erp.modules.sales.domain.dto.CopyCategoryRoutesResultDto copyCategoryRoutes(
+            @Valid @RequestBody com.erp.modules.sales.domain.dto.CopyCategoryRoutesRequest request) {
+        return setup.copyCategoryRoutes(request);
+    }
+
     /** The product categories in use, to route on the routing screen. */
     @GetMapping("/product-categories")
     @PreAuthorize("@perm.has('RESTAURANT.SETUP.MANAGE')")

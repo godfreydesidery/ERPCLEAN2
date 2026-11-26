@@ -4,6 +4,8 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import {
   Branch,
+  CopyBranchMenuResult,
+  CopyCategoryRoutesResult,
   CreateBranchRequest,
   UpdateBranchRequest,
 } from '../models/branch.model';
@@ -32,5 +34,30 @@ export class BranchService {
 
   archive(uid: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/uid/${uid}`);
+  }
+
+  /**
+   * Start `targetBranchUid`'s menu and branch prices from `sourceBranchUid`'s (ADR-0073). Fills
+   * gaps only — nothing the target branch already has is changed.
+   */
+  copyMenu(sourceBranchUid: string, targetBranchUid: string): Observable<CopyBranchMenuResult> {
+    return this.http.post<CopyBranchMenuResult>(
+      `${environment.apiBaseUrl}/products/branch-menu/copy`,
+      { sourceBranchUid, targetBranchUid },
+    );
+  }
+
+  /**
+   * Copy kitchen routing onto stations the target branch already has (by name). Never creates a
+   * station, moves a route or changes the default station.
+   */
+  copyRouting(
+    sourceBranchUid: string,
+    targetBranchUid: string,
+  ): Observable<CopyCategoryRoutesResult> {
+    return this.http.post<CopyCategoryRoutesResult>(
+      `${environment.apiBaseUrl}/restaurant/category-routes/copy`,
+      { sourceBranchUid, targetBranchUid },
+    );
   }
 }
