@@ -119,6 +119,23 @@ String buildZReadText({
   lines.add(rule(width));
   lines.add(leftRight('Invoices', '${z.invoiceCount}', width));
 
+  // The sales sections (when the server sends them), after every figure the
+  // Z-read already printed, so the drawer statement above reads as before.
+  final b = z.breakdown;
+  if (b != null) {
+    lines.add('');
+    lines.add(centered('SUMMARY', width));
+    lines.add(leftRight('Gross sales', formatAmount(b.gross), width));
+    lines.add(leftRight('Discounts', formatAmount(b.discount), width));
+    lines.add(leftRight('Net sales', formatAmount(b.net), width));
+    lines.add(leftRight('of which VAT', formatAmount(b.vat), width));
+    lines.add(leftRight('Transactions', '${b.transactions}', width));
+    _named(lines, 'CATEGORIES', b.categories, width, withCount: false);
+    _named(lines, 'DEPARTMENTS', b.departments, width, withCount: false);
+    _named(lines, 'TEAM MEMBERS', b.team, width, withCount: true);
+    lines.add(rule(width));
+  }
+
   lines.add('');
   if (reprint) {
     lines.add(centered('*** REPRINT ***', width));
@@ -136,6 +153,21 @@ String buildZReadText({
 // --------------------------------------------------------------------------
 // Shared sections
 // --------------------------------------------------------------------------
+
+/// A titled list of name → amount lines; nothing at all when [items] is empty.
+/// The amount always fits; a long name is cut to the width that is left.
+void _named(List<String> lines, String title, List<ZReadLine> items, int width,
+    {required bool withCount}) {
+  if (items.isEmpty) return;
+  lines.add(rule(width));
+  lines.add(centered(title, width));
+  for (final i in items) {
+    lines.add(leftRight(
+        withCount ? '${i.name} (${i.count})' : i.name,
+        ' ${formatAmount(i.amount)}',
+        width));
+  }
+}
 
 void _header(List<String> lines, ReportContext ctx, int width, String title,
     String subtitle) {

@@ -362,7 +362,12 @@ class ZRead {
     required this.invoiceCount,
     required this.tenderSubtotals,
     this.payoutSubtotals = const [],
+    this.breakdown,
   });
+
+  /// The shift's sales sections (summary, categories, departments, team).
+  /// Null against a server older than them — the Z-read then prints as before.
+  final ZReadBreakdown? breakdown;
 
   final String sessionUid;
   final DateTime? openedAt;
@@ -396,5 +401,57 @@ class ZRead {
         invoiceCount: asIntOr(j['invoiceCount']),
         tenderSubtotals: asList(j['tenderSubtotals'], TenderSubtotal.fromJson),
         payoutSubtotals: asList(j['payoutSubtotals'], PayoutSubtotal.fromJson),
+        breakdown: j['breakdown'] is Map
+            ? ZReadBreakdown.fromJson(asMap(j['breakdown']))
+            : null,
       );
+}
+
+/// One named total in a Z-read's sales sections, e.g. a category.
+class ZReadLine {
+  ZReadLine(this.name, this.amount, this.count);
+
+  factory ZReadLine.fromJson(Map<String, dynamic> j) =>
+      ZReadLine(asStrOr(j['name']), asNumOr(j['amount']), asIntOr(j['count']));
+
+  final String name;
+  final double amount;
+
+  /// The number of sales it covers.
+  final int count;
+}
+
+/// `ZReadDto.breakdown` (ERP 2026-11-26+). Every list sums to [net], which
+/// equals the Z-read's total sales.
+class ZReadBreakdown {
+  ZReadBreakdown({
+    required this.gross,
+    required this.discount,
+    required this.net,
+    required this.vat,
+    required this.transactions,
+    required this.categories,
+    required this.departments,
+    required this.team,
+  });
+
+  factory ZReadBreakdown.fromJson(Map<String, dynamic> j) => ZReadBreakdown(
+        gross: asNumOr(j['grossSalesAmount']),
+        discount: asNumOr(j['discountAmount']),
+        net: asNumOr(j['netSalesAmount']),
+        vat: asNumOr(j['vatAmount']),
+        transactions: asIntOr(j['transactionCount']),
+        categories: asList(j['categories'], ZReadLine.fromJson),
+        departments: asList(j['departments'], ZReadLine.fromJson),
+        team: asList(j['teamMembers'], ZReadLine.fromJson),
+      );
+
+  final double gross;
+  final double discount;
+  final double net;
+  final double vat;
+  final int transactions;
+  final List<ZReadLine> categories;
+  final List<ZReadLine> departments;
+  final List<ZReadLine> team;
 }
