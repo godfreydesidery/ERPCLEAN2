@@ -1,6 +1,11 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Branch } from '../models/branch.model';
+import { Observable, concat, map, tap } from 'rxjs';
+import {
+  Branch,
+  CopyBranchMenuResult,
+  CopyCategoryRoutesResult,
+} from '../models/branch.model';
 import { BranchService } from './branch.service';
 import { AlertService } from '../../../core/feedback/alert.service';
 import { SessionStore } from '../../../core/auth/session.store';
@@ -23,6 +28,30 @@ export class BranchListComponent {
 
   /** Rename is gated on BRANCH.MANAGE (the page itself only needs BRANCH.VIEW). */
   readonly canManage = computed(() => this.session.hasPermission('BRANCH.MANAGE'));
+
+  /** Copying a menu & branch prices uses the branch-menu permission (ADR-0073). */
+  readonly canCopyMenu = computed(() => this.session.hasPermission('PRODUCT.BRANCH.ASSIGN'));
+  /** Copying kitchen routing is restaurant set-up. */
+  readonly canCopyRouting = computed(() => this.session.hasPermission('RESTAURANT.SETUP.MANAGE'));
+  readonly canCopy = computed(() => this.canCopyMenu() || this.canCopyRouting());
+
+  readonly activeBranches = computed(() => this.branches().filter((b) => b.status === 'ACTIVE'));
+
+  /** Create form: start the new branch's menu & prices from this branch ('' = don't). */
+  readonly startFrom = signal('');
+
+  // "Copy from…" panel for an existing branch. Nothing is copied unless the user asks.
+  readonly copyTarget = signal<Branch | null>(null);
+  readonly copySource = signal('');
+  readonly copyMenuChecked = signal(true);
+  /** Off by default: a branch with one printer must keep printing everything where it does. */
+  readonly copyRoutingChecked = signal(false);
+  readonly copying = signal(false);
+  readonly copyResult = signal<string[]>([]);
+  readonly copyError = signal<string | null>(null);
+  readonly copySources = computed(() =>
+    this.activeBranches().filter((b) => b.uid !== this.copyTarget()?.uid),
+  );
 
   /** Route input — Angular binds the `:companyUid` path param to this signal. */
   readonly companyUid = input.required<string>();
@@ -121,14 +150,35 @@ export class BranchListComponent {
         makeDefault: this.makeDefault(),
       })
       .subscribe({
-        next: () => {
+        next: (created) => {
+          const source = this.canCopyMenu() ? this.startFrom() : '';
           // Reload so a default change elsewhere is reflected consistently.
           this.code.set('');
           this.name.set('');
           this.makeDefault.set(false);
-          this.saving.set(false);
-          this.alerts.success('Branch created');
-          this.load();
+          this.startFrom.set('');
+          if (!source) {
+            this.saving.set(false);
+            this.alerts.success('Branch created');
+            this.load();
+            return;
+          }
+          // The branch exists either way; a failed copy is reported, never undoes the create.
+          this.branchService.copyMenu(source, created.uid).subscribe({
+            next: (r) => {
+              this.saving.set(false);
+              this.alerts.success(`Branch created. ${this.menuSummary(r)}`);
+              this.load();
+            },
+            error: (err) => {
+              this.saving.set(false);
+              this.formError.set(
+                `Branch created, but its menu could not be copied: ${this.messageFrom(err)} ` +
+                  'Use "Copy from…" on the branch to try again.',
+              );
+              this.load();
+            },
+          });
         },
         error: (err) => {
           this.formError.set(this.messageFrom(err));
@@ -171,6 +221,96 @@ export class BranchListComponent {
         this.formError.set(this.messageFrom(err));
       },
     });
+  }
+
+  openCopy(branch: Branch): void {
+    this.copyTarget.set(branch);
+    this.copySource.set('');
+    this.copyMenuChecked.set(this.canCopyMenu());
+    this.copyRoutingChecked.set(false);
+    this.copyResult.set([]);
+    this.copyError.set(null);
+  }
+
+  closeCopy(): void {
+    this.copyTarget.set(null);
+    this.copyResult.set([]);
+    this.copyError.set(null);
+  }
+
+  runCopy(): void {
+    const target = this.copyTarget();
+    const source = this.copySource();
+    if (!target || this.copying()) {
+      return;
+    }
+    if (!source) {
+      this.copyError.set('Choose the branch to copy from.');
+      return;
+    }
+    const doMenu = this.copyMenuChecked() && this.canCopyMenu();
+    const doRouting = this.copyRoutingChecked() && this.canCopyRouting();
+    if (!doMenu && !doRouting) {
+      this.copyError.set('Tick what to copy.');
+      return;
+    }
+    const steps: Observable<string>[] = [];
+    if (doMenu) {
+      steps.push(
+        this.branchService.copyMenu(source, target.uid).pipe(map((r) => this.menuSummary(r))),
+      );
+    }
+    if (doRouting) {
+      steps.push(
+        this.branchService
+          .copyRouting(source, target.uid)
+          .pipe(map((r) => this.routingSummary(r))),
+      );
+    }
+    // One after the other; what finished is shown even if a later step fails.
+    const done: string[] = [];
+    this.copying.set(true);
+    this.copyError.set(null);
+    this.copyResult.set([]);
+    concat(...steps)
+      .pipe(tap((line) => done.push(line)))
+      .subscribe({
+        complete: () => {
+          this.copying.set(false);
+          this.copyResult.set([...done]);
+        },
+        error: (err) => {
+          this.copying.set(false);
+          this.copyResult.set([...done]);
+          this.copyError.set(this.messageFrom(err));
+        },
+      });
+  }
+
+  menuSummary(r: CopyBranchMenuResult): string {
+    if (r.itemsNowSold === 0) {
+      return 'Menu & prices: nothing new to copy.';
+    }
+    const kept = r.alreadySetAtTarget
+      ? ` ${r.alreadySetAtTarget} item(s) this branch had already set were left as they were.`
+      : '';
+    return (
+      `Menu & prices: ${r.itemsNowSold} item(s) now sold here, ` +
+      `${r.pricesCopied} with the other branch's price.${kept}`
+    );
+  }
+
+  routingSummary(r: CopyCategoryRoutesResult): string {
+    let line = `Kitchen routing: ${r.routesCopied} department(s) routed.`;
+    if (r.alreadyRouted) {
+      line += ` ${r.alreadyRouted} already routed here were left as they were.`;
+    }
+    if (r.stationsMissingAtTarget.length) {
+      line +=
+        ` This branch has no ${r.stationsMissingAtTarget.join(', ')} station, so ` +
+        `${r.skippedNoMatchingStation} department(s) still print at its default station.`;
+    }
+    return line;
   }
 
   private messageFrom(err: unknown): string {

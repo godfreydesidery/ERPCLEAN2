@@ -45,6 +45,13 @@ public class ProductBranchGuard {
         return branch.getId();
     }
 
+    /** The company of the branch {@code branchUid} — read from the LOADED branch, never a caller value. */
+    public Long companyIdOf(String branchUid) {
+        return branches.findByUid(branchUid)
+                .map(b -> b.getCompany().getId())
+                .orElseThrow(() -> new NotFoundException("Branch not found."));
+    }
+
     /** A branch as the products module needs to name it (no IAM entity leaves this guard). */
     public record BranchRef(Long id, String uid, String code, String name) {
     }

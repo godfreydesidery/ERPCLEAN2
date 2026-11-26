@@ -344,6 +344,70 @@ public class RestaurantSetupServiceImpl implements RestaurantSetupService {
     }
 
     @Override
+    public com.erp.modules.sales.domain.dto.CopyCategoryRoutesResultDto copyCategoryRoutes(
+            com.erp.modules.sales.domain.dto.CopyCategoryRoutesRequest req) {
+        Long companyId = scope.companyId();
+        // Both branches inside the caller's company AND assigned to the caller (RestaurantScope).
+        Long targetId = scope.branchId(req.targetBranchUid());
+        Long sourceId = scope.branchId(req.sourceBranchUid());
+        if (sourceId.equals(targetId)) {
+            throw new IllegalArgumentException("Choose a different branch to copy from.");
+        }
+
+        // Only ACTIVE source stations route anything (the order router ignores the rest).
+        Map<Long, String> sourceStation = stations
+                .findByCompanyIdAndBranchIdAndStatus(companyId, sourceId, MasterStatus.ACTIVE)
+                .stream().collect(Collectors.toMap(PrepStation::getId, PrepStation::getName));
+        // Matched by name, ignoring case and surrounding space ("Kitchen" = "KITCHEN ").
+        Map<String, PrepStation> targetByName = new HashMap<>();
+        for (PrepStation s : stations.findByCompanyIdAndBranchIdAndStatus(
+                companyId, targetId, MasterStatus.ACTIVE)) {
+            targetByName.putIfAbsent(nameKey(s.getName()), s);
+        }
+        java.util.Set<String> targetRouted = routes
+                .findByCompanyIdAndBranchIdOrderByCategoryAsc(companyId, targetId).stream()
+                .map(r -> PrepStationCategory.key(r.getCategory()))
+                .collect(Collectors.toSet());
+
+        int copied = 0;
+        int alreadyRouted = 0;
+        int skipped = 0;
+        java.util.Set<String> missing = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (var route : routes.findByCompanyIdAndBranchIdOrderByCategoryAsc(companyId, sourceId)) {
+            String stationName = sourceStation.get(route.getPrepStationId());
+            if (stationName == null) {
+                continue;   // routed to an inactive station at the source: nothing to copy
+            }
+            if (targetRouted.contains(PrepStationCategory.key(route.getCategory()))) {
+                alreadyRouted++;   // the target's own choice stands
+                continue;
+            }
+            PrepStation station = targetByName.get(nameKey(stationName));
+            if (station == null) {
+                skipped++;
+                missing.add(stationName.trim());
+                continue;
+            }
+            var saved = routes.save(new PrepStationCategory(companyId, targetId, station.getId(),
+                    route.getCategory(), scope.actorId()));
+            targetRouted.add(PrepStationCategory.key(route.getCategory()));
+            copied++;
+            audit.record(AuditEvent.of(AuditActions.PREP_ROUTING_SET, "prep_station_categories",
+                            saved.getId(), saved.getUid())
+                    .detail(Map.of("branchId", String.valueOf(targetId),
+                            "category", saved.getCategory(),
+                            "station", station.getName(),
+                            "copiedFromBranchId", String.valueOf(sourceId))));
+        }
+        return new com.erp.modules.sales.domain.dto.CopyCategoryRoutesResultDto(
+                copied, alreadyRouted, skipped, List.copyOf(missing));
+    }
+
+    private static String nameKey(String name) {
+        return name == null ? "" : name.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<String> listProductCategories() {
         Long companyId = scope.companyId();

@@ -44,6 +44,15 @@ public interface RestaurantSetupService {
      */
     PrepStationCategoryDto setCategoryRoute(SetCategoryRouteRequest request);
 
+    /**
+     * Copies another branch's kitchen routing into a branch: each department the target does not
+     * route yet is sent to the target's station of the SAME NAME. Never creates a station (one
+     * without a printer would never print), never moves an existing route, never touches the
+     * target's default station — a one-printer branch keeps printing everything where it does.
+     */
+    com.erp.modules.sales.domain.dto.CopyCategoryRoutesResultDto copyCategoryRoutes(
+            com.erp.modules.sales.domain.dto.CopyCategoryRoutesRequest request);
+
     /** The distinct product categories in use in the caller's company, for the routing screen. */
     List<String> listProductCategories();
 
