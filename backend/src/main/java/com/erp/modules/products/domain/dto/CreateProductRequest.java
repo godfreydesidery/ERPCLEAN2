@@ -56,8 +56,27 @@ public record CreateProductRequest(
         // PRD-04 tracking flags (optional; null → false)
         Boolean lotTracked,
         Boolean serialTracked,
-        Boolean expiryTracked
+        Boolean expiryTracked,
+        // ADR-0073 — optional: sell the new item at this branch ONLY. Null/blank → no branch rows
+        // → sold at every branch, including branches opened later (the behaviour before).
+        String soldOnlyAtBranchUid
 ) {
+
+    /** Back-compatible form predating {@code soldOnlyAtBranchUid} — the item is sold everywhere. */
+    public CreateProductRequest(String companyUid, String code, String name, String description,
+                                ProductType type, boolean sellable, boolean stockable,
+                                String baseUnitUid, MoneyDto cost, VatStatus vatStatus,
+                                BigDecimal reorderLevel, BigDecimal reorderQty,
+                                BigDecimal safetyStock, BigDecimal minStock, BigDecimal maxStock,
+                                Integer leadTimeDays, Boolean purchasable, Long preferredSupplierId,
+                                RestrictedKind restrictedKind, String category, String brand,
+                                String manufacturer, String hsCode, String imageUrl, String notes,
+                                Boolean lotTracked, Boolean serialTracked, Boolean expiryTracked) {
+        this(companyUid, code, name, description, type, sellable, stockable, baseUnitUid, cost,
+                vatStatus, reorderLevel, reorderQty, safetyStock, minStock, maxStock, leadTimeDays,
+                purchasable, preferredSupplierId, restrictedKind, category, brand, manufacturer,
+                hsCode, imageUrl, notes, lotTracked, serialTracked, expiryTracked, null);
+    }
 
     /** Back-compatible form predating the PRD-03/PRD-04 attributes — they default to empty/off. */
     public CreateProductRequest(String companyUid, String code, String name, String description,
@@ -70,6 +89,6 @@ public record CreateProductRequest(
         this(companyUid, code, name, description, type, sellable, stockable, baseUnitUid, cost,
                 vatStatus, reorderLevel, reorderQty, safetyStock, minStock, maxStock, leadTimeDays,
                 purchasable, preferredSupplierId, restrictedKind,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 }

@@ -177,6 +177,13 @@ public class ProductServiceImpl implements ProductService {
         // PRD-04: a brand-new product has no stock, so no on-hand guard is needed here.
         applyTracking(p, req.lotTracked(), req.serialTracked(), req.expiryTracked(), false);
 
+        // ADR-0073: optionally sold at ONE branch only (the till / OrbixHQ "only here" tick). Resolved
+        // against the product's company before anything is written; absent = no rows = sold
+        // everywhere, exactly as before.
+        Long onlyAtBranchId = req.soldOnlyAtBranchUid() == null || req.soldOnlyAtBranchUid().isBlank()
+                ? null
+                : branchGuard.resolveAndAssertSameCompany(companyId, req.soldOnlyAtBranchUid().trim());
+
         Product saved = products.save(p);
         audit.record(AuditEvent.of(AuditActions.PRODUCT_CREATE, "products",
                         saved.getId(), saved.getUid())
@@ -184,6 +191,16 @@ public class ProductServiceImpl implements ProductService {
                         "type", saved.getType().name(),
                         "sellable", String.valueOf(saved.isSellable()),
                         "stockable", String.valueOf(saved.isStockable()))));
+        if (onlyAtBranchId != null) {
+            // One active row and no others: under D-1 that means sold at this branch only. No
+            // materialisation of the other branches — that is the point.
+            productBranches.save(new ProductBranch(saved, onlyAtBranchId, actorId()));
+            audit.record(AuditEvent.of(AuditActions.PRODUCT_BRANCH_ADD, "products",
+                            saved.getId(), saved.getUid())
+                    .detail(Map.of("branchUid", req.soldOnlyAtBranchUid().trim(),
+                            "active", "true",
+                            "soldOnlyHere", "true")));
+        }
         return ProductDto.from(saved);
     }
 
