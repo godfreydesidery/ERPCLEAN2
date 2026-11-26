@@ -60,7 +60,11 @@ import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderLineRequest;
 import com.erp.modules.sales.domain.dto.UpdateRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.MergeRestaurantOrderRequest;
 import com.erp.modules.sales.domain.dto.OpenSessionRequest;
+import com.erp.modules.sales.domain.dto.CloseSessionRequest;
 import com.erp.modules.sales.domain.dto.PayRestaurantOrderRequest;
+import com.erp.modules.sales.domain.dto.ReconcileSessionRequest;
+import com.erp.modules.sales.domain.dto.ZReadBreakdownDto;
+import com.erp.modules.sales.domain.dto.ZReadDto;
 import com.erp.modules.sales.domain.dto.PrepSlipDto;
 import com.erp.modules.sales.domain.dto.PrepStationDto;
 import com.erp.modules.sales.domain.dto.PrepStationCategoryDto;
@@ -158,6 +162,7 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
     @Autowired private RestaurantMenuService   menu;
     @Autowired private RestaurantKitchenService kitchenDisplay;
     @Autowired private RestaurantReportQuery   reports;
+    @Autowired private SalesReportQuery        salesReport;
     @Autowired private RestaurantInsightsQuery insights;
     @Autowired private PosSaleService          posSales;
     @Autowired private JdbcTemplate            jdbc;
@@ -1745,6 +1750,93 @@ class RestaurantOrderServiceIT extends PostgresIntegrationTest {
                 BigDecimal.class, paid.invoice().uid()))
                 .as("the posted line's list price is the branch price")
                 .isEqualByComparingTo("6500");
+    }
+
+    // =========================================================================
+    // Cafe Tulia 2026-11-26: the daily sales log (items + customer on each bill), the category on
+    // the sales report, and the Z-read's sales sections — all read-only, all tying out to the shift.
+    // =========================================================================
+
+    @Test
+    void zReadSalesSections_billsLog_andSalesCategory_tieOutToTheShift() {
+        setCashierCtx();
+        RestaurantOrderDto a = orders.open(new CreateRestaurantOrderRequest(
+                null, table1.uid(), (short) 2, null, null, "Mr Juma"));
+        orders.addLine(a.uid(), item(tacos));
+        orders.addLine(a.uid(), item(tacos));          // one line of 2
+        orders.addLine(a.uid(), item(latte));
+        orders.send(a.uid());                           // tacos → Kitchen, latte → Bar
+        orders.bill(a.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        stock(tacos, latte, cake);
+        setCashierCtx();
+        // 10% off the whole bill: the summary must show it, and every group still sums to net.
+        orders.pay(a.uid(), "zread-sections-a", new PayRestaurantOrderRequest(sessionUid, customerId,
+                "TZS", null, null, null, null, null, new BigDecimal("10"), null, null));
+
+        RestaurantOrderDto b = openWith(cake);          // uncategorised → the default station
+        orders.send(b.uid());
+        RestaurantBillDto billB = orders.bill(b.uid(), new BillRestaurantOrderRequest(customerId, "TZS"));
+        setCashierCtx();
+        orders.pay(b.uid(), "zread-sections-b", payment(billB.grossTotal()));
+
+        // The daily sales log: what each bill bought, and whose it was.
+        setRootCtx();
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Africa/Dar_es_Salaam"));
+        var bills = reports.bills(company.getId(), today, today, null, null).rows();
+        assertThat(bills).hasSize(2);
+        assertThat(bills).anySatisfy(r -> {
+            assertThat(r.items()).contains("2× Grilled Chicken Tacos").contains("Pumpkin Spice Latte");
+            assertThat(r.customerName()).isEqualTo("Mr Juma");
+        });
+        assertThat(bills).anySatisfy(r -> {
+            assertThat(r.items()).isEqualTo("Brownie Cake");
+            assertThat(r.customerName()).as("nothing typed on the bill").isNull();
+        });
+
+        // The sales report carries each item's category (null when it has none).
+        var sold = salesReport.report(company.getId(), today, today, null, null, null, null).rows();
+        assertThat(sold).anySatisfy(r -> {
+            assertThat(r.productName()).isEqualTo("Grilled Chicken Tacos");
+            assertThat(r.category()).isEqualTo("Food");
+        });
+        assertThat(sold).anySatisfy(r -> {
+            assertThat(r.productName()).isEqualTo("Brownie Cake");
+            assertThat(r.category()).isNull();
+        });
+
+        // Close and reconcile, then read the Z-read's new sections.
+        setRootCtx();
+        BigDecimal takings = sessionService.xRead(sessionUid).cashTenderAmount();
+        setCashierCtx();
+        sessionService.closeSession(sessionUid, new CloseSessionRequest(takings, null));
+        setRootCtx();
+        ZReadDto z = sessionService.reconcileSession(sessionUid, new ReconcileSessionRequest(null));
+        ZReadBreakdownDto s = z.breakdown();
+        BigDecimal total = z.totalSalesAmount();
+
+        assertThat(s.netSalesAmount()).as("same basis as the Z-read total").isEqualByComparingTo(total);
+        assertThat(s.discountAmount()).as("the 10% bill discount").isPositive();
+        assertThat(s.grossSalesAmount().subtract(s.discountAmount())).isEqualByComparingTo(total);
+        assertThat(s.vatAmount()).isPositive();
+        assertThat(s.transactionCount()).isEqualTo(z.invoiceCount()).isEqualTo(2);
+
+        assertThat(s.categories()).extracting(ZReadBreakdownDto.Line::name)
+                .containsExactlyInAnyOrder("Food", "Drinks", "Uncategorised");
+        assertThat(s.departments()).extracting(ZReadBreakdownDto.Line::name)
+                .containsExactlyInAnyOrder("Kitchen", "Bar");
+        assertThat(s.teamMembers()).singleElement().satisfies(m -> {
+            assertThat(m.name()).isEqualTo("Asha Waiter");
+            assertThat(m.count()).isEqualTo(2);
+        });
+        for (var group : List.of(s.categories(), s.departments(), s.teamMembers())) {
+            assertThat(group.stream().map(ZReadBreakdownDto.Line::amount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .as("each section sums back to the Z-read total").isEqualByComparingTo(total);
+        }
+
+        // Re-reading the Z-read gives the identical sections (timestamps are stored to the
+        // microsecond, so the record itself is compared field by field elsewhere).
+        assertThat(sessionService.zRead(sessionUid).breakdown()).isEqualTo(s);
     }
 
     private AddRestaurantOrderLineRequest item(ProductDto p) {

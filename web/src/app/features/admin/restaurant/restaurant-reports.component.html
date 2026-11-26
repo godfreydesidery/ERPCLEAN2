@@ -263,6 +263,8 @@
                   <th scope="col">Cashier</th>
                   <th scope="col">Receipt</th>
                   <th scope="col">Paid by</th>
+                  <th scope="col">Items</th>
+                  <th scope="col">Customer</th>
                   <th scope="col" class="num">Amount</th>
                 </tr>
               </thead>
@@ -281,15 +283,17 @@
                       }
                     </td>
                     <td>{{ row.tenders }}</td>
+                    <td class="small">{{ row.items ?? '' }}</td>
+                    <td>{{ row.customerName ?? '' }}</td>
                     <td class="num mono">{{ fmtMoney(row.amount) }}</td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="8" class="text-center text-muted py-4">No bills were paid in this period.</td></tr>
+                  <tr><td colspan="10" class="text-center text-muted py-4">No bills were paid in this period.</td></tr>
                 }
               </tbody>
               <tfoot>
                 <tr class="fw-semibold">
-                  <td colspan="7" class="text-end">Totals · {{ fmtCount(r.billCount) }} bills</td>
+                  <td colspan="9" class="text-end">Totals · {{ fmtCount(r.billCount) }} bills</td>
                   <td class="num mono">{{ fmtMoney(r.totalAmount) }}</td>
                 </tr>
               </tfoot>

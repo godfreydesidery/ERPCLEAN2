@@ -204,6 +204,7 @@ public class SalesReportQuery {
                        COALESCE(p.code, MAX(t.product_code))      AS product_code,
                        COALESCE(p.name, MAX(t.product_name))      AS product_name,
                        COALESCE(NULLIF(TRIM(u.symbol), ''), u.code) AS base_unit,
+                       p.category                                 AS category,
                        SUM(t.qty)                                 AS qty_sold,
                        SUM(t.discount)                            AS discount,
                        SUM(t.vat)                                 AS vat,
@@ -255,7 +256,7 @@ public class SalesReportQuery {
                       /*branch-scope*/
                     GROUP BY product_id
                 ) soh ON soh.product_id = t.product_id
-                GROUP BY t.product_id, p.code, p.name, u.symbol, u.code, soh.qty
+                GROUP BY t.product_id, p.code, p.name, p.category, u.symbol, u.code, soh.qty
                 ORDER BY 2 NULLS LAST
                 """;
         mainSql = mainSql.replace("/*branch-scope*/", stockScopeSql);
@@ -271,7 +272,8 @@ public class SalesReportQuery {
                         rs.getBigDecimal("net_sales"),
                         rs.getBigDecimal("amount"),
                         rs.getBigDecimal("current_stock"),
-                        rs.getString("base_unit")
+                        rs.getString("base_unit"),
+                        rs.getString("category")
                 },
                 mainParams.toArray());
 
@@ -308,7 +310,8 @@ public class SalesReportQuery {
                     (BigDecimal) r[5],
                     margin,
                     (BigDecimal) r[7],
-                    (String) r[9]));
+                    (String) r[9],
+                    (String) r[10]));
         }
         return rows;
     }
