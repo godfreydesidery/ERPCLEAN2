@@ -1,6 +1,8 @@
 # Finance & Accounting
 
-This chapter covers every module available under the **Accounting** navigation group: General Ledger, Accounts Receivable, Accounts Payable, Cash & Bank, Tax, and Foreign Exchange (FX). The chapter is written for finance staff — accountants, AP/AR clerks, and treasury officers — who use the system day-to-day.
+This chapter covers the finance modules: General Ledger, Accounts Receivable, Accounts Payable, Cash & Bank, and Tax — all under the **Accounting** navigation group — plus cost-centre dimensions (the **Costing** group) and Foreign Exchange (the **FX / Currency** group). The financial statements and reports (Income Statement, Balance Sheet and so on) are in chapter 10. The chapter is written for finance staff — accountants, AP/AR clerks, and treasury officers — who use the system day-to-day.
+
+> **Company selector.** If you work for more than one company, most screens in this chapter show a **Company** selector at the top; pick the company first. With only one company it is hidden.
 
 > **Currency fields.** Most currency fields in this chapter (receipts, opening balances, supplier bills, credit notes, and so on) use the filtered **Currency Picker** — a dropdown limited to the company's enabled currencies and pre-set to the company default, where you do not type a 3-letter currency code. This is documented once in Chapter 0 (Getting Started) → *Common UI Patterns*; this chapter only points to it. Two screens are exceptions: the AP **debit-note** modal has no currency field at all (it follows the bill's currency), and the **FX Exchange Rate** form offers the full seeded currency list (not the enabled-only allow-list) and falls back to typing a 3-letter ISO code if that list fails to load — see *Maintaining Currencies and Rates*.
 
@@ -50,7 +52,7 @@ The table shows:
 | Name | Human-readable account name |
 | Type | One of: **ASSET, LIABILITY, EQUITY, INCOME, EXPENSE** |
 | Normal Balance | Derived from type — ASSET and EXPENSE accounts carry a **DEBIT** normal balance; LIABILITY, EQUITY, and INCOME accounts carry a **CREDIT** normal balance. Not user-editable. |
-| Status | ACTIVE or INACTIVE |
+| Active | A tick for an active account; inactive accounts are marked as such |
 
 **Control accounts and manual-posting protection.** Some accounts are owned by a sub-ledger and must never be touched by a hand-entered journal. Each account therefore carries two additional, related properties:
 
@@ -63,10 +65,12 @@ The practical effect is that a manual journal line (and a direct cash-entry coun
 
 > The control-type classification, the allow-manual-posting flag, and the per-account required-dimension flags are administered on the account record. The Chart of Accounts list itself shows Code, Name, Type, Normal Balance, and Active.
 
+Use the **Search** box (code or name) and **Search** to find an account; **Clear** resets the list.
+
 **To create an account** (requires permission `GL.MANAGE`):
 
 1. Click **New Account**.
-2. Enter a unique **Code** and **Name**.
+2. Enter a unique **Code** (e.g. `1001`) and **Name** (e.g. Cash at Bank).
 3. Choose the account **Type**. The system derives the normal balance automatically.
 4. Click **Create**. The new account is immediately available for journal posting and GL config mapping.
 
@@ -97,11 +101,20 @@ Whatever you do here is always recorded with source type **MANUAL**. This endpoi
 - **Control-account guard.** A line may not target a locked sub-ledger control account — AR, AP, INVENTORY, TAX, PAYROLL_CLEARING, or FX_CLEARING. Such a line is rejected with a `409 Conflict` naming the account and its control type. (CASH and BANK control accounts remain postable.) The same guard applies whether the account is locked via its **allow manual posting** flag or via its **control-type** classification.
 - **Required-dimension guard.** If a target account is flagged to require a cost-centre, department, or project dimension, a manual line missing that dimension is rejected, naming the account and the missing slot.
 
-Navigate to **Accounting > Journals** (`/admin/gl/journals`) and click **Post journal** (`/admin/gl/journals/post`).
+Navigate to **Accounting > Journal Entries** (`/admin/gl/journals`) and click **Post Manual Journal** (`/admin/gl/journals/post`).
 
 ![GL journals](images/08-finance/gl-journals.png)
 
-The Journal Entries list shows every posted batch — its batch number, posting date, description, source (MANUAL or a system source such as STOCK_RECEIPT or SALES), reference, and total debits — with a **View** action on each row and a **Post Manual Journal** button at the top right. SALES and other system entries are auto-posted and read-only; only MANUAL entries you compose here can later be reversed.
+The Journal Entries list shows every posted batch with the columns **Batch #**, **Posting Date**, **Description**, **Source** (MANUAL or a system source such as STOCK_RECEIPT or SALES), **Document** (the source document's own number — for example the sales invoice `INV-0453` or the goods receipt `GRN-0061` — where the system knows it), and **Total Debits**, with a **View** link on each row. SALES and other system entries are auto-posted and read-only; only MANUAL entries you compose here can later be reversed.
+
+**Finding a journal.** Above the table:
+
+- **Search** — a document number (`INV-0453`), a batch number (`JB-0012`) or words from the description or memo.
+- **From** / **To** — posting-date range.
+- **Source** — **All sources** or one of: Manual, Sales, Sales void, Cost of sales, Goods receipt, Stock adjustment, Opening stock, Opening balance, Customer receipt, Customer credit note, Supplier bill, Supplier payment, Supplier debit note, Cash entry, Cash transfer, VAT return, Landed cost, Purchase return, POS variance, Payroll, Depreciation, FX revaluation, Year-end close.
+- **Account** — **All accounts** or one account: only journals with a line on that account are listed.
+
+Click **Search** to apply; **Clear** removes all filters.
 
 **Requirements before posting (requires permission `GL.POST`):**
 
@@ -111,13 +124,13 @@ The Journal Entries list shows every posted batch — its batch number, posting 
 
 **Steps:**
 
-1. Set the **Posting Date** (defaults to today). Verify it falls within an open period.
-2. Enter a **Description** summarising the purpose of the entry. Optionally add a **Source Reference** (e.g. a supporting document number).
+1. Under **Entry Header**, set the **Posting Date** (defaults to today). Verify it falls within an open period.
+2. Enter a **Description** summarising the purpose of the entry. Optionally add a **Source Reference** (e.g. a supporting document number such as `DOC-001`).
    - Optionally pick a **Branch**. The journal then shows in that branch's financial statements (the statements run with that branch selected) instead of under *Company-level entries (no branch)*. Leave it at **Company level (no branch)** for entries that belong to the whole company — accruals, year-end adjustments, owner's capital. The picker lists only the branches you are assigned to; posting to any other branch is refused with *"You are not assigned to that branch, so you cannot post to it…"*. The branch you are currently switched into is **not** applied automatically — a journal is company level unless you choose a branch.
 3. Each line requires exactly one of a debit or credit amount (not both — business rule BR-GL-08).
-   - Use the **Account** dropdown on each line to select an account (shown as `code — name`). Only active accounts are listed.
+   - Use the **Account** dropdown on each line to select an account (shown as `code — name`). Only active accounts are listed. Accounts that a manual journal may not use are shown but greyed out, with the reason after the name — for example *(control account — use Receivables)*, *(control account — use Payables)*, *(control account — use Stock)*, *(control account — posted by sales, purchases and the VAT Return)*, *(control account — posted by payroll runs)*, *(control account — posted by FX revaluation)*, or *(closed to manual journals)* — so you know where that posting belongs instead.
    - Enter the **Debit** or **Credit** amount for that line, and an optional line **Memo**.
-4. The form shows running **Debits**, **Credits**, and **Difference** totals and a **Balanced** indicator. The **Post Journal** button remains disabled until the difference is exactly zero.
+4. The form shows running **Debits**, **Credits**, and **Difference** totals and a **Balanced** / **Not balanced** indicator. The **Post Journal** button remains disabled until the difference is exactly zero ("Total debits must equal total credits before you can post.").
 5. Click **Post Journal**. A success message shows the generated batch number (`JB-####`). You are redirected to the journal detail page.
 
 **Adding and removing lines:**
@@ -148,17 +161,18 @@ The Journal Entries list shows every posted batch — its batch number, posting 
 
 **When it is used.** When you discover that a manual journal was posted to the wrong account, with the wrong amount, or in error. The reversal is initiated by the same user who posted (or any user with `GL.POST`), typically at month-end during review.
 
-**How it works.** A reversal defaults to today's date (the reversal date — an explicit date can be supplied), references the original entry via a `Reversal Of` link, and posts with source type MANUAL. When a reason is supplied it is preserved in the reversal entry's description (`Reversal of entry <uid> — <reason>`). Because it is the exact swap of a balanced entry, the reversal is balanced by construction. It lands in its own open fiscal period. The original and the reversal coexist permanently in the ledger. An entry can be reversed only once: a second attempt to reverse the same entry, or an attempt to reverse a reversal entry, is refused with a `409 Conflict` (BR-GL-11).
+**How it works.** A reversal is dated on the **reversal date** you choose (it defaults to today — choose the original's date to undo a mistake in the same month), references the original entry via a `Reversal of` link, and posts with source type MANUAL. A **reason is required**; it is kept with the reversal entry for the audit trail. Because it is the exact swap of a balanced entry, the reversal is balanced by construction. It must land in an open fiscal period. The original and the reversal coexist permanently in the ledger. An entry can be reversed only once: a second attempt to reverse the same entry, or an attempt to reverse a reversal entry, is refused with a `409 Conflict` (BR-GL-11).
 
 Corrections to a posted journal are always made by **reversal** — a new entry with every line's debit and credit swapped. The ledger is append-only; the original entry is never modified.
 
 **To reverse a journal (requires `GL.POST`):**
 
-1. Open the journal detail from **Accounting > Journals**.
-2. If the entry has `Source Type = MANUAL` and is not itself a reversal, the **Reverse Entry** button is visible.
-3. Click **Reverse Entry**. A new journal is created immediately (defaulting to today as the reversal date) with all amounts swapped. The reversal entry links back to the original and is flagged as a **Reversal entry** on its detail page.
+1. Open the journal detail from **Accounting > Journal Entries** (click **View** on the row). The detail page shows the batch number, posting date, source, source reference, a **Balanced** tag, and the **Lines** (**Account Code**, **Account Name**, **Debit**, **Credit**, **Currency**, **Memo**) with totals.
+2. If the entry has `Source Type = MANUAL`, is not itself a reversal and has not already been reversed, the **Reverse Entry** button is visible ("Creates an equal and opposite journal entry.").
+3. Click **Reverse Entry**. Set the **Reversal date** and type a **Reason** (for example "posted to the wrong account").
+4. Click **Post reversal**. The new journal is created with all amounts swapped; it links back to the original and is flagged as a **Reversal entry** on its detail page.
 
-> System-posted entries (source types such as SALES, OPENING\_BALANCE, YEAR\_END\_CLOSE) cannot be reversed here — the **Reverse Entry** button is shown only for MANUAL entries that are not themselves reversals. Correct system-posted entries through their originating module. Already-reversed entries and reversal entries cannot be reversed again (`409 Conflict`, BR-GL-11).
+> System-posted entries (source types such as SALES, OPENING\_BALANCE, YEAR\_END\_CLOSE) cannot be reversed on their own. Their detail page says: "This entry was posted automatically from a document and is read-only. To correct it, correct that document (for example void the invoice) — it cannot be reversed on its own." Already-reversed entries and reversal entries cannot be reversed again (`409 Conflict`, BR-GL-11).
 
 ---
 
@@ -168,7 +182,7 @@ Corrections to a posted journal are always made by **reversal** — a new entry 
 
 **Why they exist.** Without period gates, journals could be posted with any date — including dates months or years in the past — which would silently change already-reported figures. Closing a period locks it: no new posting can land in a closed period, so the financial statements for that period are frozen once it closes. This is essential for accurate monthly reporting, auditing, and regulatory filing.
 
-**When they are used.** The finance manager opens a new fiscal year once before it begins (or at system setup). Periods are closed at month-end by a user with the `GL.PERIOD.CLOSE` permission, usually after reconciliations are complete and the month's reports have been approved.
+**When they are used.** The system opens the fiscal calendar for you: every company always has the current year and the next year open (the check runs when the system starts and every night), so postings never stop on 1 January for want of a period. The finance manager can still open a year by hand — for example a non-calendar financial year at setup. Periods are closed at month-end by a user with the `GL.PERIOD.CLOSE` permission, usually after reconciliations are complete and the month's reports have been approved.
 
 **How they work.** Each fiscal period covers one calendar month. A posting is accepted only when its posting date falls inside an OPEN period. The system derives which period a date belongs to automatically. Closing a period is reversible (a period can be reopened if a late adjustment is needed); closing the entire fiscal year is a separate, more final operation (see Year-End Close below).
 
@@ -176,14 +190,16 @@ Navigate to **Accounting > Fiscal Periods** (`/admin/gl/periods`).
 
 The screen shows two panels:
 
-- **Fiscal Years** — each year with its code and current status (OPEN or CLOSED).
-- **Fiscal Periods** — the twelve monthly periods within the selected year, each showing period number, date range, and status.
+- **Fiscal Years** — each year with its code, date range and current status (OPEN or CLOSED).
+- **Accounting Periods** — the monthly periods, each showing **#** (period number), **Start Date**, **End Date** and **Status**, with **Close** / **Reopen** actions for users with `GL.PERIOD.CLOSE`.
 
 **Opening a new fiscal year (requires `GL.MANAGE`):**
 
-1. Click **Open fiscal year**.
-2. Enter a unique year code (e.g. `FY2027`), the start month (1 = January), and the calendar year.
+1. Click **Open Fiscal Year**. The **Open New Fiscal Year** form opens.
+2. Enter a unique **Year Code** (e.g. `FY2027`), choose the **Start Month**, and enter the **Calendar Year**.
 3. Click **Open Year**. Twelve monthly periods are created, all in OPEN status.
+
+A year that would overlap an existing one is refused, naming both years and their dates — two open periods on one date would break every posting.
 
 **Closing a fiscal period (requires `GL.PERIOD.CLOSE`):**
 
@@ -195,7 +211,9 @@ The screen shows two panels:
 1. On a CLOSED period row, click **Reopen**.
 2. The period returns to OPEN and accepts journal postings again.
 
-> Closing a period is reversible. Closing a fiscal **year** is a separate, more permanent action (see Year-End Close below).
+> Closing a period is reversible — except that a period inside a **closed** fiscal year stays closed. To change it, reopen the year on the Year-End Close screen, which reverses the closing entry and reopens its periods. Closing a fiscal **year** is a separate, more permanent action (see Year-End Close below).
+
+When a posting is refused because of its date, the message says which: the date has **no fiscal period** at all, or its period is **closed**.
 
 ---
 
@@ -213,12 +231,37 @@ Navigate to **Accounting > Trial Balance** (`/admin/gl/trial-balance`).
 
 ![Trial balance](images/08-finance/gl-trial-balance.png)
 
-- Select your company (if multi-company).
-- Optionally select a specific **fiscal period** to view only that period's movements.
-- The table groups accounts by type in canonical order (ASSET, LIABILITY, EQUITY, INCOME, EXPENSE) and shows each account's code, name, total debit, total credit, and net balance.
-- The footer shows total debits, total credits, and a **Balanced** indicator. A balanced set of books shows equal debits and credits.
+Select your company (if multi-company), then choose what to **Show**:
+
+- **Totals (all or one period)** — optionally pick a **Period** (blank = all periods; each listed as `P<n>: start – end (status)`). The table groups accounts by type in canonical order (ASSET, LIABILITY, EQUITY, INCOME, EXPENSE) and shows each account's **Code**, **Account Name**, **Type**, **Debit**, **Credit** and **Net**, with totals and a **Balanced** / **Unbalanced** tag.
+- **As at a date (opening, movement, closing)** — enter **From** (the opening balance is everything before this date), **As at**, and optionally a **Branch** (**All branches** by default). Each account shows **Opening Dr**, **Opening Cr**, the period's **Debit** and **Credit**, and **Closing Dr**, **Closing Cr**, with totals. With a branch chosen, the figures leave out journals posted at company level (without a branch) — the screen says so.
+
+Click **Refresh** to run it. A banner states **Balanced** (total debits equal total credits) or **Out of balance** — "the books do not balance. Investigate before closing." Users with `REPORT.EXPORT` can **Export PDF**, **Export Excel** or **Export CSV**.
 
 Permission required: `GL.VIEW`.
+
+---
+
+### Posting Exceptions — automatic postings the ledger refused
+
+**What it is.** Sales, cost of sales, goods receipts, landed costs, purchase returns, customer receipts, supplier payments, POS variances, payroll and FX revaluations post to the ledger automatically. If the ledger refuses one of those postings — the date falls in a closed period, a posting account is not mapped, a mapped account is inactive — the business document still stands (the sale is still a sale), but its journal is missing. Each such refusal is recorded here instead of being lost, so it can be fixed and posted.
+
+**Why it exists.** A silently dropped posting makes the ledger disagree with the documents — sales on the sales report that never reached revenue, stock received that never reached inventory. This screen makes every gap visible and lets you post it exactly once after fixing the cause.
+
+Navigate to **Accounting > Posting Exceptions** (`/admin/gl/posting-exceptions`). Permission required: `GL.VIEW` to view; `GL.POST` to re-post.
+
+**Filters.** **Source** (All sources, Sales, Sales void, Cost of sales, Goods receipt, Landed cost, Purchase return, Customer receipt, Supplier payment, POS variance, Payroll, FX revaluation), **Posting date from** / **to**, and **Include resolved**. Click **Apply**.
+
+**Sales vs ledger.** For the chosen dates, a small table compares the **Sales invoices** with the **Ledger**: **Sales (net of VAT)** against revenue posted, and **Output VAT** against VAT posted, with the **Difference**. When they agree the screen says "Sales and the ledger agree for these dates." A difference usually means sales listed below are not in the ledger yet, or a void was reversed in a different period. Voided sales are netted out on both sides.
+
+**The exceptions table.** Each refused posting shows **Posting date**, **Source**, **Document**, **Amount**, **Why it failed**, and **Status** — **Open**, or once dealt with **Re-posted** / **Already posted** with a link to the journal.
+
+**To re-post an exception (requires `GL.POST`):**
+
+1. Fix the cause first — for example reopen the period, or map an active account under **Posting Accounts**.
+2. Click **Re-post** on the Open row. The **Re-post** panel opens.
+3. Optionally enter **Post on date** — leave it empty to post on the original date (useful when the original period is closed for good and the entry should land in the current month).
+4. Click **Re-post**. The journal is posted and the row becomes **Re-posted**. The posting is made once: a second attempt is refused, and an exception whose journal turns out to exist already is marked **Already posted**.
 
 ---
 
@@ -232,11 +275,11 @@ Permission required: `GL.VIEW`.
 
 **How it works.** Each config key represents a posting role. The system resolves the relevant key at the moment it needs to post, reads the mapped active account, and uses it as the debit or credit leg of the automatic journal. If the mapped account is inactive or the mapping is missing, the posting fails and the operator is notified to fix the mapping.
 
-Navigate to **Accounting > GL Config** (`/admin/gl/config`). The page is headed **Posting Accounts**.
+Navigate to **Accounting > Posting Accounts** (`/admin/gl/config`). The page is headed **Posting Accounts**.
 
 Permission required: `GL.MANAGE`.
 
-The table shows each configuration key and the currently mapped account. The keys relevant to the core modules include:
+The table shows each **Config Key** with the mapped **Account Code** and **Account Name**, and an **Edit** button. The keys relevant to the core modules include:
 
 - `ACCOUNTS_RECEIVABLE` — the AR control account
 - `SALES_REVENUE` — the revenue account for sales auto-posting
@@ -250,7 +293,7 @@ The table shows each configuration key and the currently mapped account. The key
 2. Pick the account from the **Account** dropdown (shown as `code — name (type)`). Only active accounts are listed.
 3. Click **Save**. The mapping takes effect immediately.
 
-> All four sales keys (`ACCOUNTS_RECEIVABLE`, `SALES_REVENUE`, `VAT_PAYABLE`, `CASH`) must be configured before sales invoices can be auto-posted to the GL.
+> All four sales keys (`ACCOUNTS_RECEIVABLE`, `SALES_REVENUE`, `VAT_PAYABLE`, `CASH`) must be configured before sales invoices can be auto-posted to the GL. When an operator's document cannot post because the accounts are not set up, the operator sees a plain message asking them to contact the accountant, and — for automatic postings — the gap appears under **Posting Exceptions**.
 
 ---
 
@@ -266,9 +309,9 @@ The table shows each configuration key and the currently mapped account. The key
 
 **How they work.** The system seeds two built-in dimension types: **Cost Centre** and **Department**. Alongside these, every company has two further, initially-unused dimension **slots** ("Dimension 3" and "Dimension 4") that a user with `COSTING.MANAGE` can manually claim for a custom dimension — see *Adding a Custom Dimension* below. Whichever type a dimension slot holds, you create the actual values under it (e.g. "Sales Dept", "Nairobi Branch"). A dimension type can be made **mandatory** on manual journal entries, in which case every manually posted line must carry a value for that slot — system-automated postings (sales, year-end, etc.) are exempt. The dimension-sliced trial balance groups account balances by dimension value, giving a department-level or cost-centre-level P&L.
 
-Navigate to **Accounting > Cost Centre > Dimensions** (`/admin/cost-centre/dimensions`).
+Navigate to **Costing > Dimension Types** (`/admin/cost-centre/dimensions`). The screen is headed **Cost Centre Dimensions** and lists each type with **Code**, **Name**, **Slot**, **Status**, **Mandatory**, **Built-in** and an action to toggle the mandatory flag.
 
-**Dimension types** are pre-seeded per company: **Cost Centre** and **Department** are **built-in** (shown with a lock icon in the **Built-in** column) and can never be created, renamed, or deleted. A company also has two spare custom slots — while a slot is free, a user with `COSTING.MANAGE` can claim it with a custom dimension type of their own naming (see below). Every dimension type, built-in or custom, can only have its **mandatory** flag toggled afterwards — there is no rename or delete. Navigate to **Accounting > Cost Centre > Values** (`/admin/cost-centre/values`) to manage the actual dimension values.
+**Dimension types** are pre-seeded per company: **Cost Centre** and **Department** are **built-in** (shown with a lock icon in the **Built-in** column) and can never be created, renamed, or deleted. A company also has two spare custom slots — while a slot is free, a user with `COSTING.MANAGE` can claim it with a custom dimension type of their own naming (see below). Every dimension type, built-in or custom, can only have its **mandatory** flag toggled afterwards — there is no rename or delete. Navigate to **Costing > Dimension Values** (`/admin/cost-centre/values`) — or use the **Dimension Values** link on this screen — to manage the actual dimension values.
 
 **Adding a custom dimension (requires `COSTING.MANAGE`):**
 
@@ -282,16 +325,18 @@ Once both custom slots are in use, the form is replaced by the message "Both cus
 
 **To create a dimension value (requires `COSTING.MANAGE`):**
 
-1. Select the dimension type from the type picker.
-2. Click **Add value**.
-3. Enter a unique code and name. Optionally select a parent value to build a hierarchy.
-4. Save.
+1. On **Dimension Values**, select the **Dimension type** (each listed as `name (slot)`).
+2. Click **New Value**. The **New Dimension Value** form opens.
+3. Enter a unique **Code** and **Name**. Optionally enter **Parent UID (optional — leave blank for root)** — the identifier of an existing value of the same type — to build a hierarchy.
+4. Click **Create Value**.
+
+The values table lists **Code**, **Name**, **Slot**, **Status**, **Active** and **Parent** (a link to the parent value). Row actions deactivate or activate a value, or delete it outright — a hard delete that is refused once the value has journal postings. Click a value's name to open it: the detail page has an **Edit** card (change the **Name**, set a new **Parent UID**, or tick **Clear parent (make this a root value)**) and Deactivate / Activate buttons.
 
 **Mandatory enforcement:** if a dimension is set to mandatory, every manually posted journal line must include that dimension slot. System-posted entries (sales, year-end, etc.) are exempt.
 
 **Per-account required dimensions:** independently of the company-wide mandatory setting, an individual Chart-of-Accounts account can be flagged to require a **cost-centre**, **department**, or **project** dimension (see *Chart of Accounts*). A manual journal line posting to such an account is rejected if it omits the required dimension, naming the account and the missing slot. As with the company-wide rule, system and event-driven postings are exempt. This lets you enforce dimension tagging on a specific expense account without making the dimension mandatory across the whole company. Because the Post Journal screen has no line-level dimension picker (see the *UI limitation* note above), such a post can only be supplied through the API.
 
-**Viewing the dimension-sliced trial balance:** Navigate to **Accounting > Cost Centre > Report** (`/admin/cost-centre/report`). Requires both `COSTING.VIEW` and `GL.VIEW`. Select a **Dimension slot** (Cost Centre, Department, Dimension 3, or Dimension 4 — the last two are offered whether or not the company has claimed them as a custom dimension), optionally filter to a specific value, toggle **Roll up** to include descendants, and click **Run**.
+**Viewing the dimension-sliced trial balance:** Navigate to **Costing > Sliced Trial Balance** (`/admin/cost-centre/report`); the screen is headed **Dimension-Sliced Trial Balance**. Requires both `COSTING.VIEW` and `GL.VIEW`. Under **Report Filters**, select a **Dimension slot** (Cost Centre, Department, Dimension 3, or Dimension 4 — the last two are offered whether or not the company has claimed them as a custom dimension), optionally a **Period** (all-time if blank), tick **Roll up (include descendant values)** to fold child values into their parents, and click **Run**. The result lists each **Value** and **Account** with **Type**, **Debit**, **Credit** and **Net (Dr − Cr)**. (See also chapter 10, *Dimension-Sliced Trial Balance*.)
 
 ---
 
@@ -301,9 +346,9 @@ Once both custom slots are in use, the form is replaced by the message "Both cus
 
 **Why it exists.** Income and expense accounts accumulate balances over the course of a year. At year-end, those balances need to be moved to equity (retained earnings) so that the new year starts fresh. Without this close, the income and expense accounts would carry over prior-year totals and the P&L for the new year would be polluted by prior-year figures. The year-end close is also the event that legally "locks the books" for the year, preventing backdated adjustments to a period whose financial statements have been approved and filed.
 
-**When it is used.** Once per year, after all period 12 journals have been posted and reviewed, by a user with the `GL.YEAR.CLOSE` permission. All fiscal periods within the year must have been closed first, and prior fiscal years must already be closed (you cannot close year N if year N-1 is still open).
+**When it is used.** Once per year, after all period 12 journals have been posted and reviewed, by a user with the `GL.YEAR.CLOSE` permission. Prior fiscal years must already be closed (you cannot close year N if year N-1 is still open). You do not need to close the year's periods first — the close closes any that are still open — and it does not matter if you have already closed the last month: the closing entry is still dated the year's last day.
 
-**How it works.** The system reads the net balance of every INCOME and EXPENSE account for the year, builds one balanced closing journal (source type `YEAR_END_CLOSE`), and posts it. Each income account is debited to zero and each expense account is credited to zero; the net difference (profit or loss) is posted to the Retained Earnings equity account as either a credit (profit) or a debit (loss). All periods in the year are then closed and the year status becomes CLOSED. The closing journal is visible in the journal list and is permanently linked to the fiscal year record. If the close needs to be undone, a reopen operation (available on the most-recently-closed year only) reverses the closing journal as a new append-only entry and reopens all periods.
+**How it works.** The system reads the net balance of every INCOME and EXPENSE account for the year, builds one balanced closing journal (source type `YEAR_END_CLOSE`, dated the last day of the year), and posts it. Each income account is debited to zero and each expense account is credited to zero; the net difference (profit or loss) is posted to the Retained Earnings equity account as either a credit (profit) or a debit (loss). All periods in the year are then closed, the year status becomes CLOSED, and the following year is made ready for posting if it does not exist yet. The closing journal is visible in the journal list and is permanently linked to the fiscal year record. If the close needs to be undone, a reopen operation (available on the most-recently-closed year only) reverses the closing journal as a new append-only entry and reopens all periods.
 
 Navigate to **Accounting > Year-End Close** (`/admin/gl/year-end`).
 
@@ -315,20 +360,22 @@ Permission required: `GL.YEAR.CLOSE`.
 - All prior fiscal years must already be CLOSED (you cannot close year N if year N-1 is still open — business rule BR-CLOSE-04).
 - The year must have at least one fiscal period.
 
+The screen lists each fiscal year with **Year Code**, **Start Date**, **End Date**, **Status**, **Closed At** and a **Closing Journal** link.
+
 **To close a fiscal year:**
 
-1. On the year row showing OPEN, click **Close**.
-2. Review the confirmation panel, which describes the retained-earnings posting that will be made.
-3. Confirm. The system:
+1. On the year row showing OPEN, click **Close Year**.
+2. Review the **Confirm Year-End Close** panel, which describes the retained-earnings posting that will be made and warns that all periods in the year will be closed.
+3. Click **Close Year** in the panel (or **Cancel**). The system:
    - Posts a `YEAR_END_CLOSE` journal zeroing every INCOME and EXPENSE account.
    - Credits (net profit) or debits (net loss) the Retained Earnings account.
    - Closes all periods within the year.
-   - Sets the year status to CLOSED.
-4. A success message appears referencing the closing journal number.
+   - Sets the year status to CLOSED and makes sure the next year is open.
+4. A success message appears referencing the closing journal number, and the row's **Closing Journal** link opens it.
 
 **To reopen a fiscal year (requires `GL.YEAR.CLOSE`):**
 
-Only the most-recently-closed year may be reopened. Click **Reopen** on the CLOSED year row. The system reverses the closing journal (as a new append-only entry) and reopens all periods.
+Only the most-recently-closed year may be reopened. Click **Reopen Year** on the CLOSED year row. The system reverses the closing journal (as a new append-only entry) and reopens all periods.
 
 ---
 
@@ -356,7 +403,7 @@ Navigate to **Accounting > Receivables** (`/admin/ar/invoices`).
 
 ![AR invoices](images/08-finance/ar-invoices.png)
 
-The list shows all AR open items for the company: document number, customer name, original amount, outstanding amount, currency, invoice date, due date, and status. Each OPEN or PARTIAL row carries a **Write off** and a **Credit** action (visible to users who hold the relevant permission).
+The screen is headed **Receivables — Open Items**. The list shows all AR open items for the company: **Document No.**, **Customer**, **Invoice Date**, **Due Date**, **Original**, **Outstanding**, **Currency**, **Status** and **Source** (SALE, OPENING_BALANCE and so on). Each OPEN or PARTIAL row carries a **Write off** and a **Credit note** action (visible to users who hold the relevant permission).
 
 **Invoice statuses:**
 
@@ -367,7 +414,7 @@ The list shows all AR open items for the company: document number, customer name
 | PAID | Fully settled |
 | WRITTEN\_OFF | Outstanding amount written off as uncollectable |
 
-**Filtering:** use the customer picker (search by name) and the status dropdown to narrow the list. The customer is selected by name — no uid is typed.
+**Filtering:** use the **Customer** search (type part of the name or code and pick from the list; the ✕ clears it) and the **Status** dropdown (— All —, Open, Partial, Paid, Written Off) to narrow the list.
 
 ---
 
@@ -379,19 +426,21 @@ The list shows all AR open items for the company: document number, customer name
 
 **When it is used.** By an AR clerk when a customer makes a payment — by cash, bank transfer, mobile money, or cheque. Requires the `AR.RECEIPT.RECORD` permission. The receipt triggers a GL posting immediately (DR Cash / CR Accounts Receivable).
 
-**How it works.** The cash leg posts to the GL in the same transaction as the sub-ledger write, so the control account and the open-item balances are always in agreement at every committed moment. Re-allocating an existing receipt between invoices (changing which invoice the money is applied to) does NOT create a new GL posting — it is a sub-ledger-only change. The receipt amount and every allocation slice must be **positive**, and a receipt may only be allocated to invoices belonging to the **same customer** — an attempt to allocate against another customer's invoice is rejected with a `409 Conflict`. A receipt whose cheque **bounced** has been reversed: it no longer counts as money held on account, and it cannot be re-allocated (record a new receipt when the customer pays).
+**How it works.** The cash leg posts to the GL in the same transaction as the sub-ledger write, and the money is entered in the cash book of the account it was received into, so the control account, the open-item balances and the cash book are always in agreement at every committed moment. Applying money already held on account to an invoice later does NOT create a new GL posting — it is a sub-ledger-only change. The receipt amount and every allocation slice must be **positive**, and a receipt may only be allocated to invoices belonging to the **same customer** — an attempt to allocate against another customer's invoice is rejected with a `409 Conflict`. A receipt whose cheque **bounced**, or that was reversed, no longer counts as money held on account and cannot be re-allocated (record a new receipt when the customer pays).
 
 Navigate to **Accounting > Record Receipt** (`/admin/ar/receipts/record`). Permission required: `AR.RECEIPT.RECORD`.
 
-1. Pick the **customer** by name in the typeahead.
-2. Enter the **receipt amount**, pick the **currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and set the **receipt date**.
-3. Choose the **tender type** (Cash, Mobile Money, Bank Transfer, Cheque, Other). For mobile or bank payments, optionally enter the bank/mobile reference.
-4. The customer's open invoices load in the **allocation editor**.
-   - Click **Auto oldest-first** to distribute the receipt against invoices starting from the oldest outstanding.
-   - Or manually enter allocation amounts against individual invoices.
-   - The editor shows the receipt total, allocated total, and unallocated balance. The **Record Receipt** button is disabled if any allocation line exceeds the invoice's outstanding balance.
-5. Optionally add a **WHT** amount (see WHT section below).
-6. Click **Record Receipt**. The receipt is recorded and the allocated invoices update their outstanding balances. Any unallocated remainder is held **on account** (the receipt shows status UNALLOCATED or PARTIAL).
+1. Under **Receipt Details**, type the customer's name or code in **Customer** and pick them.
+2. Enter the **Amount**, pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and set the **Receipt Date**.
+3. Choose the **Tender Type**: **Cash**, **Cheque**, **Bank Transfer**, **Mobile Money (M-Pesa, Tigo Pesa, Airtel Money)** or **Card**.
+4. In **Received Into**, choose the cash drawer, bank or M-Pesa account the money actually went into (or leave **Company default account**). The receipt is entered in that account's cash book and its GL account is debited.
+5. Optionally enter a **Payment Reference** — the M-Pesa code, cheque number or transfer reference. It is kept on the receipt and shown on the cash book.
+6. Optionally add **Withholding Tax** (see WHT below).
+7. Under **Allocate Against Open Invoices**, the customer's open invoices load (**Document No.**, **Date**, **Due**, **Original**, **Outstanding**, **Status**, **Allocate**):
+   - Click **Auto Oldest-first** to distribute the receipt against invoices starting from the oldest outstanding, or type amounts in **Allocate** yourself; **Clear** empties them.
+   - The editor shows **Receipt Amount**, **Allocated** and **On-account**, and a status: **Allocations valid**, **Over-allocated — reduce allocations**, or **An allocation exceeds the invoice outstanding**. The **Record Receipt** button stays disabled while an allocation is invalid.
+   - If you allocate nothing, a note warns that the whole receipt will be kept on account.
+8. Click **Record Receipt**. A confirmation shows the receipt number, amount, the **Unallocated (on-account)** amount, date, tender and reference, with **Record Another** and **View Open Items** buttons. Any unallocated remainder is held **on account** (the receipt shows status UNALLOCATED or PARTIAL) and can be applied to later invoices or refunded (below).
 
 **Receipt statuses:**
 
@@ -403,7 +452,43 @@ Navigate to **Accounting > Record Receipt** (`/admin/ar/receipts/record`). Permi
 
 **WHT on receipt:** if your company withholds tax from customer receipts, select the WHT type (kind = `WHT_ON_RECEIPT`) and enter the WHT amount. The GL posts: Cash DR (amount minus WHT), WHT Receivable DR (WHT amount), AR Control CR (full amount).
 
-**Viewing receipts:** Navigate to **Accounting > Receipts** (`/admin/ar/receipts`). The list is paged and can be filtered by customer. Click any row to open the receipt detail, which shows the header and allocation lines.
+**Viewing receipts:** Navigate to **Accounting > Receipts** (`/admin/ar/receipts`); the screen is headed **AR Receipts**. The list is paged, can be narrowed with **Filter by Customer**, and shows **Receipt #**, **Date**, **Customer**, **Amount**, **Unallocated** and **Tender**. Open a receipt to see its detail: number, date, amount, **On account (unallocated)**, customer, tender type, reference, and the **Allocations** (each with a link to the invoice and the allocated amount). From the detail page you can apply, refund or reverse the receipt as described below.
+
+#### Applying money held on account to later invoices
+
+When a customer pays in advance, over-pays, or pays before the invoice is raised, the money sits on account. To use it against invoices raised later (requires `AR.RECEIPT.ALLOCATE` or `AR.RECEIPT.RECORD`):
+
+1. Open the receipt from **Accounting > Receipts**.
+2. Click **Apply to Invoices** (shown while money is held on account).
+3. The customer's open invoices are listed with their outstanding balance. Click **Oldest first**, or type an amount in **Apply** against each invoice.
+4. Check the line "Applying … of … on account" and click **Apply**. Each amount must be a number, no more than the invoice's outstanding, and together no more than the money on account.
+
+No new journal is posted — the receipt's money already reduced the AR control account when it was recorded.
+
+#### Refunding a deposit or over-payment
+
+When money held on account must be paid back to the customer — a deposit for an order that was cancelled, an over-payment — refund it from the receipt (requires `AR.REFUND`):
+
+1. Open the receipt and click **Refund** (shown while money is held on account).
+2. The panel states how much is on account and that the refund is paid out of the default cash account and recorded in the cash book and the ledger.
+3. Enter the **Amount to refund** (above zero and no more than the amount on account) and a **Reason (required)**.
+4. Click **Pay refund**. The system posts **DR Accounts Receivable / CR the cash account**, writes the money out of that account's cash book, and reduces the amount on account.
+
+> **Note.** Refunds are made in your base currency; a receipt in a foreign currency cannot be refunded here — record the refund with a journal instead. The system can also refund an **unused credit note**, but there is no button for that on screen yet.
+
+#### Reversing a wrong receipt
+
+If a receipt was recorded in error — the wrong customer, the wrong amount, a duplicate — reverse it (requires `AR.RECEIPT.REVERSE`):
+
+1. Open the receipt and click **Reverse receipt**.
+2. The panel explains that this takes the amount back out of the cash book, posts the reversing journal, and makes the invoices it paid owed again — and that it cannot be undone.
+3. Enter a **Reason (required)** and click **Reverse receipt**.
+
+The receipt is marked **Reversed** ("This receipt was reversed on … Its invoices are owed again and the money has been taken back out of the cash book."). If the customer did pay, record a new, correct receipt.
+
+#### Bounced cheques
+
+When a customer's cheque comes back unpaid, the bounce reverses the receipt in the same way: the money is taken back out of the cash book, the reversing journal is posted, and the invoices it paid are owed again. The customer statement shows a **Reversal** line. (See *Cheque Register* for how cheques are tracked.)
 
 ---
 
@@ -426,7 +511,7 @@ A credit note reduces a customer's outstanding balance. It is raised from the in
 
 1. On **Accounting > Receivables**, find the target invoice row (OPEN or PARTIAL).
 2. Click **Credit note** (visible only when `AR.CREDITNOTE` is held).
-3. In the **Raise Credit Note** modal, set the **Note Date**, pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and enter the **Net Amount**, optional **VAT Amount**, and **Reason**.
+3. In the **Raise Credit Note — <document>** dialog, set the **Note Date**, pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and enter the **Net Amount**, optional **VAT Amount**, and **Reason**.
 4. Click **Raise Credit Note**. The invoice outstanding is reduced and the GL contra posting is made.
 
 **Statuses:** UNAPPLIED (raised, nothing applied yet), PARTIAL (some of the note applied; an unapplied balance remains), APPLIED (fully applied).
@@ -446,9 +531,9 @@ A credit note reduces a customer's outstanding balance. It is raised from the in
 A write-off removes an uncollectable balance from AR. Permission required: `AR.WRITEOFF`.
 
 1. On **Accounting > Receivables**, find the OPEN or PARTIAL invoice.
-2. Click **Write off**.
-3. Enter a reason and confirm the date.
-4. Submit. The invoice moves to WRITTEN\_OFF status; the outstanding balance is posted to the Bad Debt Expense account.
+2. Click **Write off**. The **Write Off — <document>** dialog shows the outstanding amount.
+3. Set the **Write-off Date** and enter the **Reason**.
+4. Click **Confirm Write-off**. The invoice moves to WRITTEN\_OFF status; the outstanding balance is posted to the Bad Debt Expense account.
 
 Invoices already PAID or WRITTEN\_OFF cannot be written off again.
 
@@ -466,9 +551,10 @@ Invoices already PAID or WRITTEN\_OFF cannot be written off again.
 
 To load balances brought forward from a prior system, navigate to **Accounting > AR Opening Balance** (`/admin/ar/opening-balance`). Permission required: `AR.OPENING.SET`.
 
-1. Pick the customer by name.
-2. Enter the original amount, pick the **currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), set the invoice date, and add an optional due date and document number.
-3. Click **Set Opening Balance**. An opening-balance invoice (source = `OPENING_BALANCE`) is created and posted to the AR control account.
+1. Pick the **Customer** by name or code.
+2. Enter the **Amount**, pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and set the **Invoice Date**.
+3. Optionally set the **Due Date** — leave it blank to use the customer's payment terms (or the invoice date if none are set) — and a **Document No.** (e.g. `MIGR-0001`).
+4. Click **Set Opening Balance**. An opening-balance invoice (source = `OPENING_BALANCE`) is created and posted to the AR control account, and the screen confirms the document number. A foreign-currency opening balance is converted to your base currency for the ledger at the rate for the invoice date.
 
 ---
 
@@ -478,11 +564,11 @@ To load balances brought forward from a prior system, navigate to **Accounting >
 
 **Why they exist.** AR management is not just about recording receipts — it is about proactively chasing overdue debts. The ageing report identifies which customers are overdue and by how much, allowing the AR team to prioritise collection calls. Customer statements can also be shared with customers as a formal record of what they owe and what they have paid.
 
-**When they are used.** By AR clerks and finance managers reviewing collections. The statement can be reviewed internally or shared with a customer to resolve a dispute. Requires `AR.STATEMENT.VIEW` for the statement, `AR.VIEW` for the ageing lookup.
+**When they are used.** By AR clerks and finance managers reviewing collections. The statement can be reviewed internally or shared with a customer to resolve a dispute. Both the Customer Statement and the AR Ageing screen require `AR.STATEMENT.VIEW`.
 
 **How they work.** Ageing is calculated dynamically by comparing each open invoice's due date to the current date. The system places each outstanding amount in the appropriate bucket. The balance lookup shows the net AR balance for a specific customer (open invoices minus any unallocated receipt balance).
 
-**Customer statement:** Navigate to **Accounting > Customer Statement** (`/admin/ar/statement`). Permission required: `AR.STATEMENT.VIEW`. Pick a customer by name to view total outstanding, ageing breakdown, open items, and recent receipts.
+**Customer statement:** Navigate to **Accounting > Customer Statement** (`/admin/ar/statement`). Permission required: `AR.STATEMENT.VIEW`. Pick a customer by name to view total outstanding, the **Ageing Analysis**, **Open Items** and **Recent Receipts**; **Refresh** reloads it.
 
 ![Customer statement](images/08-finance/ar-statement.png)
 
@@ -496,7 +582,9 @@ To load balances brought forward from a prior system, navigate to **Accounting >
 | 61–90 | 61 to 90 days past due date |
 | 90+ | More than 90 days past due date |
 
-**Customer balance lookup:** on the **Accounting > AR Ageing** screen (`/admin/ar/ageing`), use the balance lookup section to check a specific customer's net balance (outstanding invoices minus unallocated receipts and unapplied credit notes). Permission required: `AR.VIEW`.
+**AR Ageing:** Navigate to **Accounting > AR Ageing** (`/admin/ar/ageing`). Permission required: `AR.STATEMENT.VIEW`. The **Customer Ageing Buckets** table lists every customer who owes you, with **Current**, **1–30 days**, **31–60 days**, **61–90 days**, **90+ days**, **Total** and **Ccy**, as at today.
+
+**Customer balance lookup:** on the same screen, use the **Per-Customer Balance Lookup** section to check a specific customer's net balance (outstanding invoices minus unallocated receipts and unapplied credit notes).
 
 The balance is in your **base currency**. A foreign-currency item counts at the rate it was booked at. **Older foreign-currency items with no reliable rate.** Items raised in another currency before multi-currency was switched on were stored with an exchange rate of 1, so their "base" value is really the foreign amount. The system does not add those into a base-currency figure. They are shown underneath, per currency ("Not included above — … USD 30.00"), and the same rule applies to the AR control-account check on the dashboard.
 
@@ -523,11 +611,11 @@ Both exports need the screen's permission (`AR.STATEMENT.VIEW`) **and** `REPORT.
 
 **Why it exists.** Just as AR tracks what customers owe you, AP tracks what you owe suppliers. Without it, the company might pay the same invoice twice, miss a payment, or have no systematic way to match supplier invoices against what was ordered and received. AP also provides the first GL posting for a purchase — unlike the goods receipt (which records a stock movement only), the matched supplier bill is the point at which the purchase cost hits the books.
 
-**When it is used.** By AP clerks when a supplier invoice arrives. The bill is entered, matched, and eventually paid. Requires AP permissions (by default, ORG\_ADMIN holds these).
+**When it is used.** By AP clerks when a supplier invoice arrives. The bill is entered, matched, and eventually paid. Requires the AP permissions your administrator grants through roles (`AP.VIEW`, `AP.BILL.ENTER`, `AP.BILL.MATCH`, `AP.PAYMENT.RUN`, `AP.PAYMENT.REVERSE`, `AP.DEBITNOTE`, `AP.OPENING.SET`).
 
-**How it works.** A supplier bill goes through a lifecycle: entered as DRAFT, then matched via a 3-way match (bill vs purchase order vs goods receipt). If it matches within tolerance, it posts immediately to the GL (DR Purchases / CR Accounts Payable). If there is a variance, it is held (HELD) for a finance user to review and accept. Payments reduce the outstanding balance and post the cash leg to the GL.
+**How it works.** A supplier bill goes through a lifecycle: entered as DRAFT, then matched via a 3-way match (bill vs purchase order vs goods receipt). If it matches within tolerance, it posts immediately to the GL (goods lines DR GRNI, service lines DR the chosen expense or asset account / CR Accounts Payable). If there is a variance, it is held (HELD) for a finance user to review and accept. Payments reduce the outstanding balance and post the cash leg to the GL.
 
-AP tracks amounts your company owes to suppliers. Only users with the appropriate AP permissions can access this module. By default, only the ORG\_ADMIN role is granted AP permissions.
+AP tracks amounts your company owes to suppliers. Only users with the appropriate AP permissions can access this module.
 
 ### Entering a Supplier Bill
 
@@ -539,31 +627,36 @@ AP tracks amounts your company owes to suppliers. Only users with the appropriat
 
 **How it works (3-way match).** The system compares each bill line against the corresponding purchase order line (price tolerance, default 2%) and the goods receipt line (quantity). If all lines are within tolerance, the bill moves to MATCHED and the GL posts DR Purchases (or the configured purchases account) / CR Accounts Payable. If any line exceeds tolerance, the bill moves to HELD, flagging which lines have a price or quantity variance. A user with `AP.BILL.MATCH` must review and accept each variance before the bill can match and post.
 
-Navigate to **Accounting > Enter Bill** (`/admin/ap/supplier-bills/enter`). Permission required: `AP.BILL.ENTER`.
+Navigate to **Accounting > Enter Bill** (`/admin/ap/supplier-bills/enter`). Permission required: `AP.BILL.ENTER`. The step-by-step entry, the match result labels and the handling of held lines are described in full in chapter 04, *Supplier Bills and 3-Way Bill Match* (sections 6.1–6.5). In short:
 
-1. Pick the **supplier** by name in the typeahead.
-2. Enter the **Supplier Invoice No.**, **Bill Date**, and **Due Date**.
-3. Enter the header **VAT Amount** (0 if none), pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and, for a PO-matched bill, choose the **Purchase Order** (optional — leave blank for a service bill). For foreign-currency bills, an FX rate for the bill date must exist.
-4. Add one or more lines. Each line is a free-text **Description**, a **Billed Qty**, a **Unit Cost**, a computed **Line Net**, and — for goods supplied against a Purchase Order — an optional **PO Line** picker that drives the 3-way match.
-5. Click **Enter Bill & Match**. The system runs a **3-way match** automatically:
-   - If all lines are within the price and quantity tolerance (default 2%), the bill moves to **MATCHED** and a GL posting is made (DR Purchases / CR AP Control).
-   - If any line exceeds tolerance, the bill is **HELD** with a price or quantity variance flag.
+1. Pick the **Supplier**, enter the **Supplier Invoice No.** and **Bill Date**; **Due Date** is optional — left blank, it follows the supplier's payment terms.
+2. Enter the header **VAT Amount** (0 if none), pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and, for a PO-matched bill, choose the **Purchase Order** (optional — leave blank for a service bill). For foreign-currency bills, an exchange rate for the bill date must exist; if it is missing you are told so plainly.
+3. Add one or more lines: a free-text **Description**, **Billed Qty**, **Unit Cost** (the **Line Net** is computed), and either the **PO Line** and **Goods Receipt Line** the line is for (goods), or the expense or asset **Account (non-stock)** it should be charged to (services, assets, expenses — control accounts and inactive accounts are refused).
+4. Click **Enter Bill & Match**. The system runs a **3-way match** automatically:
+   - If every line's price is within tolerance (default 2%) of the order and the quantity billed does not exceed what was received (less anything already billed for that receipt line), the bill moves to **MATCHED** and posts.
+   - Otherwise the bill is **HELD**, with a plain note on each held line saying why. A line whose order or receipt link cannot be resolved is held as **not checked** — never passed.
 
 > A bill can only be entered against the supplier's own purchase orders — a PO belonging to a different supplier is rejected.
 
-> **Behind the scenes.** Supplier bill lines can also carry per-line VAT and a per-line GL account override (when a line carries VAT the header VAT becomes the sum of the line VAT amounts). These finer controls are available through the API; the Enter Bill screen above uses a single header VAT field and the default Purchases routing.
+> **Behind the scenes.** Supplier bill lines can also carry per-line VAT (when a line carries VAT the header VAT becomes the sum of the line VAT amounts). That is available through the API; the Enter Bill screen uses a single header VAT field.
 
 **Accepting a variance (requires `AP.BILL.MATCH`):**
 
-On a HELD bill, each variance line shows the variance amount and percentage. Click **Accept variance** to approve the line. When all variance lines are accepted the bill moves to MATCHED and the GL posts.
+On the match result (straight after entry, or after **Run match** on the bill detail page), each held line shows its variance and a note. Click **Accept variance** to approve the line — or **Post without checking** for a line that was never checked, an override recorded against your name. When all held lines are resolved the bill moves to MATCHED and the GL posts.
 
-**Service bills (no PO):** leave the PO field blank and enter free-text line descriptions.
+**Correcting a held or unposted bill:** open it and use **Run match** (after fixing the order, receipt or exchange rate) or **Delete bill** (to enter the invoice again). See chapter 04, section 6.4.
+
+**Service bills (no PO):** leave the PO field blank, enter free-text line descriptions and choose each line's **Account (non-stock)**.
 
 ---
 
 ### Viewing and Navigating Bills
 
-Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`). The list shows all bills with status, outstanding amount, and source. Click a bill number to open its detail screen, which shows the header, lines, and match result. The header carries **Enter Bill** and **Record Payment** buttons, and a HELD or DRAFT row shows a **Match** action.
+Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`); the screen is headed **Payables — Supplier Bills**. The list shows **Bill No.**, **Supplier Inv. No.**, **Supplier**, **Bill Date**, **Due Date**, **Gross**, **Outstanding**, **Currency**, **Status**, **Checked** (whether every line was checked against the purchase order and the goods receipt) and **Source**. Narrow it with the **Supplier** search, the **Status** filter (Draft, Matched, Held, Approved, Partially Paid, Paid) and the **Only bills not fully checked** tick box (bills where at least one line was never checked against an order and a receipt).
+
+Click a bill number to open its detail screen, which shows the header, lines, journal link and — for held bills — the match tools. The list header carries **Enter Bill** and **Record Payment** buttons. Row actions: **Match** on HELD or DRAFT bills (opens the detail page), **Pay** on payable bills (opens Record Payment for that supplier and bill), and **Debit Note** on MATCHED, APPROVED and PARTIALLY_PAID bills.
+
+A bill for goods received without a purchase order carries a ratification tag — **Awaiting ratification**, **Ratification refused** or **Ratified** — and cannot be paid until a manager has ratified the delivery (chapter 04, section 4.5).
 
 ![Supplier bills](images/08-finance/ap-supplier-bills.png)
 
@@ -590,20 +683,43 @@ Navigate to **Accounting > Payables** (`/admin/ap/supplier-bills`). The list sho
 
 **How they work.** Each payment allocates a specified amount against one or more bills, reducing each bill's outstanding balance. If the payment covers the full outstanding amount, the bill moves to PAID; otherwise it becomes PARTIALLY_PAID. The GL posts immediately in the same transaction as the sub-ledger write (DR Accounts Payable / CR the chosen cash/bank account), keeping the control account and the sub-ledger in agreement.
 
-**Single-bill payment:** From the **Accounting > Payments** list (`/admin/ap/payments`), use the inline pay form. Permission required: `AP.PAYMENT.RUN`.
+**Single-bill payment:** On the **Accounting > Payments** list (`/admin/ap/payments`), click **Pay Single Bill**. Permission required: `AP.PAYMENT.RUN`.
 
-1. Select the bill to pay (by bill number).
-2. Enter the payment amount (can be partial), payment date, and tender type.
-3. Submit. The GL posts DR AP Control / CR Cash.
+1. In **Bill**, search by bill number or supplier invoice number and pick the bill (its status, currency and outstanding amount are shown).
+2. Enter the **Amount** (can be partial), **Payment Date**, **Tender Type** (Bank Transfer, Cash, Cheque, Mobile Money, Other) and an optional **Bank Reference**.
+3. In **Pay from**, choose the till, M-Pesa or bank account the money left (or leave **Company default account**).
+4. Click **Record Payment**. The GL posts DR AP Control / CR the chosen account, and the payment is entered in that account's cash book.
 
-**Payment run (multiple bills):** Navigate to **Accounting > Record Payment** (`/admin/ap/payments/record`).
+**Payment run (one or more bills):** Navigate to **Accounting > Record Payment** (`/admin/ap/payments/record`), or click **Pay** on a bill.
 
-1. Pick the supplier by name.
-2. Their payable bills (MATCHED, APPROVED, or PARTIALLY\_PAID) load as a checkbox list.
-3. Select the bills to pay. Use **Select all** to pay all outstanding bills for that supplier.
-4. Set the payment date and tender type.
-5. Optionally add a **WHT on payment** amount (see WHT section below).
-6. Click **Record Payment** (the button shows the count of selected bills, e.g. **Record Payment (3 bills)**). A payment run record (`PAYRUN-####`) is created covering all selected bills.
+1. Pick the **Supplier** by name or code.
+2. Set the **Payment Date**, **Tender Type** (Cash, Cheque, Bank Transfer, Mobile Money, Other) and an optional **Bank Reference**.
+3. In **Pay from**, choose the account the money actually left ("The till, M-Pesa or bank account the money actually left."), or keep the company default.
+4. Optionally add **Withholding Tax** — **WHT Type (we withhold from supplier)** and **WHT Amount withheld** (see WHT below).
+5. Under **Select Bills to Pay**, the supplier's payable bills (MATCHED, APPROVED, or PARTIALLY\_PAID) load with **Bill No.**, **Supplier Inv. No.**, **Bill Date**, **Due Date**, **Gross**, **Outstanding**, **Pay now** and **Status**:
+   - Tick the bills to pay (**Select All** / **Clear** help). Each ticked bill's **Pay now** defaults to its full outstanding; type a smaller amount to **part-pay** it.
+   - Or enter the total cheque or transfer in **Amount to allocate oldest first** and click **Allocate oldest first** — the system ticks bills oldest first and fills **Pay now** until the amount is used up, part-paying the last one.
+6. Check **Selected Bills** and **Total to pay**, then click **Record Payment** (the button shows the count, e.g. **Record Payment (3 bills)**).
+
+A confirmation lists the payment(s) recorded — number, amount, tender, reference, and the account it was **Paid from** — with **Record Another** and **View Payables** buttons.
+
+**Rules.**
+
+- A payment larger than a bill's outstanding balance is refused.
+- A bill for goods received without a purchase order cannot be paid until a manager has ratified the delivery.
+- A foreign-currency payment is recorded in the cash book in that account's own currency.
+
+**Viewing payments:** **Accounting > Payments** (`/admin/ap/payments`, headed **AP Payments**) lists **Payment #**, **Date**, **Kind**, **Tender** and **Amount**, with **Filter by Supplier**. Open one to see its details — **Kind**, **Amount**, **Tender**, **Paid From** (account name and number), **Reference**, **GL Entry** — and the **Bill Allocations** (each with a **View Bill** link).
+
+#### Reversing a wrong supplier payment
+
+If a supplier payment was recorded in error — the wrong supplier, the wrong amount, a duplicate — reverse it (requires `AP.PAYMENT.REVERSE`):
+
+1. Open the payment from **Accounting > Payments** and click **Reverse payment**.
+2. The panel explains that this puts the amount back into the cash book, posts the reversing journal, and makes the bills it paid owed again — and that it cannot be undone.
+3. Enter a **Reason (required)** and click **Reverse payment**.
+
+The payment is marked **Reversed** ("This payment was reversed on … Its bills are owed again and the money is back in the cash book."). If the supplier was in fact paid, record a new, correct payment.
 
 **WHT on payment:** select a WHT type (kind = `WHT_ON_PAYMENT`) and enter the WHT amount. The GL reduces the cash credit by the withheld amount.
 
@@ -627,9 +743,11 @@ When you raise a debit note directly against a bill (the usual case from the pay
 A debit note reduces the amount owed to a supplier. Raised from the payables list. Permission required: `AP.DEBITNOTE`.
 
 1. On **Accounting > Payables**, find a MATCHED, APPROVED, or PARTIALLY\_PAID bill.
-2. Click **Debit note**.
-3. In the **Raise Debit Note** modal, set the **Note Date** and enter the **Net Amount**, optional **VAT**, and **Reason**.
+2. Click **Debit Note**.
+3. In the **Raise Debit Note — <bill>** dialog (it shows the bill's outstanding), set the **Note Date** and enter the **Net Amount**, optional **VAT Amount**, and **Reason**.
 4. Click **Raise Debit Note**. The bill outstanding is reduced and the GL posts DR AP / CR Purchases.
+
+A debit note only reduces bills of its own supplier, in its own currency. Purchase returns (chapter 04, section 7) raise their debit note automatically.
 
 **Statuses:** UNAPPLIED (raised, nothing applied yet), PARTIAL (some of the note applied; an unapplied balance remains), APPLIED (fully applied).
 
@@ -645,9 +763,19 @@ A debit note reduces the amount owed to a supplier. Raised from the payables lis
 
 Navigate to **Accounting > AP Opening Balance** (`/admin/ap/opening-balance`). Permission required: `AP.OPENING.SET`.
 
-1. Pick the supplier by name.
-2. Enter the **Gross Amount**, pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and set the bill date, due date, and optional supplier invoice number.
-3. Click **Set Opening Balance**. An opening-balance supplier bill is created (source = `OPENING_BALANCE`).
+1. Pick the **Supplier** by name or code.
+2. Enter the **Gross Amount**, pick the **Currency** (the Currency Picker — see Chapter 0, *Common UI Patterns*), and set the **Bill Date**, **Due Date**, and optional **Supplier Invoice No.** (e.g. `MIGR-SUP-0001`).
+3. Click **Set Opening Balance**. An opening-balance supplier bill is created (source = `OPENING_BALANCE`) and the screen confirms its number. A foreign-currency opening balance posts to the ledger in your base currency.
+
+---
+
+### AP Ageing
+
+Navigate to **Accounting > AP Ageing** (`/admin/ap/ageing`). Permission required: `AP.VIEW`.
+
+**What it is.** What you owe every supplier, company-wide, by how long it is past due — the creditors' ageing used to plan payment runs. Each supplier has a row with **Current**, **1–30 days**, **31–60 days**, **61–90 days**, **90+ days**, **Total** and **Ccy**; a supplier you owe in two currencies has one row per currency. Total lines at the foot are given **per currency** (with the number of suppliers), never added across currencies.
+
+**How to use it.** Choose an **As at** date (defaults to today). Unapplied debit notes are netted; payments not yet allocated to a bill are not in these buckets. Users with `REPORT.EXPORT` can **Export PDF**, **Export Excel** or **Export CSV**.
 
 ---
 
@@ -692,7 +820,22 @@ Both exports need `AP.VIEW` **and** `REPORT.EXPORT`.
 
 **Why it exists.** Without a dedicated cash/bank module, the company has no structured way to track the balance of individual accounts, match book records against a bank statement, or manage cheques. The key acceptance criterion is the **reconciliation invariant**: a cash/bank account's book balance must always equal its linked GL asset account balance. Because every movement posts synchronously to both the cash module and the GL, they are always in agreement at every committed moment.
 
-**When it is used.** Every time money moves into or out of a named account: on recording a customer receipt, running a supplier payment, making a bank transfer, recording a bank charge or interest entry, or performing the monthly bank reconciliation.
+**When it is used.** Every time money moves into or out of a named account: on recording a customer receipt, running a supplier payment, making a bank transfer, recording an expense, a bank charge or an interest entry, or performing the monthly bank reconciliation.
+
+**What reaches the cash book.** Each account's cash book (its statement) records every movement, by type:
+
+| Type | What it is |
+|---|---|
+| AR_RECEIPT | A customer receipt into the account (and, going out, a customer refund or a reversed receipt) |
+| AP_PAYMENT | A supplier payment out of the account (and, coming back in, a reversed payment) |
+| TRANSFER_IN / TRANSFER_OUT | A cash transfer between two of your accounts |
+| DIRECT_ENTRY | An expense or income entered on **Cash / Bank Entry**, a petty-cash top-up paid from this account, or a tax payment |
+| SALE_TENDER | Takings from a sale, net of change, into the till or account the tender was paid to |
+| SALE_REFUND | The same money going back out when that sale is voided |
+| POS_PAYOUT | Cash paid out of a POS till (a payout or till expense) |
+| POS_VARIANCE | A till session's counted-versus-expected difference — in for an over, out for a short |
+
+The last four mirror postings the sales and POS screens already make in the ledger, so the cash book of a till that takes sales shows its real takings, payouts and over/short. They are recorded from the date this feature was introduced on your system onwards; older till activity is in the ledger only.
 
 ---
 
@@ -708,14 +851,14 @@ Navigate to **Accounting > Cash & Bank Accounts** (`/admin/cash/accounts`). Perm
 
 ![Cash & bank accounts](images/08-finance/cash-accounts.png)
 
-The list shows all cash and bank accounts for the company: code, name, type (CASH or BANK), linked GL account, currency, default flag, and active status.
+The list shows all cash and bank accounts for the company: **Code**, **Name**, **Type** (CASH or BANK), **Bank** (bank name and account number), **GL Account**, **Currency**, **Default** and **Active**.
 
 **To create an account (requires `CASH.ACCOUNT.MANAGE`):**
 
-1. Click **New account**.
-2. Enter the account name and select the account type.
-   - For **BANK** accounts, also enter the bank name (required), bank account number, and branch.
-3. Select the linked **GL Asset account** from the picker (only ASSET-type accounts are listed).
+1. Click **New Account**. The **New Cash / Bank Account** form opens.
+2. Enter the **Account Name** (e.g. Main Cash Drawer) and select the **Account Type** (CASH or BANK).
+   - For **BANK** accounts, also enter the **Bank Name** (required), **Bank Account No.**, and **Bank Branch**.
+3. Select the linked **GL Asset Account** (only ASSET-type accounts are listed, as `code — name`).
 4. Optionally tick **Set as default account**.
 5. Click **Save Account**. The account code is generated automatically.
 
@@ -735,36 +878,39 @@ The list shows all cash and bank accounts for the company: code, name, type (CAS
 
 To move funds between two accounts, navigate to **Accounting > Cash Transfer** (`/admin/cash/transfers/record`). Permission required: `CASH.TRANSFER`.
 
-1. Select the **Source account** and **Destination account** from the pickers (by code — name). Source and destination must differ.
-2. Enter the **amount**, **transfer date**, and an optional **reference**.
+1. Select the **Source Account** and **Destination Account**. Each shows its **Current balance** once chosen, so you can see that the source has the money. Source and destination must differ.
+2. Enter the **Amount**, **Transfer Date**, and an optional **Reference**.
 3. Click **Record Transfer**. A transfer number (`CBT-####`) is generated. The GL posts a balanced entry covering the two accounts.
 
-View the transfers list at **Accounting > Transfers** (`/admin/cash/transfers`). Click a row to see the transfer detail.
+View the transfers list at **Accounting > Transfers** (`/admin/cash/transfers`, headed **Cash Transfers**): **Transfer #**, **Date**, **From Account**, **To Account**, **Amount** and **Ref**. Open one to see its detail, including a **View Journal** link.
 
 ---
 
 ### Direct Cash/Bank Entries
 
-**What they are.** A direct entry records a transaction that moves money into or out of a cash or bank account but does not originate from an AR receipt, AP payment, or inter-account transfer. The most common examples are bank interest credited by the bank, bank charges debited by the bank, and direct income receipts that bypass the AR module.
+**What they are.** A direct entry records a transaction that moves money into or out of a cash or bank account but does not originate from an AR receipt, AP payment, or inter-account transfer. The most common examples are everyday **expenses** paid in cash or by bank (rent, electricity, water, transport, fuel), bank charges and interest, and direct income receipts that bypass the AR module.
 
-**Why they exist.** Not every cash movement is driven by a sales invoice or supplier bill. Bank charges, interest, returned cheque fees, and similar items are imposed by the bank and need to be recorded directly. Without direct entries, these amounts would never appear in the books and the cash account statement would not reconcile to the bank statement.
+**Why they exist.** Not every cash movement is driven by a sales invoice or supplier bill. Running costs paid on the spot, bank charges, interest, returned cheque fees, and similar items need to be recorded directly. Without direct entries, these amounts would never appear in the books and the cash account statement would not reconcile to the bank statement.
 
-**When they are used.** By a user with `CASH.ENTRY.RECORD` permission, when a bank statement item cannot be matched to an AR receipt or AP payment.
+**When they are used.** By a user with `CASH.ENTRY.RECORD` permission, whenever money is paid out for an expense or received for something that has no invoice or bill in the system, or when a bank statement item cannot be matched to an AR receipt or AP payment.
 
-**How they work.** The entry records the direction (IN or OUT), the amount, and a counter GL account (the other side of the double entry — typically an income, expense, or equity account). The GL is posted in the same transaction, so the cash module balance and the linked GL account balance stay in agreement.
+**How they work.** The entry records the direction (OUT or IN), the amount, and a counter GL account (the other side of the double entry — typically an expense, income, or equity account). The GL is posted in the same transaction, so the cash module balance and the linked GL account balance stay in agreement.
 
 Because a direct cash/bank entry is user-driven, its counter account is subject to the **same control-account guard as a manual journal**: a counter GL account that is a locked control account (AR, AP, INVENTORY, TAX, PAYROLL_CLEARING, or FX_CLEARING) or that has its **allow manual posting** flag off is rejected with a `409 Conflict`. Choose a non-control account. CASH and BANK accounts are exempt — that is exactly what this screen is for. The amount must be positive.
 
-For transactions that do not originate from AP, AR, or a transfer (e.g. bank interest, bank charges), navigate to **Accounting > Cash / Bank Entry** (`/admin/cash/entries/record`). Permission required: `CASH.ENTRY.RECORD`.
+Navigate to **Accounting > Cash / Bank Entry** (`/admin/cash/entries/record`); the screen is headed **Record Cash / Bank Entry**. (Typing "expense", "rent" or "electricity" in the menu search also finds it.) Permission required: `CASH.ENTRY.RECORD`.
 
-1. Select the **Cash / Bank Account** by name.
-2. Choose the **Direction** (IN for money received by the account, OUT for money leaving the account).
+1. Select the **Cash / Bank Account** (`code — name`).
+2. Choose the **Direction**: **OUT (Money paid — expense)** — the default — or **IN (Money received)**.
 3. Enter the **Amount** and **Transaction Date**.
-4. Select a **Counter GL Account** from the picker. The picker lists INCOME, EXPENSE, and EQUITY accounts; locked control accounts are excluded.
-5. Enter an optional **Memo**.
-6. Click **Record Entry**. A transaction number is generated and the success banner shows the direction and amount.
+4. For money paid out, optionally enter the **Input VAT included (optional)** — the VAT shown on the supplier's tax invoice, included in the amount. Click **18% incl.** to fill in 18/118 of the amount. That VAT is claimed on the VAT return (it goes to VAT Input) and the expense account gets the rest.
+5. Select the counter account. For money out the field reads **Expense Account (what was paid for)** and lists EXPENSE accounts first, then EQUITY and INCOME; for money in it reads **Income Account (what the money is for)** and lists INCOME accounts first. Locked control accounts are excluded.
+6. Enter an optional **Memo**.
+7. Click **Record Entry**. A transaction number is generated and the success banner shows the direction and amount; **Record another** clears the form.
 
-The entry's currency is the company base currency — there is no currency field on this screen. Direct entries appear in the account statement but are not shown in a separate list screen.
+The entry's currency is the account's currency — there is no currency field on this screen.
+
+**Entries already recorded.** Once an account is selected, users with `CASH.VIEW` see **Entries on <account>** beneath the form: **No.**, **Date**, **Direction** (Paid out / Received), **Account**, **Memo** and **Amount**, with a **Refresh** button. The full history is on the **Cash Statement**.
 
 ---
 
@@ -784,22 +930,22 @@ Bank reconciliation matches your book records against your bank statement. Navig
 
 **Opening a reconciliation:**
 
-1. Select a **BANK** account (only bank accounts can be reconciled).
-2. The account's uncleared transactions load.
-3. Click **Open reconciliation**.
-4. Enter the **Statement Date** and the **Statement Closing Balance** from your bank statement.
-5. Submit. A reconciliation is opened in **DRAFT** status.
+1. Select the **Bank Account** (only bank accounts can be reconciled).
+2. The account's transactions load (**Txn No.**, **Date**, **Direction**, **Amount**, **Type**, **Memo**); those already cleared on an earlier, completed reconciliation are marked as such.
+3. Click **Open Reconciliation**.
+4. Enter the **Statement Date** and the **Statement Closing Balance** from your bank statement. **Statement Opening Balance** is optional — leave it blank to carry forward the closing balance of the last completed reconciliation (for the first statement, enter the opening balance shown on it).
+5. Click **Open**. A reconciliation is opened in **DRAFT** status with its own number.
 
 **Marking transactions cleared:**
 
-1. Tick the **Cleared** checkbox against each transaction that appears on the bank statement.
-2. The **Cleared book balance** and **Difference** update in real time.
-   - Difference = cleared book balance − statement closing balance.
+1. Tick **Cleared** against each transaction that appears on this bank statement.
+2. The summary updates as you tick: **Statement Opening Balance**, **Statement Closing Balance**, **Opening + Cleared This Statement**, and the **Difference** with a **Balanced** / **Out of Balance** tag.
+   - Difference = (opening balance + items cleared on this statement) − statement closing balance.
 
 **Completing the reconciliation:**
 
-1. When the difference is exactly zero, the **Complete** button becomes active.
-2. Click **Complete**. The reconciliation moves to **COMPLETED** status and is locked.
+1. When the difference is exactly zero, **Complete Reconciliation** becomes active (until then the screen explains why it is disabled).
+2. Click **Complete Reconciliation**. The reconciliation moves to **COMPLETED** status and is locked. Its closing balance becomes the next statement's opening balance, so each month's reconciliation starts where the last one ended.
 
 A completed reconciliation cannot be modified. The difference must be zero to complete — a non-zero difference means there are unidentified items on either side.
 
@@ -817,10 +963,12 @@ Track issued cheques at **Accounting > Cheques** (`/admin/cash/cheques`). Permis
 
 **Registering a cheque:**
 
-1. Click **Register cheque**.
-2. Select the **BANK account** (only bank accounts issue cheques).
-3. Enter the cheque number, payee, amount, issue date, and value date.
+1. Click **Register Cheque**.
+2. Select the **Bank Account** (only bank accounts issue cheques).
+3. Enter the **Cheque Number**, **Payee**, **Amount**, **Issue Date**, and **Value Date**.
 4. Click **Register**. The cheque is recorded with status **ISSUED**.
+
+The register lists **Cheque No.**, **Payee**, **Amount**, **Issue Date**, **Value Date** and **Status**.
 
 **Cheque lifecycle:**
 
@@ -830,7 +978,7 @@ Track issued cheques at **Accounting > Cheques** (`/admin/cash/cheques`). Permis
 
 CLEARED and CANCELLED are terminal states; no further transitions are possible.
 
-> **Behind the scenes.** The cheque model also supports inbound (customer) cheques with a direction flag and a deposit/bounce flow (a bounce posts a reversing GL entry and restores the related receipt's outstanding balance). These inbound actions are available through the API; the Cheque Register screen above currently registers outbound cheques and exposes only Clear and Cancel.
+> **Behind the scenes.** The cheque model also supports inbound (customer) cheques with a direction flag and a deposit/bounce flow. A bounce reverses the customer receipt: it posts the reversing journal, takes the money back out of the bank account's cash book, and makes the invoices the receipt paid owed again. These inbound actions are available through the API; the Cheque Register screen above currently registers outbound cheques and exposes only Clear and Cancel.
 
 ---
 
@@ -844,11 +992,13 @@ CLEARED and CANCELLED are terminal states; no further transitions are possible.
 
 Navigate to **Accounting > Cash Statement** (`/admin/cash/statement`). Permission required: `CASH.VIEW`.
 
-Select an account by name to view:
+Select an **Account** (listed as `code — name (type)`) to view:
 
-- **Current balance** — the running book balance.
-- **Transaction history** — each cash transaction in date order with a running balance column (IN transactions increase the balance; OUT transactions decrease it).
-- **GL reconciliation** — compares the account's book balance against the linked GL asset account balance. A zero difference confirms agreement. A non-zero difference requires investigation.
+- **Current Book Balance** — the running book balance.
+- **Transaction history** — each cash transaction in date order with **Txn No.**, **Date**, **Direction**, **Amount**, **Running Balance**, **Type** (see *What reaches the cash book* above), **Cleared** and **Memo** (IN transactions increase the balance; OUT transactions decrease it).
+- **GL Reconciliation** — compares the account's book balance against the linked GL asset account (its code is shown): **In sync**, or **Out of sync** with the difference. A non-zero difference requires investigation.
+
+Click **Refresh** to reload.
 
 **Printing the account statement.** Above the balance, choose **From** and **To** and click **Export PDF**, **Export Excel** or **Export CSV**. The statement carries your letterhead, the account (code, name, bank, branch, account number), the period and currency, the **Balance brought forward** on the From date, every transaction in the period with **Money In**, **Money Out** and a running **Balance**, and a **Closing balance** row. For a period that ended before today, the foot also gives today's book balance, so the two are never confused. Leave both dates empty to print the whole history. Permission: `CASH.VIEW` **and** `REPORT.EXPORT`.
 
@@ -866,7 +1016,9 @@ Select an account by name to view:
 
 **How it works.** A count moves through three states — **OPEN** (started; the expected balance has been captured), **COUNTED** (the denomination breakdown has been entered and the counted total and variance computed), and **RECONCILED** (finalised; any variance posted to the GL and the count locked). Only CASH-type accounts can be counted — a bank account has no physical drawer. When the count is reconciled, an over posts **DR till cash / CR Cash Over (income)** and a short posts **DR Cash Short (expense) / CR till cash**, and a matching cash-book entry is written so the till's cash book and its GL account always move together to the counted figure. A count with **zero variance posts no journal** — nothing needs correcting. A count is locked once reconciled and can never be re-opened or re-counted.
 
-**Viewing counts.** Navigate to **Accounting > Cash Counts** (`/admin/cash/counts`). Because counts are held per till, pick the **company** (if multi-company) and then the **till** from the selectors; the table then lists that till's counts with count number, business date, expected, counted, variance (green for over, red for short), and status. Click the eye icon to open a count.
+**Viewing counts.** Navigate to **Accounting > Cash Counts** (`/admin/cash/counts`). Because counts are held per till, pick the **Company** (if multi-company) and then the **Till** from the selectors; the table then lists that till's counts with **Count #**, **Till**, **Business Date**, **Expected**, **Counted**, **Variance** (green for over, red for short), and **Status**. Click the eye icon to open a count.
+
+> **Note.** A till that takes sales can be counted: its cash book carries the takings, payouts and over/short (see *What reaches the cash book*), so the expected figure includes them. A count that was started before the cash book carried sales cannot be reconciled — start a new count for that till instead.
 
 **Opening a count (requires `CASH.COUNT.MANAGE`):**
 
@@ -903,16 +1055,25 @@ Select an account by name to view:
 
 **How it works.** Each fund has a **float** (the authorised ceiling) and a **balance** (the cash actually on hand, which starts at zero and moves only through recorded transactions). Three transaction types move the balance: a **Disbursement** decreases it (cash paid out), a **Replenishment** increases it (float topped back up), and an **Adjustment** is a signed correction (a positive amount increases the balance, a negative amount decreases it). The system refuses any transaction that would push the balance below zero. The float is informational — it does not hard-block a disbursement, it simply tells you the ceiling the fund should be topped up to.
 
-> **Record-only.** Petty cash movements are **not posted to the general ledger** in this release. Even the optional expense GL account on a disbursement is captured for reference only — it does not create a journal. Reflect petty cash spending in the GL through a manual journal or the periodic replenishment payment.
+**Posting to the ledger.** Every petty-cash movement posts to the general ledger in the same step, so the books always show what is in the box:
 
-**Viewing funds.** Navigate to **Accounting > Petty Cash Funds** (`/admin/petty-cash/funds`). Pick the **company** (if multi-company); the table lists each fund's code, name, custodian, float, current balance, and status (ACTIVE / INACTIVE / ARCHIVED). Click the eye icon to open a fund.
+| Transaction | Ledger entry |
+|---|---|
+| Disbursement | DR the expense account chosen on the voucher / CR Petty Cash |
+| Replenishment | DR Petty Cash / CR the cash or bank account the money came from — and an OUT line in that account's cash book |
+| Adjustment (surplus) | DR Petty Cash / CR Cash Over |
+| Adjustment (shortage) | DR Cash Short / CR Petty Cash |
+
+All of a company's funds post to one asset account named **Petty Cash**. If the chart of accounts has none, the system creates it on first use (code 1011–1019); it is never an account a till or bank already uses. If the posting date's period is closed, or the accounts are not set up, the whole movement is refused — nothing is half-recorded. Movements recorded before this feature was introduced stay as they were (not posted).
+
+**Viewing funds.** Navigate to **Accounting > Petty Cash** (`/admin/petty-cash/funds`); the screen is headed **Petty Cash Funds**. Pick the **Company** (if multi-company); the table lists each fund's **Code**, **Name**, **Custodian**, **Float**, **Balance**, and **Status** (ACTIVE / INACTIVE / ARCHIVED). Click the eye icon to open a fund.
 
 **Creating a fund (requires `PETTY_CASH.MANAGE`):**
 
 1. From the Petty Cash Funds list, click **New Fund** (or go to `/admin/petty-cash/funds/new`).
 2. Enter a unique **Fund Code** (e.g. `PCF-001`) and a **Fund Name** (e.g. "Front Office Petty Cash").
 3. Optionally select a **Custodian** (a user in the company) who is responsible for the float.
-4. Enter the **Float Amount** (the authorised ceiling) and the **Currency** (defaults to the company base currency).
+4. Enter the **Float Amount** (the authorised ceiling) and the **Currency** (typed as a 3-letter code, e.g. `TZS`).
 5. Click **Create Fund**. The fund opens with a balance of zero — record a replenishment to put the opening cash in.
 
 > The company must already have at least one branch before a petty cash fund can be created.
@@ -923,9 +1084,10 @@ On the fund detail screen, use the **Record Transaction** panel:
 
 1. Choose the **Type**: **Disbursement** (cash out), **Replenishment** (cash in), or **Adjustment** (a correction).
 2. Enter the **Amount** (must be positive for a disbursement or replenishment; for an adjustment, enter a negative amount to decrease the balance) and the **Date**.
-3. For a **Disbursement**, optionally pick the **Expense GL Account** the spend relates to (captured for the record only — see the record-only note above).
-4. Optionally add a **Reference** and a **Description**.
-5. Click **Record Transaction**. The fund balance updates immediately and the movement appears in the **Transaction Ledger** below, showing the transaction number, type, amount, and the running balance after each entry.
+3. For a **Disbursement**, choose the **Expense GL Account** the money was spent on (required — "This expense account is debited and petty cash credited.").
+4. For a **Replenishment**, choose where the money was **Paid in from** — a cash or bank account, or leave **— company default cash account —**. The money leaves that account's cash book and goes into petty cash.
+5. Optionally add a **Reference** and a **Description**.
+6. Click **Record Transaction**. The fund balance updates immediately and the movement appears in the **Transaction Ledger** below, showing **Txn #**, **Date**, **Type**, **Amount**, **Balance After** and **Reference**.
 
 > A transaction that would take the balance below zero is rejected. Transactions can be recorded only against an **ACTIVE** fund.
 
@@ -933,7 +1095,7 @@ On the fund detail screen, use the **Record Transaction** panel:
 
 ## Tax
 
-**What it is.** The Tax module covers two statutory obligations: the monthly **VAT return** (filed with TRA) and the **WHT (Withholding Tax) register**. Both work from the same underlying transaction data — sales invoices for output VAT, supplier bills for input VAT, and AR/AP payment legs for WHT — but they are separate filings with separate regulatory purposes.
+**What it is.** The Tax module covers two statutory obligations: the monthly **VAT return** (filed with TRA) and the **WHT (Withholding Tax) register**. Both work from the same underlying transaction data — sales invoices for output VAT, supplier bills and expense entries for input VAT, and AR/AP payment legs for WHT — but they are separate filings with separate regulatory purposes. It also records **paying** what you owe: VAT and WHT payments to TRA are recorded here, and payroll statutory payments (PAYE, NSSF and so on) from the payroll screens (chapter 11).
 
 **Why it exists.** Tanzania (and most countries) requires businesses to collect VAT on sales (output VAT), claim VAT paid on qualifying purchases (input VAT), and remit the net difference to the revenue authority monthly. Without a VAT return module, the company would need to aggregate these figures manually from the GL each month, increasing the risk of error and late filing. The WHT register similarly provides the structured record needed for regulatory compliance.
 
@@ -950,17 +1112,17 @@ On the fund detail screen, use the **Record Transaction** panel:
 **How it works.** Output VAT (on account 2200 VAT Payable) accumulates continuously as sales are finalised; input VAT (on the VAT_INPUT control account) accumulates as supplier bills are matched. The return computes both figures from the period's documents, and it already nets the corrections the system knows about:
 
 - **Output VAT** = VAT on sales invoices finalised in the period (including any voided later) − VAT on sales voided in the period − VAT on customer credit notes raised in the period (including sales returns).
-- **Input VAT** = VAT on supplier bills in the period − VAT on supplier debit notes raised in the period (including purchase returns).
+- **Input VAT** = VAT on supplier bills in the period + input VAT recorded on cash/bank expense entries in the period − VAT on supplier debit notes raised in the period (including purchase returns).
 
 Each figure is converted to TZS exactly as its own ledger posting was, so filing the return clears VAT Payable and VAT Input to zero. Any prior-period credit is carried forward from the last FILED return. Manual adjustments are only for items that are **not** documents in the system, such as bad debt relief or a prior-period correction. Filing locks the return (FILED), posts a settlement journal to clear both control accounts (and each adjustment) to a dedicated VAT_DUE liability, and records the TRA filing reference.
 
 > **Do not key credit-note or debit-note VAT by hand.** Credit notes, supplier debit notes, sales and purchase returns and voided sales recorded in the system are already in the Output VAT and Input VAT figures. Adding a **Credit Note VAT** or **Debit Note VAT** adjustment for them counts them twice. If a DRAFT return already carries such an adjustment for a document in the system, remove it and click **Recompute** before filing.
 
-Navigate to **Accounting > Tax > VAT Returns** (`/admin/tax/vat-returns`). Permission required: `VAT.VIEW`.
+Navigate to **Accounting > VAT Returns** (`/admin/tax/vat-returns`). Permission required: `VAT.VIEW`.
 
 ![VAT returns](images/08-finance/tax-vat-returns.png)
 
-The list shows all VAT returns for the company with their return number, period, due date, status, output VAT, input VAT, net VAT, and a result flag (Payable, Credit c/f, or Nil), plus a **New VAT Return** button.
+The list shows all VAT returns for the company with **Return No.**, **Period**, **Due Date**, **Status**, **Output VAT**, **Input VAT**, **Net VAT**, and **Result** (Payable, Credit c/f, or Nil), plus a **New VAT Return** button.
 
 **VAT return statuses:**
 
@@ -971,8 +1133,8 @@ The list shows all VAT returns for the company with their return number, period,
 
 **Opening a new VAT return (requires `VAT.RETURN.PREPARE`):**
 
-1. Click **New VAT Return**.
-2. Select the **year** and **month**.
+1. Click **New VAT Return**. The **New VAT Return — Select Period** form opens.
+2. Select the **Year** and **Month**.
 3. Submit. The system creates a DRAFT return for the period and performs an initial computation. The opening credit (if any) is carried forward from the most recent FILED prior-period return.
 
 **VAT return detail:** click a return row to open its detail. The detail screen shows:
@@ -990,6 +1152,11 @@ The list shows all VAT returns for the company with their return number, period,
 **Recomputing a DRAFT return (requires `VAT.RETURN.PREPARE`):**
 
 Click **Recompute** on the detail screen to re-read the current sales and purchase figures. This is useful after new invoices or bills have been entered for the period.
+
+**VAT schedules (sales and purchases listings).** Next to the export buttons, users with `VAT.VIEW` **and** `REPORT.EXPORT` see **Sales schedule** and **Purchases schedule** (Excel), and **Sales CSV** and **Purchases CSV**. These are the per-document listings behind the return that TRA asks for — date, document number, customer or supplier, TIN, VRN, net amount, VAT and, for sales, the EFD/fiscal number. They read exactly the same documents as the return, so the VAT column of the sales schedule adds up to the return's Output VAT and the purchases schedule to its Input VAT:
+
+- **Sales:** invoices finalised in the period (including ones voided later), invoices voided in the period (as negative lines), and customer credit notes dated in the period (negative).
+- **Purchases:** matched or approved supplier bills dated in the period, and supplier debit notes dated in the period (negative).
 
 **Printing the return (Export PDF / Excel / CSV).** On the VAT return detail, users with `VAT.VIEW` **and** `REPORT.EXPORT` see three export buttons at the top. The document prints the return face as the screen shows it — supplies by tax band (taxable value and VAT), total sales turnover and output VAT, the zero-rated and exempt "of which" lines, purchases turnover, input VAT, adjustments, credit brought forward, and **Net VAT** (Payable to TRA / Credit carried forward / Nil) — under your company letterhead with its **TIN and VRN**. A filed return prints its filing date and TRA reference; a **DRAFT** prints "DRAFT — not yet filed; figures may still change", so it cannot pass for the filed return. Purchases turnover prints blank (not 0.00) when it was not computed. Any penalty or interest recorded is printed at the foot, marked as not included in Net VAT.
 
@@ -1054,6 +1221,20 @@ A nil-activity return (output and input both zero) files and locks without posti
 
 ---
 
+### Paying VAT to TRA
+
+**What it is.** Filing a return moves the net VAT you owe onto the **VAT Due** liability. Paying TRA clears it. Recording the payment here books the money out of the bank or cash account and reduces VAT Due by the same amount, so the ledger shows what is still owed.
+
+**When it is used.** After a return showing **Payable to TRA** has been filed, when the payment is made. Requires `VAT.RETURN.FILE`.
+
+1. Open the FILED return. While something is still owed, a **Record payment** button is shown.
+2. In **Record VAT payment to TRA**, choose **Paid from** (the cash or bank account), the **Payment date**, the **Amount** (defaults to what is still owed) and the **TRA payment reference**.
+3. Click **Record payment**. The return now shows **Paid to TRA** with the amount and reference, and "… still owed" if the payment was partial. You can record further payments until nothing is owed.
+
+The payment posts **DR VAT Due / CR the chosen account** and an OUT line in that account's cash book.
+
+---
+
 ### WHT Types and Register
 
 **What WHT is.** Withholding Tax (WHT) is tax that one party deducts from a payment before remitting the balance to the other party. It works in two directions. When your company **pays a supplier**, it may be required by TRA regulations to withhold a percentage of the payment, remit that withheld amount to TRA, and issue the supplier a WHT certificate (`WHT_ON_PAYMENT`). When a customer **pays your company**, the customer may withhold tax from the receipt; you receive less than the invoice amount and are issued a WHT certificate in return — a tax credit you can use against your own tax liability (`WHT_ON_RECEIPT`).
@@ -1066,7 +1247,7 @@ A nil-activity return (output and input both zero) files and locks without posti
 
 **What the register shows.** The WHT register is the period summary of all WHT certificates — how much was withheld on supplier payments (payable to TRA) and how much was withheld by customers from your receipts (a receivable credit against your tax bill). It is the data source for preparing the WHT remittance to TRA.
 
-**WHT Types:** Navigate to **Accounting > Tax > WHT Types** (`/admin/tax/wht-types`). Permission required: `WHT.VIEW` to view; `WHT.MANAGE` to create, edit, and deactivate.
+**WHT Types:** Navigate to **Accounting > WHT Types** (`/admin/tax/wht-types`); the screen is headed **Withholding Tax Types**. Permission required: `WHT.VIEW` to view; `WHT.MANAGE` to create, edit, and deactivate.
 
 WHT types define the rates at which tax is withheld. Each type has:
 
@@ -1074,26 +1255,34 @@ WHT types define the rates at which tax is withheld. Each type has:
 - A kind: **WHT\_ON\_PAYMENT** (withheld when paying a supplier) or **WHT\_ON\_RECEIPT** (withheld by the customer from your receipt).
 - A rate percentage.
 
+The list shows **Code**, **Name**, **Kind**, **Rate %** and **Active**.
+
 To create a WHT type:
 
-1. Click **New WHT Type**.
-2. Enter the code, name, kind, and rate percentage (0 or greater).
+1. Click **New WHT Type**. The **New Withholding Tax Type** form opens.
+2. Enter the **Code**, **Name**, **Kind** — **On Payment (we withhold from supplier)** or **On Receipt (customer withholds from us)** — and **Rate %** (0 or greater).
 3. Save.
 
 The kind is fixed at creation and cannot be changed. To deactivate a type, click **Deactivate** on its row. An inactive type is excluded from the pickers in the AP payment and AR receipt screens.
 
-**WHT Register:** Navigate to **Accounting > Tax > WHT Register** (`/admin/tax/wht-register`). Permission required: `WHT.VIEW`.
+**WHT Register:** Navigate to **Accounting > WHT Register** (`/admin/tax/wht-register`). Permission required: `WHT.VIEW`.
 
 The register shows all WHT certificates in a period, grouped into two sections:
 
-- **WHT Payable to TRA** — certificates from supplier payments (`WHT_ON_PAYMENT`).
+- **WHT Payable to TRA** — certificates from supplier payments (`WHT_ON_PAYMENT`), with a **TRA** column showing **Remitted** or **Unpaid**.
 - **WHT Receivable** — certificates from customer receipts (`WHT_ON_RECEIPT`).
 
-Select the period by choosing **Month** mode (year + month) or **Range** mode (start and end dates), then click **Load**.
+Each section lists **WHT Certificate No.**, **Party**, **Source Ref**, **Taxable Base**, **WHT Amount** and **Date**, with a total. Select the period under **Select Period** by choosing the **Period type** — **Year & Month** (Year + Month) or **Date Range** (From and To) — then click **Load**.
+
+**Paying withheld tax to TRA (requires `WHT.REMIT`).** When the period has unpaid payable certificates, a **Record payment to TRA** button appears in the WHT Payable section.
+
+1. Click **Record payment to TRA**. The panel states how many unpaid certificates of the period it will pay, and their total.
+2. Choose **Paid from** (cash or bank account), the **Payment date**, and the **TRA reference** (required).
+3. Click **Record payment**. The system posts **DR WHT Payable / CR the chosen account**, writes the payment into that account's cash book, and marks those certificates **Remitted**.
 
 **Exporting the register.** After loading, users with `WHT.VIEW` **and** `REPORT.EXPORT` see **Export PDF / Excel / CSV**. The export is exactly the period on screen: the WHT Payable section and the WHT Receivable section, each certificate with its date, party, source reference, taxable base and WHT amount, and a subtotal per section, under your company letterhead. There is deliberately no grand total — payable and receivable are different obligations and adding them would mean nothing.
 
-> **Behind the scenes.** A WHT certificate can be marked as remitted to TRA once the withheld tax has been paid over (API: `POST /wht/register/transactions/{uid}/remit`, permission `WHT.REMIT`). This mark-remitted action is not yet exposed on the WHT Register screen above.
+> **Payroll statutory deductions** (PAYE, NSSF, WCF, SDL, HESLB) are paid from the payroll screens — see chapter 11, *Paying payroll statutory deductions*.
 
 ---
 
@@ -1123,7 +1312,7 @@ Select the period by choosing **Month** mode (year + month) or **Range** mode (s
 
 **When it is used.** By a user with `CURRENCY.MANAGE` permission whenever an exchange rate needs to be entered or updated — typically daily or at the start of each period.
 
-Navigate to **Accounting > FX > Exchange Rates** (`/admin/fx/rates`). Permission required: `CURRENCY.VIEW` to view; `CURRENCY.MANAGE` to add rates.
+Navigate to **FX / Currency > Exchange Rates** (`/admin/fx/rates`). Permission required: `CURRENCY.VIEW` to view; `CURRENCY.MANAGE` to add rates. (Enabling currencies for the company and choosing the default is done on **FX / Currency > Currencies** — see chapter 02, *Currencies and FX Rates*.)
 
 ![FX rates](images/08-finance/fx-rates.png)
 
@@ -1166,25 +1355,25 @@ If no rate exists for the document's currency on or before the document date, th
 
 **How it works.** A preview (dry run) shows you the would-be adjustments without posting anything. Once you confirm, the system posts a single balanced GL journal (DR/CR the relevant control account / CR/DR the UNREALIZED_FX_GAIN or UNREALIZED_FX_LOSS account). If the next fiscal period is already open, the reversal is posted immediately; otherwise the system records the intent and posts the reversal when that period is opened.
 
-At period end, open foreign-currency balances (AR invoices and AP bills not yet settled) must be revalued at the current spot rate. Navigate to **Accounting > FX > Revaluation Runs** (`/admin/fx/revaluation-runs`). Permission required: `FX.EXPOSURE.VIEW` to view runs; `FX.REVALUE` to preview and post.
+At period end, open foreign-currency balances (AR invoices and AP bills not yet settled) must be revalued at the current spot rate. Navigate to **FX / Currency > Revaluation Runs** (`/admin/fx/revaluation-runs`); the screen is headed **FX Revaluation Runs**. Permission required: `FX.EXPOSURE.VIEW` to view runs; `FX.REVALUE` to preview and post.
 
 **Running a preview (dry run):**
 
-1. Select the company and click **Preview**.
-2. Choose the **fiscal period** from the picker.
-3. Optionally enter a **spot rate date** (defaults to the period end date).
-4. Click **Run preview**. The system shows each open foreign item with its carrying base amount, revalued base amount, and adjustment (gain or loss). No GL is posted.
+1. Select the company and click **Preview / Run Revaluation**. The **Preview Revaluation (Dry Run)** panel opens.
+2. Choose the **Fiscal Period** from the picker.
+3. Optionally enter a **Spot Rate Date** (defaults to the period end date).
+4. Click **Preview**. The system shows **Total Gain**, **Total Loss** and **Net Adjustment**, marked "DRY RUN — not posted", and each open foreign item with **Source**, **Currency**, **Outstanding Txn**, **Carrying Base**, **Spot Rate**, **Revalued Base** and **Adjustment**. No GL is posted.
 
 **Posting the revaluation:**
 
-1. After reviewing the preview, click **Post**.
-2. Enter the **posting date** and confirm.
+1. After reviewing the preview, go to **Post this Revaluation Run**.
+2. Enter the **Posting Date** and click **Post to GL**.
 3. A revaluation run record is created and a balanced unrealized FX journal posts to the GL.
 4. If the next fiscal period is already open, the system automatically schedules and posts a reversal on the first day of the next period.
 5. If the next period is not yet open, the run status is **POSTED** and the reversal can be triggered manually later (see below).
 
 **Manually reversing a run:**
 
-On a POSTED run in the runs list, click **Reverse**, enter the reversal date, and confirm. The reversal journal posts and the run status moves to **REVERSED**.
+The runs list shows **Run #**, **Posting Date**, **Spot Rate Date**, **Status**, **Net Adjustment**, **Gain** and **Loss**. On a POSTED run, click **Reverse <run number>**, enter the reversal date, and confirm. The reversal journal posts and the run status moves to **REVERSED**.
 
 **Realized FX gains and losses** are posted automatically when a foreign-currency invoice is settled. The difference between the original invoice rate and the settlement rate is posted to the `REALIZED_FX_GAIN` or `REALIZED_FX_LOSS` accounts configured in GL config. No manual action is needed.

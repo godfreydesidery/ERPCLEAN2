@@ -25,17 +25,22 @@ Walk-in cash sales skip the first three steps and begin directly with a Sales In
 | Deliveries | `SALES.DELIVERY.VIEW`, `SALES.DELIVERY.CREATE` |
 | Sales Invoices | `SALES.INVOICE.VIEW`, `SALES.INVOICE.CREATE`, `SALES.INVOICE.SETTLE`, `SALES.INVOICE.VOID` |
 | Sales Returns | `SALES.RETURN.VIEW`, `SALES.RETURN.CREATE` |
-| Blanket Orders | `SALES.BLANKET.VIEW`, `SALES.BLANKET.CREATE` |
-| Standing Orders | `SALES.STANDING.VIEW`, `SALES.STANDING.CREATE` |
+| Blanket Orders | `SALES.BLANKET.VIEW`, `SALES.BLANKET.CREATE`, `SALES.BLANKET.MANAGE` (draw releases, cancel) |
+| Standing Orders | `SALES.STANDING.VIEW`, `SALES.STANDING.CREATE`, `SALES.STANDING.MANAGE` (pause, resume, trigger, cancel) |
 | Pricing Rules | `SALES.PRICING.RULE.VIEW`, `SALES.PRICING.RULE.MANAGE` |
-| Sales Settings (SO approval threshold) | `SALES.SETTINGS.MANAGE` |
+| Overrides | `SALES.INVOICE.OVERRIDE` (change a line's price), `SALES.DISCOUNT.OVERRIDE` (approve a discount above the limit), `SALES.CREDIT.OVERRIDE` (exceed a credit limit), `SALES.BELOW_COST.OVERRIDE` (approve a below-cost sale) |
+| Printing documents (proforma, invoice, delivery note) | `DOCUMENT.RENDER` |
+| Sales Settings (approval, stock, below-cost, discount and till-shift policies) | `SALES.SETTINGS.MANAGE` |
 | Fiscal (EFD) receipts | `FISCAL.VIEW`, `FISCAL.MANAGE` |
-| POS (tills) | `POS.TILL.VIEW`, `POS.TILL.MANAGE` |
-| POS (cashier) | `POS.SESSION.OPEN`, `POS.SALE.CREATE`, `POS.SESSION.VIEW` |
+| POS (tills, offline selling) | `POS.TILL.VIEW`, `POS.TILL.MANAGE`, `POS.OFFLINE.REVIEW`, `POS.OFFLINE.SWITCH` |
+| POS (cashier) | `POS.SESSION.OPEN`, `POS.SALE.CREATE`, `POS.SESSION.VIEW`, `POS.EXPENSE.RECORD` |
 | POS (reverse / age override) | `POS.SALE.VOID`, `POS.SALE.AGE_OVERRIDE` |
-| POS (close/reconcile) | `POS.SESSION.CLOSE`, `POS.SESSION.RECONCILE` |
+| POS (close/reconcile, cash-up report) | `POS.SESSION.CLOSE`, `POS.SESSION.RECONCILE`, `POS.CASHUP.VIEW` |
+| Restaurant | `RESTAURANT.ORDER.MANAGE`, `RESTAURANT.ORDER.VOID`, `RESTAURANT.SETUP.MANAGE`, `RESTAURANT.KITCHEN.MANAGE` |
 
 Contact your administrator if an expected menu item is missing.
+
+**Working on the list screens.** If you belong to more than one company, each sales list shows a **Company** picker. On **Quotations**, **Sales Orders** and **Invoices** the create form opens inline at the top of the list; after **Create** the new draft appears in the list with a confirmation (for example *Quotation created*), and you click **Open** on its row to add lines. Date fields such as Quote Date and Order Date start empty and must be filled in.
 
 **Concurrent edits.** If two people act on the same document at the same time (for example, both try to confirm the same order), the second action is rejected with a conflict message asking you to reload and retry, rather than failing silently or corrupting the record. Reload the screen to see the current state and act again.
 
@@ -53,16 +58,19 @@ Navigate to **Sales › Quotations** (`/admin/quotations`).
 
 **When a quotation is used.** A quotation is raised when a customer asks "what will it cost me?" before committing to buy — typically by a salesperson or sales assistant. It sits at the very beginning of the O2C chain: nothing is reserved from stock and no financial entry is made; the quotation is a promise, not a transaction.
 
-**How a quotation flows.** A quotation begins as a `DRAFT` (editable, no number yet). When it is sent to the customer the status moves to `SENT` and a `QUOTE-####` number is assigned. If the customer accepts, the quotation moves to `ACCEPTED` and a Sales Order is created automatically with the same lines and agreed prices. If the customer declines it is `REJECTED`; if the validity date passes without a response the system marks it `EXPIRED` and acceptance is blocked.
+**How a quotation flows.** A quotation begins as a `DRAFT` (editable, no number yet). When it is sent to the customer the status moves to `SENT` and a `QUOTE-####` number is assigned. If the customer accepts, the quotation moves to `ACCEPTED` and a Sales Order is created automatically with the same lines and agreed prices. If the customer declines it is `REJECTED`. Once the Valid Until date has passed, the quotation can no longer be accepted.
+
+The **Quotations** list shows **Quote #** (*DRAFT* until sent), **Status**, **Quote Date**, **Valid Until** and **Total (gross)**, with an **Open** button per row.
 
 ### 1.1 Create a quotation
 
 1. Navigate to **Sales › Quotations** (`/admin/quotations`).
 2. Click **New Quotation**.
-3. In the **Customer** field, type part of the customer name or code and select the correct entry from the list. Do not type or paste a raw ID.
+3. In the **Customer** field, type part of the customer name or code and select the correct entry from the list (active customers only).
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — only the company's enabled currencies are offered, defaulting to the company default).
-5. Set **Quote Date** (today by default) and **Valid Until** (the date the offer expires; it must be on or after the Quote Date).
-6. Click **Create Quotation**. The quotation is saved in **DRAFT** status. A quote number is assigned later when you send it.
+5. Set **Quote Date** and **Valid Until** (the date the offer expires; it must be on or after the Quote Date).
+6. Optionally choose an **Agent (optional)** and add **Notes**.
+7. Click **Create Quotation**. The quotation is saved in **DRAFT** status. A quote number is assigned later when you send it.
 
 **Required fields:** Customer, Currency, Quote Date, Valid Until.
 
@@ -70,8 +78,8 @@ Navigate to **Sales › Quotations** (`/admin/quotations`).
 
 1. Open the draft quotation (navigate to **Sales › Quotations** then click the **Open** action on the quotation row, or go to `/admin/quotations/uid/{uid}`).
 2. In the **Lines** section, search for the product by name or code and select it.
-3. Choose a **Unit**, enter **Quantity**, optionally enter a **Price Override** (otherwise the list price is used), and optionally enter a **Disc %** (line discount as a percentage — the quotation and Sales Order line forms only offer a percentage discount, not a fixed amount).
-4. Click the **+** (Add line) button. The system calculates net amount, VAT, and gross from the configured price list.
+3. Choose a **Unit**, enter **Quantity**, optionally enter a **Price Override** (otherwise the list price is used), and optionally enter a **Disc %** (line discount as a percentage — the quotation and Sales Order line forms only offer a percentage discount, not a fixed amount). Under the price, a hint shows the price the system found for this customer and unit — *List price … — leave blank to use it.*, or *No price set for this product yet.*
+4. Click the **+** (Add line) button. The system calculates net amount, VAT, and gross.
 
 **Unit choices are product-scoped.** The **Unit** dropdown is disabled until a product is selected. Once a product is chosen, it lists only that product's configured units — its base unit plus any active bulk-pack units (e.g. CARTON) — never the full company unit list, and it defaults to the base unit. This applies to every line form in this chapter (quotations, sales orders, invoices, blanket orders, standing orders, and POS sales): you can no longer select a unit that is not configured on the product, which previously could silently mis-record the quantity.
 
@@ -89,16 +97,18 @@ When the quotation is ready to share with the customer:
 2. Click **Send to Customer**.
 3. The status changes to **SENT** and a quote number (QUOTE-####) is assigned.
 
-**Prerequisites:** The quotation must have at least one line, and the Valid Until date must be today or in the future.
+**Prerequisites:** The quotation must have at least one line (the button is disabled until it has), and the Valid Until date must be today or in the future (*Valid-until date is in the past; cannot send.*). Sending needs `SALES.QUOTE.SEND`.
+
+**Printing a proforma.** Once a quotation has been sent, holders of `DOCUMENT.RENDER` see **Print Proforma**, which downloads the quotation as a proforma invoice PDF (`proforma-QUOTE-####.pdf`) to send to the customer.
 
 ### 1.4 Accept or reject a quotation
 
 When the customer responds:
 
-- **Accept** — click **Accept & Convert to Order** on the sent quotation. A **Sales Order** is created automatically with the same lines and discounts. The quotation status changes to **ACCEPTED**. A success message shows the new order number and provides a link to it.
-- **Reject** — click **Reject**. The quotation status changes to **REJECTED**.
+- **Accept** — click **Accept & Convert to Order** on the sent quotation. A **Sales Order** is created automatically with the same lines and discounts, the quotation status changes to **ACCEPTED**, and you are taken straight to the new order (*Quotation accepted — Sales Order created*). The quotation then shows a **View Sales Order** link.
+- **Reject** — click **Reject** (there is no confirmation). The quotation status changes to **REJECTED**.
 
-Both actions require the `SALES.QUOTE.ACCEPT` permission. If the Valid Until date has already passed, the system prevents acceptance and marks the quotation **EXPIRED**.
+Both actions require the `SALES.QUOTE.ACCEPT` permission. If the Valid Until date has already passed, acceptance is refused with *This quotation expired on … and can no longer be accepted.* — the quotation stays **SENT**; reject it and raise a new one if the customer still wants to buy.
 
 ### 1.5 Quotation statuses
 
@@ -108,7 +118,6 @@ Both actions require the `SALES.QUOTE.ACCEPT` permission. If the Valid Until dat
 | SENT | Sent to customer; awaiting response |
 | ACCEPTED | Customer accepted; Sales Order created |
 | REJECTED | Customer declined |
-| EXPIRED | Valid Until date passed before acceptance |
 
 ---
 
@@ -122,7 +131,7 @@ Ali adds two lines:
 
 VAT at 18% is added by the system: total gross = TZS 1,535,400 + VAT. Ali clicks **Send to Customer** — status becomes SENT and the number **QUOTE-0047** is assigned.
 
-Karibu calls back and accepts. Ali clicks **Accept & Convert to Order**. The system creates **Sales Order SO-0112** from the same lines and shows a link. Quotation status is now ACCEPTED.
+Karibu calls back and accepts. Ali clicks **Accept & Convert to Order**. The system creates **Sales Order SO-0112** from the same lines and opens it. Quotation status is now ACCEPTED.
 
 ---
 
@@ -138,7 +147,9 @@ Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 
 **When a Sales Order is used.** A Sales Order is created either automatically (when a customer accepts a quotation) or directly (when a salesperson or order-desk clerk enters it fresh — for example, a telephone order that was never quoted). It is used any time a customer is buying goods that need to be fulfilled from stock and billed after delivery, as opposed to a walk-in cash purchase which goes straight to an invoice.
 
-**How a Sales Order flows.** An SO begins as `DRAFT` (a `SO-####` number is assigned immediately at creation, even in draft). When the user confirms it, the status moves to `CONFIRMED` and stock is soft-reserved. As deliveries are made against the order the status tracks fulfilment progress (`PARTIALLY_FULFILLED` → `FULFILLED`). As invoices are raised from those deliveries it tracks invoicing progress (`PARTIALLY_INVOICED` → `CLOSED`). Cancellation at any point releases the reservations.
+**How a Sales Order flows.** An SO begins as `DRAFT` (a `SO-####` number is assigned immediately at creation, even in draft). When the user confirms it, the status moves to `CONFIRMED` and stock is soft-reserved. As deliveries are made against the order the status tracks fulfilment progress (`PARTIALLY_FULFILLED` → `FULFILLED`). Once everything is delivered, invoicing moves it on to `PARTIALLY_INVOICED` and finally `CLOSED`. Cancelling an order before anything is fully delivered releases the reservations.
+
+**The Sales Orders list** shows **Order #**, **Customer**, **Agent**, **Branch**, **Status**, **Approval** (*Awaiting approval*, *Approved*, *Rejected*, …), **Order Date** and **Total (gross)**. The **Status** filter narrows the page currently shown; page through for more.
 
 **Stock reservation explained.** When you confirm a Sales Order, the system writes a "soft reservation" against each product in the warehouse. The reserved quantity is not physically moved — the goods stay on the shelf — but they are marked as committed. This means the available-to-promise figure (what can still be sold to other customers) is reduced immediately. A reservation prevents double-selling: two salespeople cannot independently confirm orders for the same last 10 units. When a delivery is made, the reservation for the delivered quantity is released (because the goods have actually left) and the on-hand balance is reduced instead.
 
@@ -155,21 +166,23 @@ Navigate to **Sales › Sales Orders** (`/admin/sales-orders`).
 
 ### 2.2 Add lines to a Sales Order
 
-The same process as adding quotation lines, including the **Unit** dropdown being scoped to the selected product's configured units (see section 1.2). Lines can only be added, edited, or removed while the order is in DRAFT.
+The same process as adding quotation lines, including the **Unit** dropdown being scoped to the selected product's configured units (see section 1.2). Lines can only be added, edited, or removed while the order is in DRAFT and not in the approval process.
+
+The lines table shows **Ordered**, **Reserved**, **Fulfilled**, **Invoiced** and **Open (backorder)** quantities for each line, with **Unit Price** (and its incl./excl. VAT tag), **Disc %**, **Net** and **Gross**. The order header shows the customer, sales agent, branch, currency, dates, notes and — for an order made from a quotation — a **From quotation** link.
 
 ### 2.3 Confirm an order
 
-Confirming an order reserves stock for every GOODS line.
+Confirming an order reserves the ordered quantity of every line.
 
 1. Open the draft order at **Sales › Sales Orders** then click the **Open** action on the order row (or navigate to `/admin/sales-orders/uid/{uid}`).
-2. The order must have at least one line.
-3. Click **Confirm Order**. A confirmation dialog appears explaining that confirming will attempt to reserve stock for all order lines, and that **if insufficient stock is available the order will confirm with a backorder**.
-4. Click **Yes, Confirm**.
-5. The status changes to **CONFIRMED** and each line shows its reserved quantity. Where stock was short, the line keeps an **Open (backorder)** quantity that you fulfil with a later delivery.
+2. The order must have at least one line (the button is disabled until it has).
+3. Click **Confirm Order**. The **Confirm Order?** dialog explains that confirming will reserve stock for all order lines, and that **if insufficient stock is available the order will confirm with a backorder**.
+4. Click **Yes, Confirm** (*Order confirmed — stock reserved*).
+5. The status changes to **CONFIRMED** and each line's **Reserved** quantity equals its ordered quantity. Confirming does not check stock on hand: shortages show up when you deliver. The **Open (backorder)** column shows what is still to be delivered.
 
 This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders but not confirm them will not see this button.
 
-**Approval threshold (large orders).** Your company can require manager approval for high-value orders. When the SO-approval workflow is switched on (see *Sales Settings* below) and the order's gross total is **at or above the configured threshold**, clicking **Confirm Order** does not confirm it. Instead the system automatically **submits the order for approval** and refuses the confirmation with *"This order exceeds the approval threshold and has been submitted for approval. It can be confirmed once it is approved."* The order stays in **DRAFT**, but it is now **awaiting approval**: its lines are frozen (you cannot add or remove lines while it is pending) and the **Confirm Order** button is disabled. An authorised approver acts on it from **Approvals › Approval Inbox**. Once it is **approved**, come back and click **Confirm Order** again to reserve stock as normal. If the approval is **rejected**, the order can no longer be confirmed — cancel it and raise a new one. Orders below the threshold (or when the workflow is off) confirm immediately with no approval step.
+**Approval threshold (large orders).** Your company can require manager approval for high-value orders. When the SO-approval workflow is switched on (see *Sales Settings* below) and the order's gross total is **at or above the configured threshold**, clicking **Confirm Order** does not confirm it. Instead the system automatically **submits the order for approval** and refuses the confirmation with *"This order exceeds the approval threshold and has been submitted for approval. It can be confirmed once it is approved."* The order stays in **DRAFT**, but it is now **awaiting approval** (*Awaiting approval before it can be confirmed.*): its lines are frozen and the **Confirm Order** button is disabled. An authorised approver acts on it from **Approvals › My Inbox**. Once it is **approved**, come back and click **Confirm Order** again to reserve stock as normal; the lines stay frozen. If the approval is **rejected** or withdrawn, the order shows *This order's approval is closed. Cancel it and raise a new order to submit for approval again.* Orders below the threshold (or when the workflow is off) confirm immediately with no approval step.
 
 > You can also submit a draft order for approval yourself, before trying to confirm it: an order that has never been submitted shows a **Submit for Approval** button on its detail page. This routes it through the same inbox.
 
@@ -181,7 +194,7 @@ This requires the `SALES.ORDER.CONFIRM` permission. A user who can create orders
 - the customer is on a **manual hold** (a credit-control staff override — the hold reason, if recorded, is shown in the message); or
 - the order's gross total, added to the customer's current outstanding balance, would **exceed their credit limit**.
 
-The block is overridable only by a user holding the `SALES.CREDIT.OVERRIDE` permission; every override is recorded in the audit trail. **Cash / walk-in customers are exempt** — this check never applies to them.
+The message begins *This sales order is on hold due to a credit control restriction.* and adds the reason — the account is stopped or on hold, a manual credit hold is active (with its reason), or confirming would exceed the credit limit. The block is overridable only by a user holding the `SALES.CREDIT.OVERRIDE` permission; every override is recorded in the audit trail. **Cash / walk-in customers are exempt** — this check never applies to them.
 
 **Credit limit and other currencies.** The limit is checked in your base currency. The customer's balance counts each foreign-currency item at the rate it was booked at; older foreign-currency items that have no reliable booked rate, and an order or invoice that is itself in a foreign currency, are converted at **today's** exchange rate (the latest rate on or before today). If a currency involved has **no exchange rate at all**, the system cannot work out the exposure, so it treats the limit as exceeded: the order or invoice is blocked with "The credit limit could not be checked because there is no exchange rate for USD. Add a USD rate under Currency rates and try again." A user with `SALES.CREDIT.OVERRIDE` can still proceed, and the audit record notes which rate was missing. The same rule applies to the credit-limit check at invoice finalisation.
 
@@ -192,9 +205,9 @@ The block is overridable only by a user holding the `SALES.CREDIT.OVERRIDE` perm
 Cancelling an order releases any stock reservations.
 
 1. Open the order.
-2. Click **Cancel Order**, enter an optional reason, and click **Confirm Cancel**.
+2. Click **Cancel Order**, enter a **Reason (optional)**, and click **Confirm Cancel** (or **Keep Order**).
 
-Cancellation is allowed from any status except **CANCELLED** and **CLOSED**.
+Cancellation is allowed only while the order is **DRAFT**, **CONFIRMED** or **PARTIALLY_FULFILLED**. Once everything has been delivered or anything invoiced, cancelling is refused — for example *Cannot cancel a FULFILLED order. All stock has been dispatched. Raise a sales return to reverse it.* The cancel reason is shown on the order.
 
 ### 2.5 Set or change the agent
 
@@ -223,11 +236,17 @@ The order's agent is updated immediately and a confirmation is shown.
 |---|---|
 | DRAFT | Being prepared; no stock reserved |
 | CONFIRMED | Stock reserved |
-| PARTIALLY_FULFILLED | At least one delivery made; not all lines delivered |
-| FULFILLED | All lines delivered |
-| PARTIALLY_INVOICED | Some deliveries invoiced |
-| CLOSED | Fully fulfilled and fully invoiced |
+| PARTIALLY_FULFILLED | At least one delivery made; not all lines delivered (stays here even if some deliveries are invoiced) |
+| FULFILLED | All lines delivered; nothing invoiced yet |
+| PARTIALLY_INVOICED | All lines delivered; some of it invoiced |
+| CLOSED | Fully delivered and fully invoiced |
 | CANCELLED | Cancelled; reservations released |
+
+Voiding a delivery's invoice, or cancelling its draft invoice, moves the order back to the matching status so the delivery can be invoiced again. (The status filter also lists *Invoiced*, which orders do not normally reach.)
+
+### 2.7 Deliveries from the order
+
+The bottom of a confirmed order lists its **Deliveries** (**Delivery #**, **Status**, **Delivery Date**, **Confirmed At**, **Open**) for users who can view deliveries, with a **New Delivery** button (needs `SALES.DELIVERY.CREATE`). See section 3.
 
 **Approval status is separate from order status.** When the approval workflow holds an order (see section 2.3), the order stays in **DRAFT** but its detail page shows an **awaiting approval** state; it is not a distinct row in the table above. The approval outcome (pending, approved, rejected) governs whether **Confirm Order** is available, while the statuses above track fulfilment and invoicing once the order is confirmed.
 
@@ -251,17 +270,17 @@ Navigate to **Sales › Deliveries** (`/admin/deliveries`).
 
 ### 3.1 Create a delivery
 
-Deliveries are always created from a Sales Order. The **Deliveries** list (`/admin/deliveries`) is view-only — it has no "New Delivery" button (its subtitle reads *"Create deliveries from the Sales Order detail screen."*).
+Deliveries are always created from a Sales Order. The **Deliveries** list (`/admin/deliveries`) is view-only — it has no "New Delivery" button (its subtitle reads *"View all deliveries. Create deliveries from the Sales Order detail screen."*). It shows **Delivery #**, **Sales Order** (a **View SO** link), **Status**, **Delivery Date** and **Confirmed At**.
 
-1. Open a **CONFIRMED** (or **PARTIALLY_FULFILLED**) Sales Order and click its **Create Delivery** action. This opens the delivery create form at `/admin/deliveries/create` for that order; there is no Sales Order picker — the order is carried through from the button.
-2. The form's **Lines to Deliver** table lists all open (undelivered) lines with the remaining (Open Qty) quantity pre-filled in **Deliver Qty**.
-3. Untick a line's **Include** checkbox to leave it out, or lower its **Deliver Qty** if you are making a **partial delivery** (backorder). The quantity you enter cannot exceed the open balance.
+1. Open a **CONFIRMED** (or **PARTIALLY_FULFILLED**) Sales Order and click its **Create Delivery** action (needs `SALES.DELIVERY.CREATE`). This opens the delivery form for that order.
+2. The form's **Lines to Deliver** table lists all open (undelivered) lines with the remaining **Open Qty (in unit)** pre-filled in **Deliver Qty (in unit)**. For a pack line the form shows how many base units one pack holds.
+3. Untick a line's **Include** checkbox to leave it out, or lower its **Deliver Qty** if you are making a **partial delivery** (backorder). The quantity cannot exceed the open balance.
 4. Set **Delivery Date** (required) and optionally enter **Notes**.
-5. Click **Create Delivery**.
+5. Click **Create Delivery**. The new delivery opens.
 
-Deliveries are created immediately in **CONFIRMED** status and cannot be undone. Each delivery is assigned a DELIVERY-#### number.
+Deliveries are created immediately in **CONFIRMED** status and cannot be undone. Each delivery is assigned a `DEL-####` number. The delivery page shows each line's **Delivered Qty**, **Invoiced Qty**, **Returned Qty** and **Issue Value** (the stock cost), a link back to the **Sales Order**, and any **Returns Against This Delivery**. **Print PDF** (needs `DOCUMENT.RENDER`) downloads the delivery note.
 
-**Not enough stock (negative-stock block).** Creating a delivery issues stock from the branch, so if your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), **Create Delivery** is refused when a delivered line would take that product's available stock below zero. You get a plain message naming the product with how much is available versus requested, and no delivery is created. Lower the **Deliver Qty** (which leaves the rest as a backorder — section 3.2), receive or transfer more stock in first, or have a user with `SALES.SETTINGS.MANAGE` turn the setting off to allow the shortfall. This is the same block described under section 4.4; when the setting is off (or Sales Settings has never been saved) deliveries are never blocked this way.
+**Not enough stock (negative-stock block).** Creating a delivery issues stock from the branch, so when your company blocks sales that would take stock negative (the default — see *Sales Settings* in chapter 01), **Create Delivery** is refused when a delivered line would take that product's available stock below zero. You get a plain message naming the product with how much is available versus requested, and no delivery is created. Lower the **Deliver Qty** (which leaves the rest as a backorder — section 3.2), receive or transfer more stock in first, or have a user with `SALES.SETTINGS.MANAGE` turn the setting off to allow the shortfall.
 
 ### 3.2 Partial delivery (backorder)
 
@@ -272,8 +291,8 @@ Enter a quantity less than the open balance on any line to create a partial deli
 Once goods are delivered, you can invoice the customer for that delivery:
 
 1. Open the delivery (navigate to **Sales › Deliveries** and click the **Open** action on the delivery row, or go to `/admin/deliveries/uid/{uid}`).
-2. Click **Invoice this Delivery**.
-3. A draft **Sales Invoice** is created automatically with the delivered lines. The doc discount from the source order is pro-rated to the delivered quantity.
+2. Click **Invoice this Delivery** (needs `SALES.DELIVERY.CREATE`).
+3. A draft **Sales Invoice** is created with the delivered lines (*Invoice created*), and the button is replaced by **View Invoice** — click it to open the draft. Line and order discounts from the source order are shared out in proportion to the delivered quantity, and pack lines are billed in their own unit.
 
 **Prerequisite: the source order must have an agent.** Invoice this Delivery reads the agent from the underlying Sales Order. If that order has no agent, the action is refused with *"The sales order has no agent assigned."* Open the Sales Order and use **Assign Agent** (section 2.5) to set one, then retry.
 
@@ -298,7 +317,7 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 
 **Why the origin matters.** If a `SALES_ORDER`-sourced invoice also issued stock, the Cost of Goods Sold would be posted twice: once at delivery and once at invoicing. The system prevents this by tracking the origin on every invoice and skipping the stock-issue step for SO-sourced invoices. A walk-in invoice (DIRECT) has no prior delivery, so it must issue stock at finalisation — that is the only point at which goods leave.
 
-**The VAT calculation.** All prices are entered tax-exclusive (net). The system calculates VAT per line using each product's VAT status (Standard 18%, Zero-Rated 0%, or Exempt 0%). The VAT rate is snapshotted onto the line at sale time so a later rate change cannot silently alter a historical invoice. The invoice prints a VAT analysis breaking down the tax by rate band.
+**The VAT calculation.** The system calculates VAT per line using each product's VAT status (Standard 18%, Zero-Rated 0%, or Exempt 0%) and the VAT stance of the price — VAT is either added on top of a net price or split out of a VAT-inclusive price (see *"incl. VAT" vs "excl. VAT"* in section 4.2). The VAT rate is snapshotted onto the line at sale time so a later rate change cannot silently alter a historical invoice. The invoice prints a VAT analysis breaking down the tax by rate band.
 
 **Price snapshots.** When you add a product line to an invoice (or any sales document), the system reads the current price from the price list and records it permanently on that line. If the price list is updated tomorrow, the historical invoice is unaffected — it retains the price that applied at sale time. This is called a "price snapshot" and is mandatory for any document that is legally an audit record.
 
@@ -308,12 +327,23 @@ Navigate to **Sales › Invoices** (`/admin/sales-invoices`).
 2. Click **New Invoice**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
-5. The **Agent** field is pre-filled with **your own agent** (if your user is linked to one) — leave it, clear it, or type another agent to change it. Optionally pick a **Route**. If you clear the Agent and leave it blank, the system still falls back to your linked agent and that agent's primary route on save; the pre-fill just makes the default visible up front. (Root/admin logins with no linked agent open with the box empty.)
-6. Click **Create Invoice**. A draft invoice is created.
+5. The **Sales agent** field (*Search agent…*) is pre-filled with **your own agent** if your user is linked to one — leave it, clear it, or choose another agent. As the hint says, *Leave blank to record the sale under your own sales agent.* A user with no linked agent gets one created automatically on their first sale; a root administrator's sales are credited to the company's **Counter** agent.
+6. Optionally pick a **Route (optional)**; the default, **— Auto from agent's primary route —**, uses the agent's primary route.
+7. Click **Create Invoice**. A draft invoice is created and listed (*Invoice created*); click **Open** on its row.
+
+**The Invoices list** has a **Search** box (*Customer, number…*), a **Status** filter (*All statuses*, *Draft*, *Finalised*, *Void*) and **From** / **To** dates (the date the invoice was created). It shows **Number**, **Customer**, **Agent**, **Status**, **Currency**, **Gross Total** and **Created**.
+
+**The invoice page** shows the customer, agent, route, notes, who finalised it and when, and — once posted — a **GL Entry › View Journal** link to its accounting entry.
 
 ### 4.2 Add lines to an invoice
 
-Same process as adding lines to a quotation or order, including the product-scoped **Unit** dropdown (see section 1.2). Lines can only be added, edited, or removed while the invoice is in DRAFT.
+The invoice line form has **Product**, **Unit** (only the product's own units — see section 1.2), **Quantity**, **Price Override**, **Disc. amount** and **Disc. %**. Under the price, a hint shows the price found for this customer and unit (*List price … — leave blank to use it.*); if there is none, it reads *No price set for this product yet — enter a unit price to bill it.* Click **Add Line**. Lines can only be added, changed or removed while the invoice is in DRAFT.
+
+**Changing a line.** On a draft, click the pencil on a line (*Change quantity or discount*) to change its quantity or discount in place. Type the discount as an amount or as a percentage such as `10%`. Quantities on an invoice raised from a delivery follow the delivery and cannot be changed here.
+
+**Discounts above the company limit.** If Sales Settings limits discounts and a line's discount is over the limit, the line is refused and an **Ask a supervisor** button appears. A supervisor holding `SALES.DISCOUNT.OVERRIDE` signs in in the **Supervisor approval for this discount** window; the line is then added and shows *Discount approved by \<name\>*. Under **Never allow**, a discount over the limit is simply refused; under **Allow, but record it**, it goes through and is recorded for review.
+
+The lines table shows each line's VAT status and rate (for example *STANDARD 18%*) and marks an overridden price with an *Overridden* tag.
 
 **"incl. VAT" vs "excl. VAT" on a line.** Each line shows a small tag beside its **Unit Price** reading either **incl. VAT** or **excl. VAT**. It tells you how the unit price relates to VAT, and it simply reflects the VAT stance of the price list the line's price came from (set once per list — see *Price Lists › VAT-inclusive vs exclusive pricing* in chapter 02, Master Data):
 
@@ -350,45 +380,55 @@ The override is applied to that line only, and the line's net, VAT, and gross re
 
 Payments can be recorded on a draft invoice before it is finalised.
 
-1. In the **Record Payment** panel (shown on a DRAFT invoice).
-2. Choose the **Tender type**: Cash or Mobile Money.
-3. Enter the **Amount**, and optionally a **Reference** (for example, the M-Pesa transaction reference for Mobile Money).
-4. Click **Record**.
+1. In the **Record Payment** panel (shown on a DRAFT invoice), choose the **Tender type**: Cash or Mobile Money.
+2. Enter the **Amount**, and optionally a **Reference** (for example, the mobile-money transaction reference).
+3. Click **Record**.
 
-Recording payments requires the `SALES.INVOICE.SETTLE` permission (separate from the permission to create lines).
+Recording payments requires the `SALES.INVOICE.SETTLE` permission. The panel shows **Gross**, **Paid** and **Remaining**, and lists each payment with its **Tender**, **Amount**, **Change**, **Reference** and **Received** time. A payment recorded by mistake can be removed with its delete button while the invoice is a draft.
 
-For **cash / walk-in customers** the total payments must equal the invoice gross before you can finalise. Credit customers may have a balance that becomes an open AR item.
+For **cash / walk-in customers** the payments must **cover** the invoice gross before you can finalise. Cash may be more than the total — the difference is recorded as **Change**. Mobile-money payments cannot be more than what is owed. Credit customers may leave a balance that becomes an open AR item.
 
 ### 4.4 Finalise an invoice
 
 1. Open the draft invoice.
-2. Click **Finalise**.
+2. Click **Finalise** (needs `SALES.INVOICE.CREATE`; disabled until the invoice has lines).
 3. The status changes to **FINALISED** and an invoice number is assigned.
+
+Once finalised (or voided), **Print PDF** (needs `DOCUMENT.RENDER`) downloads the invoice as `invoice-INV-####.pdf`.
 
 After finalisation:
 - For DIRECT invoices, stock is issued from the branch.
 - For invoices from a delivery, revenue is posted (stock was already issued at delivery).
 - For credit customers, an AR open item is created for any unpaid balance.
 
-**Paid-in-full rule:** walk-in (cash) customers must be fully paid before finalisation is allowed.
+**Paid-in-full rule:** walk-in (cash) customers must be fully paid before finalisation is allowed. Otherwise you see *The total payments received do not cover the invoice amount. Required: …, received: ….*
 
 **Rounding follows the invoice's currency.** Line amounts, VAT and totals are rounded to the decimal places of the invoice's own currency: whole shillings for a TZS invoice, cents for a USD, EUR or KES invoice (18% VAT on USD 12.00 is USD 2.16). The same applies to quotations, sales orders and POS sales. The accounting entry is always posted in the base currency, each amount converted at the invoice's exchange rate.
 
-**Credit limit:** if a credit customer's outstanding balance plus this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission. (This is a credit-limit check at finalisation. For SO-sourced sales, the broader credit-control hard block — covering credit status, manual hold, and the limit — already runs earlier, at Sales Order confirm; see section 2.3.)
+**Credit limit:** if a credit customer's outstanding balance plus the **unpaid part** of this invoice would exceed their credit limit, finalisation is blocked unless you hold the `SALES.CREDIT.OVERRIDE` permission. A fully paid invoice is never blocked. The message shows the figures, for example *This customer's credit limit is TZS 5,000,000. With this invoice they would owe TZS 5,400,000, which is TZS 400,000 over the limit. Take a payment of at least TZS 400,000 first, or ask someone allowed to override the credit limit.* (For SO-sourced sales, the broader credit-control block — covering credit status, manual hold, and the limit — already runs earlier, at Sales Order confirm; see section 2.3.)
 
-**Not enough stock (negative-stock block).** If your company has turned on **Block sales that would take stock negative** (in *Sales Settings*), finalising a walk-in **DIRECT** or **POS** invoice is refused when a line would take that product's available stock below zero. The refusal is a plain message naming the product with how much is available versus requested — for example *"Not enough stock of Sukari 1kg to complete this sale — 3 available, 5 requested. To allow this, enable backorder in Sales Settings."* Nothing is posted; the invoice stays in DRAFT. To clear it you can lower the quantity, receive or transfer more stock in first, or — if selling ahead of stock is deliberate — have a user with `SALES.SETTINGS.MANAGE` turn the setting off, which lets the sale go through and stock go negative (backorder). When the setting is **off**, or the company has never saved any Sales Settings, sales are never blocked this way and stock is allowed to go negative. Invoices raised from a delivery are not checked here (their stock was issued and checked at the delivery — see below), and **the same block applies when you create a Delivery** against a sales order (section 3.1).
+**Not enough stock (negative-stock block).** When your company blocks sales that would take stock negative (the default — see *Sales Settings* in chapter 01), finalising a walk-in **DIRECT** or **POS** invoice is refused when a line would take that product's available stock below zero. The message names the product, for example *"Not enough stock of Sugar 1kg to complete this sale — 3 available, 5 requested. Ask a supervisor to enable backorder if this should be allowed."* (quantities are in base units). Nothing is posted; the invoice stays in DRAFT. To clear it you can lower the quantity, receive or transfer more stock in first, or — if selling ahead of stock is deliberate — have a user with `SALES.SETTINGS.MANAGE` turn the setting off, which lets the sale go through and stock go negative (backorder). Invoices raised from a delivery are not checked here (their stock was checked at the delivery), and **the same block applies when you create a Delivery** (section 3.1).
+
+**Selling at or below cost.** If Sales Settings has a below-cost policy of **Needs supervisor approval** or **Never allow**, finalising a walk-in invoice that contains an item priced at or below its cost is refused (*… priced at or below cost, so this sale cannot be completed. Raise the price, or ask a supervisor to review the pricing policy.*). Supervisor approval for a below-cost sale is given on the till; on this screen, raise the price.
+
+#### Cancelling a draft invoice
+
+A draft invoice that is not needed can be discarded. Click **Cancel draft** (needs `SALES.INVOICE.CREATE`) and confirm *Cancel this draft invoice? Its lines and any tenders on it are discarded.* The draft is removed (the action is recorded in the audit trail) and you return to the list (*Draft cancelled*). A draft raised from a delivery gives its quantities back to the delivery, so it can be invoiced again. A finalised invoice cannot be cancelled — void it instead.
 
 ### 4.5 Void an invoice
 
-**What voiding means.** Voiding a finalised invoice reverses its financial effect: the revenue is reversed, the AR item is cancelled, and VAT is adjusted. The original invoice number is retained on the record (voiding is not deletion — the document remains as evidence that the transaction happened and was corrected). A reversing credit note is raised automatically. Use voiding only when an invoice was issued in error; for goods returned by the customer use a Sales Return (section 5) instead.
-
-A finalised invoice can be voided if it was issued in error:
+**What voiding means.** Voiding a finalised invoice reverses its financial effect: the revenue and VAT are reversed and stock issued by the invoice comes back. For a credit customer, a credit note cancels what they owed. The original invoice number is retained on the record (voiding is not deletion — the document remains as evidence that the transaction happened and was corrected). Use voiding only when an invoice was issued in error; for goods returned by the customer use a Sales Return (section 5) instead.
 
 1. Open the finalised invoice (navigate to **Sales › Invoices**, open it from its row action, or go to `/admin/sales-invoices/uid/{uid}`).
-2. Click **Void Invoice**, enter a mandatory reason, and confirm.
-3. The invoice status changes to **VOID** and a reversing credit note is posted.
+2. Click **Void Invoice** — or **Void & refund** when payments were taken on the invoice. For a refund the form warns: *The whole sale is cancelled and every payment taken on it is refunded to the customer. Stock comes back and the sale is reversed in the ledger. This cannot be undone.*
+3. Enter the **Reason** (required) and click **Confirm Void** (or **Confirm void & refund**).
+4. The invoice status changes to **VOID**.
 
-The original invoice number is retained on the voided record. Voiding is not the same as deletion.
+Voiding needs `SALES.INVOICE.VOID`. Voiding an invoice raised from a delivery frees the delivered quantities so they can be invoiced again. A void is refused when:
+
+- customer receipts have already been allocated to the invoice — raise a credit note instead;
+- the invoice is a till sale whose session is still open — reverse it on the till instead;
+- items of the sale were already returned at the till — return the remaining items on the till instead.
 
 ### 4.6 Issue a fiscal (EFD) receipt
 
@@ -412,6 +452,7 @@ The original invoice number is retained on the voided record. Voiding is not the
 | ISSUED | Success — fiscal number and verification URL are shown. This is final; a receipt is never re-issued. |
 | FAILED | The device rejected or could not be reached; the reason is shown. Fix the cause and click **Retry EFD receipt**. |
 | NOT_CONFIGURED | No EFD/VFD device is set up for this company yet — the panel says so. Ask your administrator to configure the fiscal provider, then retry. |
+| VOID | The fiscal record was cancelled; no button is offered. |
 
 **Gotchas.**
 - The receipt can only be issued **after** the invoice is finalised — there is no fiscal button on a DRAFT invoice.
@@ -422,9 +463,9 @@ The original invoice number is retained on the voided record. Voiding is not the
 
 | Status | Meaning |
 |---|---|
-| DRAFT | Being prepared; lines and payments editable |
+| DRAFT | Being prepared; lines and payments editable; can be cancelled |
 | FINALISED | Issued; posted to AR and GL; immutable |
-| VOID | Reversed; credit note posted; number retained |
+| VOID | Reversed; number retained |
 
 ---
 
@@ -434,9 +475,9 @@ Continuing from section 1's example, Sales Order **SO-0112** was created from th
 
 1. **Confirm SO:** Ali opens **Sales › Sales Orders** (`/admin/sales-orders`), clicks the **Open** action on the SO-0112 row, clicks **Confirm Order**, and clicks **Yes, Confirm** in the dialog. Karibu is within its credit limit and not on hold, so the credit-control check passes. Status becomes CONFIRMED; stock reserved — 50 cartons Unga + 30 cartons Mafuta.
 
-2. **Deliver:** From the confirmed **SO-0112** detail page, Ali clicks **Create Delivery**. The delivery form opens with both lines pre-filled at their full open quantity. He keeps both lines included (50 + 30 cartons), sets Delivery Date 2026-06-15, and clicks **Create Delivery**. Delivery **DELIVERY-0089** is created; SO status → FULFILLED.
+2. **Deliver:** From the confirmed **SO-0112** detail page, Ali clicks **Create Delivery**. The delivery form opens with both lines pre-filled at their full open quantity. He keeps both lines included (50 + 30 cartons), sets Delivery Date 2026-06-15, and clicks **Create Delivery**. Delivery **DEL-0089** is created; SO status → FULFILLED.
 
-3. **Invoice from delivery:** Ali opens DELIVERY-0089 at `/admin/deliveries/uid/{uid}` and clicks **Invoice this Delivery**. A DRAFT invoice is created. Since Karibu is a CREDIT_ACCOUNT customer, Ali clicks **Finalise** without adding a payment — the unpaid balance of TZS 1,535,400 (plus 18% VAT = TZS 1,811,772 gross) becomes an open AR item. Invoice number **INV-0203** is assigned.
+3. **Invoice from delivery:** Ali opens DEL-0089 at `/admin/deliveries/uid/{uid}` and clicks **Invoice this Delivery**. A DRAFT invoice is created. Since Karibu is a CREDIT_ACCOUNT customer, Ali clicks **Finalise** without adding a payment — the unpaid balance of TZS 1,535,400 (plus 18% VAT = TZS 1,811,772 gross) becomes an open AR item. Invoice number **INV-0203** is assigned.
 
 **Example — Walk-in direct invoice (cash customer):**
 
@@ -452,7 +493,7 @@ Navigate to **Sales › Sales Returns** (`/admin/sales-returns`).
 
 **What a Sales Return is.** A Sales Return (also called an RMA — Return Merchandise Authorisation) is the document that records goods coming back from the customer. It is always tied to a specific delivery so the system knows exactly which shipment is being reversed.
 
-**Why Sales Returns exist.** When a customer returns goods — because they are damaged, wrong, or surplus — several things need to happen simultaneously: the stock must come back into the warehouse, the customer's account must be credited (so they do not owe money for goods they no longer have), the revenue must be reversed, and the cost of those goods must be put back. Doing these four things as separate manual steps would be error-prone and would leave the accounts temporarily out of balance. A Sales Return handles all four atomically: on creation, stock is returned to the branch, a credit note is raised automatically, revenue and VAT are reversed, and (for a credit customer) the AR open item is reduced.
+**Why Sales Returns exist.** When a customer returns goods — because they are damaged, wrong, or surplus — several things need to happen simultaneously: the stock must come back into the warehouse, the customer's account must be credited (so they do not owe money for goods they no longer have), the revenue must be reversed, and the cost of those goods must be put back. Doing these four things as separate manual steps would be error-prone and would leave the accounts temporarily out of balance. A Sales Return handles all four together: on creation, stock is returned to the branch, revenue and VAT are reversed, and a credit note is raised automatically on the customer's account. The credit note is not tied to a particular invoice — it sits on the account as credit, which your accountant applies to an open invoice or refunds (Finance chapter).
 
 **When a Sales Return is used.** A Sales Return is created by a warehouse clerk or sales supervisor when goods arrive back from the customer. It can only reference a previous delivery — you cannot return more than was delivered on that delivery, and returns against the same delivery can be processed in multiple batches up to the full delivered quantity.
 
@@ -462,17 +503,17 @@ Navigate to **Sales › Sales Returns** (`/admin/sales-returns`).
 
 ### 5.1 Create a return
 
-The **Sales Returns** list (`/admin/sales-returns`) is view-only — it has no "New Return" button (its subtitle reads *"Create a return from the Delivery detail screen."*). There are two ways to reach the create form:
+The **Sales Returns** list (`/admin/sales-returns`) is view-only — it has no "New Return" button (its subtitle reads *"Manage sales returns and RMAs. Create a return from the Delivery detail screen."*). It shows **Return #**, **Delivery**, **Sales Order**, **Status**, **Return Date** and **Total (gross)**. There are two ways to reach the create form:
 
-- Open the relevant CONFIRMED delivery and click **Create Return** (the delivery is pre-loaded), or
-- Go directly to `/admin/sales-returns/create` and select the **Delivery** from the picker, then click **Load** to pull in its lines.
+- Open the relevant CONFIRMED delivery and click **Create Return** (needs `SALES.RETURN.CREATE`; the delivery is pre-loaded), or
+- Go directly to `/admin/sales-returns/create`, select the **Delivery** from the picker, then click **Load** to pull in its lines.
 
-1. With the delivery loaded, the form shows the delivered lines with **Delivered**, **Already Returned**, and **Returnable** columns.
-2. Enter the **Return Qty** for each line being returned (cannot exceed the **Returnable** balance — delivered minus what has already been returned).
-3. Set the **Return Date** and optionally enter a **Reason**.
-4. Click **Confirm Return**.
+1. With the delivery loaded, the form shows the delivered lines with **Delivered (base units)**, **Already Returned (base units)** and **Returnable (base units)**.
+2. Enter the **Return Qty (base units)** for each line being returned. Quantities are entered in base units even for pack lines — for a carton of 12, returning one carton means entering `12`. The quantity cannot exceed the returnable balance. Lines already fully returned read *Fully returned*.
+3. Check the **Return Date** (today by default) and optionally enter a **Reason**.
+4. Click **Confirm Return**. The new return opens.
 
-Returns are created directly in **CONFIRMED** status. Stock is returned to the branch. A credit note is raised automatically (pro-rated to the returned quantity).
+Returns are created directly in **CONFIRMED** status. Stock is returned to the branch and a credit note is raised automatically. The return page shows the delivery and sales order it came from, the returned lines with **Net**, **VAT** and **Gross**, and a banner *Credit note raised: View Credit Note* linking to the credit note in Receivables.
 
 **How the credit is worked out.** The credit note gives back the same share of the order line's net and VAT as the share of goods returned — returning 2 of 5 credits 2/5 of what the customer was charged for that line, discounts and VAT-inclusive prices included. Amounts are rounded in the order's currency (whole shillings for TZS, cents for USD).
 
@@ -484,7 +525,7 @@ Each return reduces the returnable balance for that delivery line. You can proce
 
 **Example — Partial sales return (Karibu Supermarkets):**
 
-Two days after delivery, Karibu reports 5 cartons of Mafuta ya Kupikia arrived leaking. The stock controller opens delivery **DELIVERY-0089** and clicks **Create Return** (which pre-loads that delivery). She enters **Return Qty = 5** on the Mafuta line, sets return date **2026-06-17**, reason **"Damaged packaging — leaking oil"**, and clicks **Confirm Return**. Return **RET-0031** is created in CONFIRMED status. Five cartons of Mafuta stock are returned to the warehouse and a credit note for TZS 104,500 (5 × TZS 20,900) plus VAT is automatically raised against INV-0203.
+Two days after delivery, Karibu reports 5 cartons of Mafuta ya Kupikia arrived leaking. The stock controller opens delivery **DEL-0089** and clicks **Create Return** (which pre-loads that delivery). She enters **Return Qty (base units) = 60** on the Mafuta line (5 cartons × 12 bottles), sets return date **2026-06-17**, reason **"Damaged packaging — leaking oil"**, and clicks **Confirm Return**. Return **RET-0031** is created in CONFIRMED status. Five cartons of Mafuta stock are returned to the warehouse and a credit note for TZS 104,500 (5 × TZS 20,900) plus VAT is raised on Karibu's account, ready for the accountant to apply against INV-0203.
 
 ---
 
@@ -500,7 +541,9 @@ Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
 
 **When a Blanket Order is used.** A blanket order is created by a sales manager when a long-term supply contract is signed with a customer. Once active, the sales team creates call-off Sales Orders against it whenever the customer exercises part of their commitment.
 
-**How a Blanket Order flows.** A blanket order is `ACTIVE` from creation. Call-offs (draw-downs) produce ordinary Sales Orders that flow through the normal O2C chain (confirm → deliver → invoice). The blanket itself tracks the remaining committed quantity on each product line. When all quantities are fully drawn, the validity window expires, or a manager closes it manually, the blanket becomes `CANCELLED` (no further releases). The blanket document itself posts no stock and no GL entries — only the resulting Sales Orders do.
+**How a Blanket Order flows.** A blanket order is `ACTIVE` from creation. Call-offs (draw-downs) produce ordinary Sales Orders that flow through the normal O2C chain (confirm → deliver → invoice). The blanket itself tracks the remaining committed quantity on each product line. Once every line is fully drawn, nothing more can be drawn; after the **Valid To** date a draw is refused (*This blanket order has expired.*). The status stays `ACTIVE` in both cases — it changes only when a manager cancels the agreement (`CANCELLED`). The blanket document itself posts no stock and no GL entries — only the resulting Sales Orders do.
+
+The list shows **Order #** (`BO-####`), **Status**, **Valid From**, **Valid To**, **Currency**, **Committed** and **Drawn**. The blanket page shows the agreement's dates, committed and drawn amounts, notes, and each line's **Committed**, **Drawn**, **Remaining** and **Unit Price**.
 
 ### 6.1 Create a blanket order
 
@@ -508,34 +551,33 @@ Navigate to **Sales › Blanket Orders** (`/admin/blanket-orders`).
 2. Select the **Company** and **Branch**.
 3. Pick the **Customer** by name.
 4. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default), then set **Valid From** and **Valid To** dates.
-5. Add one or more **Lines**: for each, pick the product by name, choose a unit (limited to that product's configured units — see section 1.2), and enter the committed quantity and unit price.
+5. In **Agreement Lines**, add one or more lines: for each, pick the product by name, choose a unit (limited to that product's configured units — see section 1.2), enter the **Committed Qty** and **Unit Price**, and click **Add**.
 6. Optionally add notes (up to 500 characters).
-7. Click **Create Blanket Order**.
+7. Click **Create Blanket Order**. The new agreement opens.
 
-The blanket order is created with status **ACTIVE** and assigned an order number.
+The blanket order is created with status **ACTIVE** and assigned a `BO-####` number. **Valid From** must be before **Valid To**, and at least one line is needed.
 
 ### 6.2 Create a release (draw-down)
 
 When the customer calls off part of their commitment:
 
 1. Open the blanket order (navigate to `/admin/blanket-orders/uid/{uid}`).
-2. Click **Draw Release** (visible only when the blanket is ACTIVE and you hold the manage permission).
-3. Enter the **Branch ID** for the delivery branch.
-4. Pick the **Agent** by name.
-5. For each line you want to include, tick it and enter the **Draw Quantity** (cannot exceed the remaining committed quantity).
-6. Click **Create Release**.
+2. Click **Draw Release** (visible while the blanket is ACTIVE, to holders of `SALES.BLANKET.MANAGE`).
+3. The form asks for a **Branch ID** and an **Agent**; fill both in (the form requires them).
+4. The lines with quantity remaining are listed, ticked, with the full **Remaining Qty** as the **Draw Qty**. Untick lines you do not want and lower the **Draw Qty** as needed (it cannot exceed what remains).
+5. Click **Create Release**. The banner *Release created. Open sales order* links to the new order.
 
-A **Sales Order** is created and linked to the blanket. The committed remaining quantity on each drawn line decreases.
+A **DRAFT Sales Order** is created at the blanket's unit prices and linked to the blanket; the remaining quantity on each drawn line decreases. The order is dated today, raised at the branch you are working in, and credited to your own sales agent — whatever was typed in the Branch ID and Agent boxes. Open it, check the branch and agent (use **Assign Agent** to change the agent), then confirm it as usual.
 
 ### 6.3 Cancel a blanket order
 
-Open the blanket order and click **Cancel** then confirm. The status changes to **CANCELLED**. Previously generated Sales Orders from this blanket are unaffected.
+Open the blanket order and click **Cancel** (needs `SALES.BLANKET.MANAGE`). The prompt *Cancel this blanket order?* explains that *Any sales orders already drawn will not be affected.* Click **Confirm Cancel** (or **Keep Agreement**). The status changes to **CANCELLED**.
 
 ### 6.4 Blanket order statuses
 
 | Status | Meaning |
 |---|---|
-| ACTIVE | Agreement in force; releases can be drawn |
+| ACTIVE | Agreement in force; releases can be drawn while quantity remains and the agreement has not expired |
 | CANCELLED | Cancelled; no further releases |
 
 ---
@@ -556,33 +598,41 @@ Navigate to **Sales › Standing Orders** (`/admin/standing-orders`).
 
 **Why Standing Orders exist.** Some customers receive the same goods on the same schedule every week or month — a hotel that takes 50 loaves of bread every Monday, or a distributor that replenishes the same five products on the first of each month. Without standing orders, the sales desk must manually create the same Sales Order repeatedly, risking forgetting, using the wrong quantities, or applying the wrong prices. A standing order removes the repetitive work and ensures consistent, timely order creation without manual intervention.
 
-**When a Standing Order is used.** Standing orders are set up by a sales manager or sales administrator for customers with regular, predictable buying patterns. Once active, the cashier or sales desk does not need to do anything — orders appear automatically. The standing order can be paused if supply is interrupted and resumed when normal service resumes.
+**When a Standing Order is used.** Standing orders are set up by a sales manager or sales administrator for customers with regular, predictable buying patterns. Once active, orders appear automatically as drafts for the sales desk to check and confirm. The standing order can be paused if supply is interrupted and resumed when normal service resumes.
 
-**How a Standing Order flows.** A standing order is `ACTIVE` from creation. The system runs a nightly check and generates a new Sales Order (in `DRAFT` status — a human must confirm it deliberately) for every active standing order whose next run date is today or earlier. After generation, the next run date advances by one period. A standing order can be `PAUSED` (no generation while paused) and `RESUMED`, or permanently `CANCELLED`. The generated Sales Orders flow through the normal O2C chain.
+**How a Standing Order flows.** A standing order is `ACTIVE` from creation. The system runs a nightly check and generates a new Sales Order (in `DRAFT` status — a human must confirm it deliberately) for every active standing order whose next run date is today or earlier. After generation, the next run date advances by one period (only one order is generated per night, even if several periods were missed). A standing order can be `PAUSED` (no generation while paused) and `RESUMED`, or permanently `CANCELLED`. After its **End Date** it stops generating, although its status still reads ACTIVE. The generated Sales Orders flow through the normal O2C chain.
+
+The list shows **Order #** (`STD-####`), **Frequency**, **Status**, **Start Date**, **Next Run** and **Currency**.
 
 ### 7.1 Create a standing order
 
 1. Navigate to **Sales › Standing Orders** (`/admin/standing-orders`) and click **New Standing Order**, or go directly to `/admin/standing-orders/create`.
-2. Pick the **Branch** and **Customer**, then choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
-3. Choose a **Frequency**: Daily, Weekly, Bi-Weekly, or Monthly.
-4. Set a **Start Date**. Optionally set an **End Date**; leave it blank for open-ended.
-5. Add lines: pick each product by name; the unit choices are limited to that product's configured units (see section 1.2); enter quantity and unit price.
+2. Pick the **Company**, **Branch** and **Customer**, then choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
+3. Choose a **Frequency**: Daily, Weekly, Bi-Weekly, or Monthly (Monthly by default).
+4. Set a **Start Date**. Optionally set an **End Date**; leave it blank for open-ended. Optionally add **Notes**.
+5. Add lines: pick each product by name; the unit choices are limited to that product's configured units (see section 1.2); enter **Qty** and **Unit Price**. Leave **Qty (Base)** blank.
 6. Click **Create Standing Order**.
 
-The standing order is created with status **ACTIVE** and the first `Next Run Date` is set.
+The standing order is created with status **ACTIVE** and the first **Next Run** date is set.
+
+> **Note — the Qty (Base) column.** The generated order uses the figure in **Qty (Base)** as its quantity, in the line's unit. Leaving it blank makes it equal to **Qty**, which is what you want. If you type a base-unit count there for a pack line (for example `24` for 2 cartons of 12), the generated order would ask for 24 cartons.
+
+> **Note — agents on generated orders.** Orders generated overnight have no sales agent. Open each one and use **Assign Agent** (section 2.5) before it is invoiced. An order generated with **Trigger Now** carries your own agent.
 
 ### 7.2 Pause and resume
+
+The standing order page shows its currency, frequency, start and end dates, **Next Run**, notes and line items. Its action buttons need `SALES.STANDING.MANAGE`.
 
 - **Pause** — open the standing order (navigate to `/admin/standing-orders/uid/{uid}`) and click **Pause**. No Sales Orders are generated while the order is paused.
 - **Resume** — click **Resume** to make it active again.
 
 ### 7.3 Trigger a run manually
 
-Click **Trigger Now** to generate a Sales Order immediately (without waiting for the scheduled run). The next run date advances by the configured frequency.
+While the standing order is ACTIVE, click **Trigger Now** to generate a Sales Order immediately (*Order generated — check Sales Orders for the new order*). The next run date moves on by one period from the date it already had. Find the new draft in **Sales › Sales Orders**.
 
 ### 7.4 Cancel a standing order
 
-Click **Cancel** to stop the standing order permanently. The status changes to **CANCELLED** and no further Sales Orders are generated.
+Click **Cancel** to stop the standing order permanently — it takes effect at once, without a confirmation. The status changes to **CANCELLED** and no further Sales Orders are generated.
 
 ### 7.5 Automatic generation
 
@@ -608,29 +658,26 @@ Hoteli ya Pwani orders 50 loaves of bread every Monday. The sales rep opens **Sa
 
 Navigate to **Sales › Pricing Rules** (`/admin/pricing-rules`).
 
-**What pricing rules are.** Pricing rules are pre-configured exceptions to the standard price list. Without any rules, every customer is charged the standard list price for a product. Rules let the business offer lower prices automatically under specific conditions — for example, a lower price per bag when a customer orders more than 100 bags at once (a quantity break), or a privately negotiated price that applies only to one specific customer.
+**What pricing rules are.** Pricing rules are pre-configured exceptions to the standard price list: a privately negotiated price that applies only to one customer (a **customer price**), and a lower price for bigger quantities (a **price tier**).
 
-**Why pricing rules exist.** Manual price overrides by sales staff are error-prone and untraceable. A salesperson might give a loyal customer a discount one day and forget it the next, or apply the wrong discount tier. Pricing rules encode the business's commercial agreements in the system so that the correct price is applied automatically and consistently every time, without needing the salesperson to remember or calculate. They also create an audit trail: when a line is priced, the system records which rule was applied (standard list, a tier, or a customer-specific price) as a diagnostic field on the line.
+**Why pricing rules exist.** Manual price overrides by sales staff are error-prone and hard to trace. A salesperson might give a loyal customer a special price one day and forget it the next. Customer prices record the business's agreements in the system so that the correct price is applied automatically and consistently every time.
 
-**How pricing rules resolve.** When a product line is added to any sales document (quotation, order, invoice, or POS sale), the system runs a single price-resolution check in the following priority order, applying the first rule that matches:
+> **Note — price tiers are recorded but not yet applied.** The **Price Tiers** tab reads: *Not applied to sales yet. Quantity-break tiers are saved here, but invoices, orders, quotations and the till do not use them yet. Customer prices (next tab) and each customer's default price list are applied.* Until this changes, give volume discounts with a line discount or a customer price.
 
-1. **Customer price** (highest priority) — a contract price for this exact customer and product
-2. **Active promotion** — a time-limited offer matching the product or product category
-3. **Price tier** — a volume-break price if the ordered quantity meets the tier's minimum
-4. **Standard list price** — the product's price on the customer's assigned price list
-5. **No price found** — the line is rejected; the product cannot be sold without a price
+**How a line is priced.** When a product line is added to any sales document (quotation, order, invoice, or POS sale), the system uses the first price it finds in this order:
 
-Once the price is resolved, the standard totals calculation (net, VAT, gross) runs unchanged — pricing rules only affect the unit price input.
+1. **Customer price** — a contract price for this exact customer and product, when it is active, valid today and in the document's currency;
+2. **The customer's own price list**, where one has been set up for the customer;
+3. **Price here** — the product's own price at the branch making the sale (see *Different menus and prices per branch* in chapter 02);
+4. **The company's Default price list**.
+
+If no price is found, the line is refused unless you type a **Price Override** yourself (*This product has no price yet — no price list is configured for this company. Set up a price list, or enter a unit price on the line.*). Once the price is found, the normal totals calculation (net, VAT, gross) runs unchanged.
 
 **VAT stance travels with the resolved price.** Whichever source wins above, the resolved price also carries the VAT-inclusive or -exclusive stance of the price list it came from. That stance is what shows as the **incl. VAT** / **excl. VAT** tag on the sales line (section 4.2): it decides whether VAT is split out of the price or added on top, but it does not change which price wins the resolution. See *Price Lists › VAT-inclusive vs exclusive pricing* in chapter 02 for how the stance is set on a list.
 
 ### 8.1 Price tiers (quantity breaks)
 
-**What a price tier is.** A price tier is a volume-break discount: if a customer orders at least a minimum quantity of a specific product, they receive a lower unit price than the standard list price. For example, the standard price for a 50 kg bag of cement is TZS 15,200, but any order of 100 or more bags is priced at TZS 14,500 per bag.
-
-**Why tiers exist.** Volume pricing rewards large orders and encourages customers to consolidate purchases. Without tiers, a salesperson would have to manually override the price and justify the discount each time — an inconsistent and unaudited process. Tiers make the volume price automatic, consistent, and visible on the price list.
-
-A price tier gives a lower unit price when a customer orders at least a minimum quantity of a product on a given price list.
+**What a price tier is.** A price tier records a volume-break price: a lower unit price for orders of at least a minimum quantity of a product on a given price list — for example TZS 14,500 per bag of cement for 100 bags or more, against a standard TZS 15,200. Tiers are saved for reference; as the note above explains, sales are not yet priced from them.
 
 **To create a tier:**
 
@@ -640,13 +687,11 @@ A price tier gives a lower unit price when a customer orders at least a minimum 
 4. Enter **Min Quantity** and **Unit Price**, and choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
 5. Click **Save Tier**.
 
-The tier status is **ACTIVE**. To deactivate a tier, click the **Deactivate** button on the row; the tier is soft-deactivated and no longer applied to new transactions.
-
-You cannot have two active tiers for the same product, price list, and minimum quantity combination.
+The tier status is **ACTIVE**. To deactivate a tier, click the deactivate button on the row (there is no confirmation). You cannot have two active tiers for the same product, price list and minimum quantity; a deactivated tier's quantity can be used again.
 
 ### 8.2 Customer prices (contract prices)
 
-**What a customer price is.** A customer price (also called a contract price or a customer-specific price) is a fixed unit price agreed between the business and one specific customer for one specific product. It overrides every other pricing rule — including tiers and promotions — and applies regardless of quantity, as long as it is active and within its effective date window.
+**What a customer price is.** A customer price (also called a contract price or a customer-specific price) is a fixed unit price agreed between the business and one specific customer for one specific product. It comes before every other price and applies regardless of quantity, as long as it is active, within its effective dates, and in the same currency as the sale. It is the price of one **base unit**: a pack is charged at that price times the pack size.
 
 **Why customer prices exist.** Key accounts and long-term customers often negotiate individualised prices as part of a supply agreement — prices that are lower than the standard list but not published generally. Storing these as customer prices means the correct price is applied automatically on every transaction for that customer, with no risk of the wrong price being used by a different salesperson who does not know the agreement.
 
@@ -661,189 +706,212 @@ A customer price sets a fixed unit price for a specific product for a specific c
 5. Optionally set **Effective From** and **Effective To** dates for a time-limited contract.
 6. Click **Save Price**.
 
-Only one customer price record can exist per customer-and-product pair. Deactivate the existing record before creating a new one is not possible (the unique constraint is status-agnostic); raise a support request to change an existing contract price.
+Each row has a deactivate button to stop the price applying. Only one customer-price record can exist for each customer and product — even a deactivated one — so a second record for the same pair is refused. To change an agreed price, ask your administrator.
 
 ### 8.3 Pricing resolution order
 
-When a sale line is priced the system applies the first matching rule in this priority:
+When a sale line is priced the system uses the first price it finds:
 
-1. Customer price (highest priority)
-2. Active promotion (managed via the API; no UI currently)
-3. Price tier
-4. Standard list price
-5. No price configured (the line is rejected)
+1. Customer price (active, valid today, same currency)
+2. The customer's own price list
+3. The product's **Price here** at the selling branch
+4. The company's Default price list
+5. No price found — the line needs a typed price, or is refused
+
+Price tiers are not part of this order yet.
 
 ---
 
-**Example — Volume tier for cement:**
-
-The sales manager opens **Sales › Pricing Rules** (`/admin/pricing-rules`), goes to **Price Tiers**, and clicks **Add Price Tier**. He picks product **Saruji 50kg**, Price List **Wholesale TZS**, Min Quantity **100**, Unit Price **TZS 14,500**, Currency **TZS**. Any order for 100+ bags on the Wholesale price list will now use TZS 14,500 instead of the standard TZS 15,200.
-
 **Example — Contract price for Karibu Supermarkets:**
 
-Under the **Customer Prices** tab the manager creates: Customer **Karibu Supermarkets Ltd**, Product **Unga wa Ngano 2kg**, Unit Price **TZS 17,500** (negotiated). From the next sale, whenever a sales line is added for this customer and product, TZS 17,500 is applied — regardless of the price list.
+Under the **Customer Prices** tab the manager creates: Customer **Karibu Supermarkets Ltd**, Product **Unga wa Ngano 2kg**, Unit Price **TZS 1,460** per piece (negotiated), Currency **TZS**. From the next sale, whenever a TZS sales line is added for this customer and product, TZS 1,460 is applied per piece — TZS 17,520 for a carton of 12 — regardless of the price list.
 
 ---
 
 ## 9. Point of Sale
 
-Navigate to the **Point of Sale** group in the sidebar.
+Navigate to the **Point of Sale** group in the sidebar. It holds **Point of Sale** (the web checkout), **POS Sessions**, **POS Tills**, **Offline Sales Review**, and the restaurant screens (**Restaurant Orders**, **Kitchen Display**, **Restaurant Setup**, **Restaurant Dashboard**, **Restaurant Reports**).
 
-**What the Point of Sale module is.** Point of Sale (POS) is the in-store face-to-face retail workflow. It provides a cashier-facing checkout screen to ring up products, accept cash, and issue receipts. Everything processed through POS is ultimately a sales invoice — POS wraps the invoice channel with till management and session-level drawer accountability.
+**What the Point of Sale module is.** Point of Sale (POS) is the in-store, face-to-face selling workflow. Most counters use the **OrbixPOS** till app, which has its own user manual; the web screens described here set up tills, run a simple checkout, and let managers control shifts, cash and offline selling. Everything sold through POS is ultimately a sales invoice — POS wraps the invoice with till management and shift-level cash accountability.
 
-**Why POS exists as a distinct module.** A back-office sales invoice is fine for credit-account customers who receive goods on account and pay later. Counter retail is different: a cashier is processing many small transactions rapidly, cash is flowing in and out of a physical drawer, and at end of day the business needs to verify that the cash in the drawer matches what the system says was collected. The POS module adds the `till` and `session` layer on top of the invoice to manage this accountability — without it, cash sales would have no way to reconcile the physical drawer to the books.
+**Why POS exists as a distinct module.** A back-office sales invoice is fine for credit-account customers who receive goods on account and pay later. Counter retail is different: a cashier is processing many small transactions rapidly, cash is flowing in and out of a physical drawer, and at end of day the business needs to check that the cash in the drawer matches what the system says was collected. The till and session layer provides that accountability.
 
-**What a till is.** A till is a physical cash register position at a branch (for example, "Counter 1" or "Counter 2"). In the system a till is a named record tied to a branch and to a bank/cash account that represents the drawer. Multiple tills can operate at the same branch simultaneously. A till must be `ACTIVE` before a session can be opened on it.
+**What a till is.** A till is a cash-register position at a branch (for example, "Counter 1" or "Counter 2"). In the system a till is a named record tied to a branch; the money it takes is booked to the company's default cash account. Several tills can work at the same branch at once. A till must be `ACTIVE` before a session can be opened on it.
 
-**What a session is.** A session is the till's working period — typically one business day or one shift. Before a cashier can ring sales, they open a session by declaring the opening float (the cash placed in the drawer to make change). During the session every POS sale, refund, and payout is tracked against that session. At end of day the cashier or manager closes the session by counting the cash in the drawer, and then a manager reconciles the session to post any variance to the General Ledger.
+**What a session is.** A session (a *shift*) is the till's working period — typically one business day or one shift. Before a cashier can ring sales, they open a session by declaring the opening float (the cash placed in the drawer to make change). During the session every sale, refund and payout is tracked against it. At the end the cashier closes the session by counting the cash in the drawer, and then a manager reconciles it, posting any difference to the accounts.
 
-**What a POS sale is.** A POS sale is a cash counter transaction. It produces a finalised sales invoice with origin `POS` (it is stamped with the originating POS session), the cash payment is recorded automatically for the full amount, and revenue is posted on finalisation. The invoice number (`INV-####`) is assigned on the spot. No quotation, sales order, or delivery step is involved — POS is designed for speed at the counter.
+**What a POS sale is.** A POS sale is a counter transaction. It produces a finalised sales invoice stamped with its session, records the payment, posts revenue and issues stock at once. The invoice number (`INV-####`) is assigned on the spot. No quotation, sales order, or delivery step is involved.
 
-> **Note on stock.** A `POS`-origin invoice issues stock at finalisation exactly like a walk-in `DIRECT` invoice: finalising the invoice decrements on-hand stock for each line (the stock-issue step runs for both `DIRECT` and `POS` origins). A POS sale completed at the till therefore both posts revenue **and** reduces inventory.
-
-POS is used for face-to-face retail transactions. A **till** is a physical cash register position. Each till must be opened in a **session** before sales can be processed. The session is closed and reconciled at end of day.
+> **Note — stock.** A POS sale reduces stock at finalisation exactly like a walk-in invoice. If your company blocks sales that would take stock negative (Sales Settings), a POS sale is refused when there is not enough stock.
 
 ### 9.1 Roles
 
-| Role | Typical permissions |
+| Role | POS permissions it carries |
 |---|---|
-| Cashier | Open session, ring sales, view sessions |
-| Manager | All cashier permissions plus create/deactivate tills, close sessions, reconcile |
+| **Cashier** | Open and close a shift, ring sales, reverse a sale while the shift is open, record till expenses and payouts, view sessions, take restaurant orders. Cannot reconcile. |
+| **Branch Manager** | Create and (de)activate tills and switch offline selling, close and **reconcile** sessions, reverse sales and override age checks, view the cash-up report, review offline sales, run the restaurant set-up and kitchen display. Does not open a shift or ring sales itself unless also given the Cashier role. |
+| **Sales Manager** | View sessions, the cash-up report and till expenses; review offline sales and switch a till offline. |
+| **Waiter** | Take restaurant orders and print bills on the till. Takes no payment. |
 
-Your administrator assigns the appropriate POS permissions to your role. Contact them if POS is not visible in your menu.
+Reconciling is deliberately kept away from the person who counted the drawer (segregation of duties). Your administrator assigns roles; contact them if POS is not visible in your menu.
 
 ### 9.2 Set up a till
 
-This is a one-time setup task done by a manager.
+This is a one-time setup task done by a manager with `POS.TILL.MANAGE`.
 
-1. Navigate to **Point of Sale › POS Tills** (`/admin/pos/tills`).
-2. Click **New Till**.
-3. Enter a **Till Name** (e.g. "Counter 1").
-4. Pick the **Branch** by name.
-5. Click **Create Till**.
+1. Navigate to **Point of Sale › POS Tills** (`/admin/pos/tills`) — *Manage point-of-sale tills per branch.*
+2. Choose the **Branch** whose tills you want to see (and the **Company**, if you belong to more than one). Choose a specific branch; the list is shown one branch at a time.
+3. Click **New Till**. In the **New POS Till** card, enter a **Till Name** (e.g. "Counter 1") and pick the **Branch**.
+4. Click **Create Till**.
 
-The till is created with status **ACTIVE**. To deactivate a till, click **Deactivate** on its row.
+The till is created as **ACTIVE** (*Till created*). The company must have a cash account set up first; otherwise creation is refused with *No cash/bank account is configured for this company. Please create a cash account before setting up a POS till.* Your subscription plan may limit the number of active tills.
+
+The till list shows **Name**, **Branch**, **Status**, **Offline selling**, and the actions:
+
+- **Deactivate** — takes an active till out of use (*Till deactivated*). No session can be opened on it.
+- **Activate** — shown on a deactivated till; puts it back into use (*Till activated*). Re-activating counts towards your plan's till limit.
+- **Offline selling** — an On/Off switch; see *Offline selling* below. Users without `POS.TILL.MANAGE` see the setting as text.
+
+Neither Deactivate nor Activate asks for confirmation.
 
 ### 9.3 Open a session (start of day)
 
-**What opening a session means.** Opening a session declares the start of a cashier's working period on a specific till. The opening float is the starting cash in the drawer (coins and notes placed there before the first sale so the cashier can make change). The system records this amount and uses it as the baseline for the end-of-day cash reconciliation. Only one session can be open on a till at a time — you cannot accidentally open a second session on the same counter without closing the first.
+**What opening a session means.** Opening a session declares the start of a cashier's working period on a till. The opening float is the starting cash in the drawer. The system uses it as the baseline for the end-of-day cash count. Only one session can be open on a till at a time.
 
-The **POS Sessions** list shows every session with its number, status (OPEN, CLOSED, RECONCILED), opening float, and expected cash; use the **Open Session** button to start a new one and the **View** action on a row to open a session's detail.
+Navigate to **Point of Sale › POS Sessions** (`/admin/pos/sessions`) — *Open, view, close and reconcile till sessions.* The list opens showing **Open** sessions; use the **Status** filter for **Closed**, **Reconciled** or **All statuses**. The columns are **Session #**, **Status**, **Cashier**, **Opened At**, **Opening Float** and **Expected Cash** (shown once the session is closed), with a **View** button on each row.
 
 ![POS sessions / till control](images/03-sales-and-pos/pos-sessions.png)
 
-1. Navigate to **Point of Sale › POS Sessions** (`/admin/pos/sessions`).
-2. Click **Open Session**.
-3. Pick the **Till** by name (only ACTIVE tills are listed).
-4. Enter the **Opening Float** — the cash amount placed in the drawer at the start of the day.
+1. Choose the **Branch** whose tills you want to open (this does not filter the list of sessions).
+2. Click **Open Session** (needs `POS.SESSION.OPEN`).
+3. In the **Open New Session** card, pick the **Till** — only active tills of that branch are listed. (*No active tills in this branch. Create a till before opening a session.* means you must add or activate one.)
+4. Enter the **Opening Float** — the cash placed in the drawer at the start of the day.
 5. Click **Open Session**.
 
-A new session is created with status **OPEN**. Only one session can be open on a till at a time.
+A new session is created as **OPEN** (*Session opened*). A till that already has an open session is refused with *This till already has an OPEN session.*; an inactive till with *This till is INACTIVE and cannot open a session. Activate the till first.*
 
-### 9.4 Ring a sale
+### 9.4 Ring a sale (web checkout)
 
-**What "ringing a sale" means.** This is the cashier's checkout step: entering the products and quantities the customer is buying, taking the cash the customer hands over, and completing the transaction. The system calculates the total, computes the change due, and — on completion — records the cash payment, finalises the sales invoice, posts the revenue, and issues the receipt. (On completion a `POS`-origin invoice issues stock just like a `DIRECT` walk-in invoice — see the stock note above.)
+**What "ringing a sale" means.** This is the cashier's checkout step: entering the products the customer is buying, taking the cash, and completing the transaction. On completion the system records the payment, finalises the sales invoice, posts revenue and issues stock.
 
-**What the tendered amount is.** The tendered amount is the cash the customer physically hands to the cashier — often a round number larger than the total. If the total is TZS 13,000 and the customer hands over TZS 20,000, the tendered amount is TZS 20,000 and the change is TZS 7,000. The system calculates the change and the cashier returns it. A sale cannot be submitted if the tendered amount is less than the total.
+**What the tendered amount is.** The cash the customer hands over — often more than the total. If the total is TZS 13,000 and the customer hands over TZS 20,000, the change is TZS 7,000.
 
 ![POS — ringing up a sale](images/03-sales-and-pos/pos-sell.png)
 
-1. Navigate to **Point of Sale › Point of Sale** (`/admin/pos/sell`) — this is the checkout screen.
-2. If your organisation has more than one company, select the correct company.
-3. Pick the **Session** — only OPEN sessions are listed. Each option is labelled *"Session &lt;…&gt; (Till &lt;till id&gt;)"* (a short fragment of the session's UID plus its till id), not the `POS-####` session number.
-4. Pick the **Customer** (type in the search box above the picker to filter the list, then select).
-5. Pick the **Agent** (search then select) — required; leaving Agent blank will cause the sale to be rejected.
-6. Choose the **Currency** from the Currency Picker (see *Common UI Patterns* in chapter 00 — enabled currencies only, defaulting to the company default).
-7. Click **Add Line**. Pick the **Product**; the **Unit** field is disabled until a product is picked and then lists only that product's configured units (defaulting to its base unit — see section 1.2), so confirm it or choose another from the list; enter **Quantity** and **Unit Price**, and optionally a line **Discount** (entered as an amount).
-8. Add further lines as needed. The **Total** updates in the footer.
-9. Enter the **Tendered Amount** (the cash handed over by the customer). The **Change** is calculated immediately. The sale cannot be submitted if the tendered amount is less than the total.
-10. Click **Complete Sale**.
+1. Navigate to **Point of Sale › Point of Sale** (`/admin/pos/sell`) — the **Point of Sale — Checkout** screen.
+2. Choose the **Branch** (it starts on your active branch) and pick the **Session**. Only open sessions are listed; each reads *Session \<code\> (Till \<number\>)*. If none is open, open one first.
+3. Type in **Type to search customers…** and pick the **Customer**.
+4. Pick the **Agent** — required on this screen. If no agent is offered, your user is not linked to a sales agent; ask an administrator.
+5. Check the **Currency** (pick from the Currency Picker if it is not your company's currency). Optionally add **Notes**.
+6. Click **Add Line**. Search for the **Product** (*Search by name, code or barcode…*), choose the **Unit** (only the product's own units are offered), and enter the **Qty**. Optionally enter a line **Discount** as an amount.
+   - The **Unit Price** is filled in automatically from the price list for the chosen customer, currency and unit (*Prices are set automatically from the price list.*). It cannot be typed. A line showing **No price** cannot be sold until a price is set for the item.
+   - Changing the customer or currency re-prices every line.
+7. Add further lines. The footer shows **Subtotal (net)**, **VAT** and **Total (incl. VAT)**.
+8. In the **Payment** card, enter the **Tendered Amount**. **Amount Due (incl. VAT)** and **Change** are shown; change turns red if the tendered amount is too little.
+9. Click **Complete Sale** (it reads *Processing…* while it works).
 
-A success receipt is displayed showing the invoice number and total. Click **View Invoice** to open the full invoice, or **New Sale** to start the next transaction.
+A **Sale Recorded** card shows the **Invoice** number and **Total**. Click **View Invoice** to open the invoice, or **New Sale** for the next customer. The web checkout does not print a receipt — print the invoice from the invoice page if needed.
 
-**Fiscal (EFD) receipt for a counter sale.** A completed POS sale produces a normal FINALISED invoice, so the government fiscal receipt is issued from that invoice — not from the checkout screen. Click **View Invoice** on the success panel (or open it later from **Sales › Invoices**) and use the **Fiscal Receipt** panel to issue the EFD receipt and read its fiscal number and verification URL. See section 4.6 for the full steps and the receipt states; it needs the `FISCAL.VIEW` / `FISCAL.MANAGE` permissions.
+**Fiscal (EFD) receipt for a counter sale.** A completed POS sale produces a normal FINALISED invoice, so the fiscal receipt is issued from that invoice. Click **View Invoice** (or open it later from **Sales › Invoices**) and use the **Fiscal Receipt** panel — see section 4.6.
 
 **Notes:**
-- On this checkout screen the sale is settled in cash — you enter a single **Tendered Amount** and the payment is recorded as Cash automatically. (The POS sale itself can also accept several tenders together; see *Splitting payment across tenders* below.)
-- The agent field is mandatory on the backend; leaving it blank will cause the sale to be rejected.
-- If the chosen session has been closed in the meantime, the sale is rejected with **"This POS session is not OPEN."** so you know to re-open or re-select an OPEN session.
-- If the session has been open longer than the company's **till shift time limit** (36 hours unless changed in **Sales Settings**), the sale is rejected with *"This till session has been open too long to take new sales."* Nothing is charged: close and reconcile the session, open a new one, and ring or pay the sale again. Open restaurant bills carry over to the new session.
-- If a **Complete Sale** click is interrupted (network drop, slow response) and the cashier retries, the system recognises the repeat and returns the original sale instead of ringing it twice — a sale is never double-posted, so it is safe to retry.
+- The web checkout takes one cash payment. The till app also takes card, mobile money and split payments.
+- If the chosen session has been closed in the meantime, the sale is refused with *This till session is closed, so no more sales can be rung on it. Open a new session to keep selling.*
+- If the session has been open longer than the company's **till shift time limit** (36 hours unless changed in **Sales Settings**), the sale is refused with *This till session has been open too long to take new sales. Close and reconcile it, then open a new session.* Nothing is charged: close and reconcile the session, open a new one, and ring the sale again. Open restaurant bills carry over to the new session.
+- If a **Complete Sale** click is interrupted and you click again, the system recognises the repeat and returns the original sale instead of ringing it twice.
+
+#### Discounts above the company limit
+
+If Sales Settings limits discounts and requires approval above the limit, a line whose discount is too large shows **Ask a supervisor**. Click it: a **Supervisor approval for this discount** window asks a supervisor (holding `SALES.DISCOUNT.OVERRIDE`) to sign in. Once approved, the line shows *Approved by \<name\>* and the sale can be completed.
 
 #### Splitting payment across tenders
 
-A POS sale does not have to be settled with a single cash amount. It can be split across **several tenders** at once — for example part **cash** and part **card**, or cash plus **mobile money** — as long as the tenders together cover the sale total. Each tender is recorded as its own payment on the resulting invoice (cash, card, mobile money, or cheque), so the receipt and the books show exactly how the customer paid. The standard checkout screen above records a single cash tender; mixed-tender sales are taken on a connected POS terminal or device that offers the tender breakdown.
+A POS sale can be split across **several tenders** — for example part **cash** and part **card**, or cash plus **mobile money** — as long as together they cover the total. Each tender is recorded as its own payment on the invoice, so the receipt and the books show exactly how the customer paid. Split payments are taken on the OrbixPOS till; the web checkout takes a single cash payment.
 
 #### Age-restricted items
 
-If any product on the sale is **age-restricted** (for example an 18+ or 21+ line — see *Products and Catalog* in chapter 02), the sale is **blocked** until age has been dealt with. The cashier must either confirm that the customer's age has been verified (the prompt to confirm appears when an age-restricted line is present) or hold the `POS.SALE.AGE_OVERRIDE` permission. Without one or the other, completing the sale is refused so restricted goods cannot be sold without an age check.
+If any product on the sale is **age-restricted** (18+ or 21+ — see *Products › Age restriction* in chapter 02), the sale is **blocked** until age has been dealt with. On the till the cashier confirms that the customer's age was checked. The web checkout has no age prompt, so there an age-restricted item can be sold only by a user holding `POS.SALE.AGE_OVERRIDE`; others are refused.
 
 #### Scale labels (embedded weight or price barcodes)
 
-Deli, butchery, and produce items are often weighed at a counter scale that prints a special **scale label** — a barcode that carries the item plus its weight or its price inside the code. When such a label is scanned at the till, the system recognises the format, identifies the product, and works out the **quantity** (or the line price) automatically from the embedded value, so the cashier does not type the weight by hand. Ordinary fixed-price barcodes are read as usual.
+Deli, butchery and produce items are often weighed on a scale that prints a **scale label** — a barcode carrying the item plus its weight or price. When such a label is scanned on the till, the system identifies the product and works out the quantity (or price) automatically. On the web checkout you type the quantity yourself.
 
-#### Reversing (voiding) a POS sale
+#### Reversing a sale, and returning some items
 
-A completed POS sale that was rung in error can be **reversed** at the till. Reversing a sale undoes everything the sale did: it reverses the revenue and VAT, refunds the cash out of the drawer, and returns the goods to stock — the opposite of the original transaction, recorded as evidence rather than deleted.
+Both are done on the till (OrbixPOS), not on the web:
 
-A reversal is only allowed while the **till session is still OPEN**, so that the cash refund comes out of the same drawer that took the money. Once the session has been closed or reconciled, a mis-rung sale is corrected through a back-office invoice void (section 4.5) instead. Reversing a sale requires the `POS.SALE.VOID` permission; you enter a reason, which is recorded on the void and in the audit trail.
+- **Reverse** undoes a whole sale rung in error: it reverses revenue and VAT, refunds the cash from the drawer, and returns the goods to stock.
+- **Return items** refunds only the chosen items and quantities from a receipt, in cash from the drawer, and returns those goods to stock. The original invoice is not changed; the return is recorded separately and shows in the reports (see section 10).
+
+Both are allowed only while the sale's **till session is still OPEN**, so the cash comes out of the same drawer that took it. They need `POS.SALE.VOID` (or `SALES.INVOICE.VOID`); a cashier without it needs a supervisor to approve on the till. Once any item of a sale has been returned, the whole sale can no longer be reversed. After the session is closed, a mis-rung sale is corrected through a back-office invoice void (section 4.5).
 
 ### 9.5 Record a payout
 
-**What a payout is.** A payout is any cash that leaves the drawer during the session that is not change given to a customer. The two types are:
-- **Paid Out:** a safe drop (moving excess cash from the drawer to the safe mid-shift) or a petty-cash payment made from the drawer.
-- **Refund:** cash paid back to a customer as a refund.
+**What a payout is.** Cash that leaves the drawer during the session other than change given to a customer. Recording it keeps the end-of-day count accurate.
 
-Both types reduce the expected closing cash and are recorded so the end-of-day reconciliation remains accurate. Without recording payouts, the drawer would appear short at close-of-day even though the cash was accounted for.
+| Type | Use it for | Effect in the accounts |
+|---|---|---|
+| **PAID_OUT** | Cash taken out of the drawer and spent — for example a small purchase paid from the till. | Booked as a till expense (the *Till Expenses* account, 5175 by default). |
+| **REFUND** | Cash handed back to a customer. Needs `SALES.INVOICE.VOID`. | Cash only — it does not reverse the sale, its VAT or its stock. To refund a sale properly, reverse it or return its items on the till. |
+| **EXPENSE** | A categorised till expense recorded from the till app. | Booked as a till expense. |
 
-A payout records cash leaving the drawer during the session — for example, a drop to the safe or a petty-cash refund.
-
-1. Open the session detail (**Point of Sale › POS Sessions** (`/admin/pos/sessions`), click **View** on the OPEN session, or navigate to `/admin/pos/sessions/uid/{uid}`).
+1. Open the session (**POS Sessions** → **View** on the open session).
 2. Click **Record Payout**.
-3. Select the **Type**: Paid Out (cash removed from the drawer) or Refund (customer cash refund).
-4. Enter the **Amount** and a **Reason**.
-5. Click **Record**.
+3. Choose the **Type** (`PAID_OUT` or `REFUND`), enter the **Amount** and a **Reason** (a few words at least).
+4. Click **Record** (*Payout recorded*).
 
-Both payout types reduce the expected closing cash. The live X-read total updates automatically.
+All payout types reduce the expected closing cash. Recording a payout needs `POS.SESSION.OPEN`.
 
-### 9.6 X-Read (live totals during the day)
+> **Note.** A PAID_OUT is booked as an expense. Do not use it for moving cash from the drawer to the safe.
 
-**What an X-Read is.** An X-Read (from the retail term "X-reading the register") is a snapshot of running totals for the current session without closing or resetting it. Cashiers and managers use it to verify the session is on track during the day — for example, after a safe drop, to confirm the expected cash figure has decreased correctly. Unlike a Z-Read (see section 9.8), an X-Read does not close anything.
+> **Note.** If the till-expense account has not been set up, a payout is refused with *No account has been set up for till expenses, so this cash cannot be recorded and none was taken out. …* Ask your accountant to set it under **Accounting › Posting Accounts**.
 
-The **X-Read** card on the session detail page shows running totals without closing the session:
+### 9.6 X-Read (live totals during the shift)
+
+**What an X-Read is.** A snapshot of running totals for the session without closing it. Unlike a Z-Read (section 9.8), it does not close anything.
+
+The **X-Read (Mid-Shift Snapshot)** card on the session page (marked *Live*) reads *Running totals so far — a mid-shift snapshot, not the final shift figures.* It shows:
 
 | Field | Meaning |
 |---|---|
-| Sales Total | Sum of all POS sale totals in this session |
-| Payouts | Sum of all payouts (PAID_OUT + REFUND) |
-| Expected Cash | Opening Float + Sales Total − Payouts |
-| Invoice Count | Number of sales processed |
+| Cashier, Till, Branch | Who and where. |
+| Sales Total | All sales in the session, whatever the payment type (cash, card, mobile money), less any item returns. |
+| Payouts | All payouts — PAID_OUT, REFUND (including item-return refunds) and EXPENSE. |
+| Expected Cash | Opening float + cash taken (after change) − payouts. Shown only to users who can reconcile, so a cashier counts the drawer without knowing the expected figure. |
+| Invoice Count | Number of sales in the session. |
 
-Click the refresh icon to reload the X-read at any time.
+Click **Refresh X-read** (the refresh icon) to reload it. The X-read stays visible after the session is closed until it is reconciled.
 
 ### Offline selling (tills that keep selling without the server)
 
-A till can be allowed to keep selling cash, mobile money and card sales while it cannot reach the server — for example when the internet is down. It keeps those sales on the till and sends them when the server is back; the ERP records each one once, at the price the customer paid and at the time it was sold.
+A till can be allowed to keep selling cash, mobile money and card sales while it cannot reach the server — for example when the internet is down. It keeps those sales on the till and sends them when the server is back; the system records each one once, at the price the customer paid and at the time it was sold.
 
-- **Allow it per till.** **POS › Tills**, the **Offline selling** switch (permission `POS.TILL.MANAGE`). Every till starts with it **off**.
-- **Review what was sold offline.** **POS › Offline Sales Review** (permission `POS.OFFLINE.REVIEW`, held by Sales Managers and Branch Managers) lists, for the active branch, offline sales recorded at a different price from today's, sales that took stock below zero, sales sold below cost (when the below-cost policy is on), sales dated in a closed accounting period, and sales the ERP **held** without recording — with the sale exactly as it was rung. It also lists every offline period (till, who switched, why, how long, how many sales). **Acknowledge** each item once you have looked at it; nothing on the list blocks the books.
-- **Switching a till offline by hand** on a slow but working connection needs a manager with `POS.OFFLINE.SWITCH`, confirmed by password at the till.
+- **Allow it per till.** **Point of Sale › POS Tills**, the **Offline selling** switch (permission `POS.TILL.MANAGE`). The note above the table reads *Allow offline selling: when on, this till keeps selling cash, mobile money and card sales while it cannot reach the server, and sends them when it can. Sales made offline are listed for a manager to review.* Every till starts with it **off**.
+- **Switching a till offline by hand** on a slow but working connection needs a manager with `POS.OFFLINE.SWITCH` (Sales and Branch Managers), confirmed by password at the till.
+
+**Reviewing offline sales.** **Point of Sale › Offline Sales Review** (permission `POS.OFFLINE.REVIEW`, held by Sales Managers and Branch Managers) — *Sales made while a till could not reach the server, and anything that needs a manager's attention.* It covers the active branch.
+
+- **Review items.** **Show** **Needs review** (the default) or **Acknowledged**. The columns are **Kind**, **Offline receipt**, **Till**, **Invoice** (a link), **Detail** and **Time**. The kinds are:
+  - **Price differed** — sold at a price different from today's;
+  - **Stock went below zero**;
+  - **Sold below cost** (when the below-cost policy is on);
+  - **Closed accounting period** — dated in a period that is already closed;
+  - **Held — not posted** — the system held the sale without recording it; **View sale as rung** shows it exactly as the till sent it.
+- **Acknowledge** an item once you have looked at it: add an optional **Note** and click **Confirm acknowledge** (*Review item acknowledged*). Acknowledged items show who acknowledged them and when. Nothing on the list blocks the books.
+- **Offline periods** lists every time a till went offline: **Till**, **Reason** (*No connection* or *Switched by a manager*), **Switched by**, **Started**, **Ended** (*Still offline* while it lasts) and **Sales**.
 
 The cashier's side is described in the OrbixPOS user manual, chapter *Selling Offline*.
 
-### 9.7 Close a session (end of day)
+### 9.7 Close a session (end of shift)
 
-**What closing a session means.** Closing a session is the end-of-shift step where the cashier physically counts the cash in the drawer and enters the counted amount. The system compares this to the expected cash (computed from the opening float plus all sales minus all payouts) and calculates the variance. A zero variance means the drawer balances perfectly. A positive variance (more cash than expected) is a till surplus. A negative variance (less cash than expected) is a till shortage. The session moves to `CLOSED` but the variance is not yet posted to the General Ledger — that happens at reconciliation.
+**What closing a session means.** The cashier counts the cash in the drawer and enters the counted amount. The system compares it with the expected cash and calculates the variance. The session becomes `CLOSED`; the variance is posted to the accounts at reconciliation.
 
-Closing records the physical cash count.
+1. Open the session.
+2. Click **Close Session** (needs `POS.SESSION.CLOSE` — Cashiers and Branch Managers).
+3. Enter the **Counted Cash** — the amount physically in the drawer — and optional **Notes**.
+4. Click **Close Session** (*Session closed*).
 
-1. Open the session detail (navigate to `/admin/pos/sessions/uid/{uid}`).
-2. Click **Close Session**.
-3. Enter the **Counted Cash** — the amount physically in the drawer.
-4. Optionally add closing notes.
-5. Click **Close Session**.
-
-The session status changes to **CLOSED** and a **variance** is computed:
+The session becomes **CLOSED** and the **Session Overview** shows **Counted Cash**, **Expected Cash** and the **Variance**, coloured green when zero, blue when over and red when short:
 
 ```
 Variance = Counted Cash − Expected Cash
@@ -851,41 +919,33 @@ Variance = Counted Cash − Expected Cash
 
 - **Positive variance** (over): more cash in the drawer than expected.
 - **Negative variance** (short): less cash than expected.
-- **Zero variance**: drawer balances exactly.
+- **Zero variance**: the drawer balances exactly.
 
 ### 9.8 Reconcile a session (Z-Read)
 
-**What reconciliation is.** Reconciliation is the final accounting step for a session. A manager reviews the closed session, confirms the figures are correct, and posts the cash variance — if any — to the General Ledger. After reconciliation the session is permanently locked and no further changes are possible. The result is called the **Z-Read** (again from retail terminology: the Z-read "zeroes" the register for the next session).
+**What reconciliation is.** The final accounting step for a session. A manager reviews the closed session and posts the cash variance, if any, to the accounts. After reconciliation the session is locked. The result is the **Z-Read**.
 
-**What the GL posting means.** If the drawer is over (more cash than expected), the excess is income — the business has more cash than it should, which is a gain. The system debits the Cash account and credits a Till Surplus income account. If the drawer is short, the shortfall is an expense — the business is missing cash. The system debits a Till Shortage expense account and credits Cash. A zero variance produces no journal entry.
+**What the posting means.** If the drawer is over, the excess is a gain: Cash is debited and the *Cash Over (Till Surplus)* account (4900 by default) is credited. If the drawer is short, the *Cash Short / Till Shortage* expense account (5170 by default) is debited and Cash is credited. A zero variance posts nothing. The entry is dated on the day the session was closed. Your accountant can change these accounts under **Accounting › Posting Accounts**.
 
-Reconciliation posts the variance to the general ledger and produces the final Z-Read report.
+1. Open a **CLOSED** session.
+2. Click **Reconcile** (needs `POS.SESSION.RECONCILE` — Branch Managers).
+3. Optionally add **Notes** in the **Reconcile Session** card.
+4. Click **Reconcile** (*Session reconciled*).
 
-1. Open a **CLOSED** session (navigate to `/admin/pos/sessions/uid/{uid}`).
-2. Click **Reconcile**.
-3. Optionally add notes.
-4. Click **Reconcile**.
+The session becomes **RECONCILED**. The **Z-Read (Final Shift Report)** card, marked *Final*, shows **Cashier**, **Till**, **Branch**, **Opening Float**, **Sales Total**, **Payouts**, **Expected Cash**, **Counted Cash**, **Variance** and **Invoice Count**. The journal itself can be found under **Accounting › Journal Entries**. The till app's printed Z-report also lists sales by category, by kitchen/bar station and by team member.
 
-The session status changes to **RECONCILED**. The **Z-Read** card shows all session figures plus the variance and (if non-zero) the journal reference:
-
-- **Over variance** — debit Cash, credit income account 4900 (Till Surplus).
-- **Short variance** — debit expense account 5170 (Till Shortage), credit Cash.
-- **Zero variance** — no journal posted.
-
-After reconciliation the session is read-only and no further sales or payouts can be recorded.
+If the variance cannot be posted (for example the accounting period is closed), reconciliation is refused with *This till could not be reconciled because the cash difference could not be recorded in the accounts. Ask your accountant to check the accounts setup for this date, then try again.*
 
 ### 9.9 Cash variance explained
 
-**What cash variance is.** Cash variance is the difference between the cash that should be in the drawer (the expected cash, calculated by the system) and the cash that is actually in the drawer (the counted cash, declared by the cashier). Every business aims for zero variance — a perfectly balanced drawer — but small discrepancies occur in practice due to rounding on change, counting errors, or occasional till errors.
-
-The formula is:
+**What cash variance is.** The difference between the cash that should be in the drawer (expected cash, calculated by the system) and the cash that is actually there (counted by the cashier). Small differences occur in practice through counting or change errors.
 
 ```
-Expected Cash = Opening Float + Sum of all cash sales in the session − Sum of all payouts
-Variance = Counted Cash − Expected Cash
+Expected Cash = Opening Float + cash received (after change) − all payouts
+Variance      = Counted Cash − Expected Cash
 ```
 
-A variance greater than zero means there is more cash in the drawer than the sales records account for (a surplus — perhaps the cashier made change errors that favoured the business). A variance less than zero means there is less cash than expected (a shortage — perhaps an error or a discrepancy). Both are posted to the GL at reconciliation so the books always reflect the actual cash held.
+Card and mobile-money takings are not in the drawer, so they are not part of expected cash. Both surpluses and shortages are posted at reconciliation, so the books always reflect the cash actually held.
 
 ### 9.10 Session lifecycle
 
@@ -893,7 +953,7 @@ A variance greater than zero means there is more cash in the drawer than the sal
 |---|---|
 | OPEN | Sales and payouts can be recorded |
 | CLOSED | Session counted; reconciliation pending |
-| RECONCILED | Final Z-read produced; GL posted; session closed |
+| RECONCILED | Final Z-read produced; variance posted; session locked |
 
 Transitions are one-way: OPEN → CLOSED → RECONCILED. A session cannot be re-opened.
 
@@ -901,34 +961,29 @@ Transitions are one-way: OPEN → CLOSED → RECONCILED. A session cannot be re-
 
 1. **Open** a session on your till with the day's opening float.
 2. **Ring sales** as customers arrive.
-3. **Record payouts** for any cash removed from the drawer.
-4. Check the **X-Read** at any time for running totals.
-5. At end of day, **count** the cash in the drawer.
+3. **Record payouts** for any cash spent from the drawer.
+4. Check the **X-Read** for running totals.
+5. At the end of the shift, **count** the cash in the drawer.
 6. **Close** the session by entering the counted amount.
-7. A manager **reconciles** the closed session; the system posts any variance to the GL.
+7. A manager **reconciles** the closed session; the system posts any variance.
 
 ---
 
-**Example — Walk-in cash sale (full POS day):**
+**Example — Walk-in cash sales (a full POS day):**
 
-Cashier Jane starts her shift at Duka Moja. She navigates to **Point of Sale › POS Sessions** (`/admin/pos/sessions`) and clicks **Open Session**. She picks till **Counter 1** (Branch: Dar es Salaam Main) and enters Opening Float **TZS 100,000**. Session **POS-0041** opens with status OPEN.
+Cashier Jane starts her shift at the Main Branch. She opens **Point of Sale › POS Sessions** (`/admin/pos/sessions`), clicks **Open Session**, picks till **Counter 1** and enters Opening Float **TZS 100,000**. Session **POS-0041** opens.
 
-During the morning Jane processes three customers at **Point of Sale › Point of Sale** (`/admin/pos/sell`):
+During the morning Jane serves three customers at **Point of Sale › Point of Sale** (`/admin/pos/sell`):
 
-1. She picks her open session from the Session picker (shown as *"Session … (Till …)"* — the picker does not display the `POS-0041` number), customer **Mteja wa Kawaida**, agent **Omar Salim**, currency TZS. She adds: **Sukari 1kg** × 2 @ TZS 2,500 = TZS 5,000; **Mafuta ya Kupikia 1L** × 1 @ TZS 8,000 = TZS 8,000. Total TZS 13,000. Customer hands over TZS 20,000 — Change shown as TZS 7,000. Jane clicks **Complete Sale** — Invoice **INV-0211** issued.
+1. She picks her open session, customer **Walk-in Customer**, agent **Omar Salim**, currency TZS. She adds **Sugar 1kg** × 2 — the price list fills in TZS 2,500 each — and **Cooking Oil 1L** × 1 at TZS 8,000. Total TZS 13,000 (VAT inclusive). The customer hands over TZS 20,000 — Change TZS 7,000. **Complete Sale** — invoice **INV-0211**.
+2. **Wheat Flour 2kg** × 3 at TZS 3,200 = TZS 9,600. Tendered TZS 10,000, change TZS 400. Invoice INV-0212.
+3. **Salt 500g** × 5 at TZS 500 = TZS 2,500, tendered exact. Invoice INV-0213.
 
-2. Second sale: **Unga wa Ngano 2kg** × 3 @ TZS 3,200 = TZS 9,600. Tendered TZS 10,000, change TZS 400. Invoice INV-0212 issued.
+At midday Jane buys cleaning supplies for TZS 5,000 from the drawer: she opens the session, clicks **Record Payout**, Type **PAID_OUT**, Amount **TZS 5,000**, Reason "Cleaning supplies". Expected cash is now TZS 100,000 + TZS 25,100 − TZS 5,000 = **TZS 120,100**. (Jane's X-Read shows Sales Total TZS 25,100, Payouts TZS 5,000 and Invoice Count 3; as a cashier she does not see Expected Cash.)
 
-3. Third sale: **Chumvi 500g** × 5 @ TZS 500 = TZS 2,500. Tendered exact. Invoice INV-0213 issued.
+At the end of her shift Jane counts TZS 120,200. She clicks **Close Session** and enters Counted Cash **TZS 120,200** — Variance **+TZS 100** (over).
 
-At midday Jane does a safe drop: she opens session detail (`/admin/pos/sessions/uid/{uid}`), clicks **Record Payout**, Type **Paid Out**, Amount **TZS 20,000**, Reason "Midday safe drop". Expected cash now: TZS 100,000 + TZS 25,100 − TZS 20,000 = **TZS 105,100**.
-
-Jane checks the X-Read: Sales Total TZS 25,100, Payouts TZS 20,000, Expected Cash TZS 105,100, Invoice Count 3. Correct.
-
-At end of day Jane counts the drawer: TZS 105,200 (TZS 100 over). She clicks **Close Session**, enters Counted Cash **TZS 105,200** — Variance is **+TZS 100.00** (over).
-
-Manager Rehema opens the session detail, clicks **Reconcile**. Status → RECONCILED. Z-Read confirms the +TZS 100 variance and shows Journal **JNL-0519**: DR Cash 100 / CR Till Surplus (4900) 100.
-
+Manager Rehema opens the session and clicks **Reconcile**. Status → RECONCILED. The Z-Read shows the +TZS 100 variance, and a journal posting DR Cash 100 / CR Cash Over (Till Surplus) 100 appears under **Accounting › Journal Entries**.
 
 ---
 
@@ -936,71 +991,216 @@ Manager Rehema opens the session detail, clicks **Reconcile**. Status → RECONC
 
 ### 10.1 Sales Summary (sales by customer, agent, route, branch, day or cashier)
 
-Navigate to **Sales > Sales Summary** (`/admin/reports/sales-summary`). Requires `SALES.INVOICE.VIEW` — the same permission as the Sales Report. In the search palette (Ctrl+K) it is also found as "sales by customer", "agent performance", "sales by route", "daily sales" or "cashier sales".
+Navigate to **Sales › Sales Summary** (`/admin/reports/sales-summary`). Requires `SALES.INVOICE.VIEW`. In the search box (Ctrl+K) it is also found as "sales by customer", "agent performance", "sales by route", "daily sales" or "cashier sales".
 
-Pick a **From** and **To** date, a **Group by** option and, optionally, a **Branch**, then click **Run report**. Each row is one customer, sales agent, route, branch, day or cashier, showing: number of invoices, quantity (in base units, so a pack of 12 counts as 12), gross sales, discount, VAT, net sales, cost of sales, margin and margin %. A TOTAL row sums every group.
+The report opens on the month so far. Pick a **From** and **To** date, a **Group by** option — **Customer (sales by customer)**, **Sales agent (agent performance)**, **Route (sales by route)**, **Branch**, **Day (daily sales)** or **Cashier (who rang the sale)** — and, optionally, a **Branch**, then click **Run report**. Each row is one group, showing **Invoices**, **Qty** (in base units, so a pack of 12 counts as 12), **Gross**, **Discount**, **VAT**, **Net**, and — for users who can see costs (`INVENTORY.VALUATION.VIEW`) — cost of sales, margin and margin %. A TOTAL row sums every group.
 
-- Only **finalised** invoices count; drafts and voided invoices do not. Returns and credit notes are **not** deducted — the same as the Sales Report.
-- **All amounts are in the company's base currency** (e.g. TZS). An invoice raised in another currency (e.g. USD) is converted at the exchange rate stamped on that invoice when it was finalised — the same rate its accounting entry used — so a USD 14.16 sale at 2,500 shows as TZS 35,400, not 14.16. Each line is converted and rounded on its own, so every grouping adds up to the same total as the Sales Report and the Profitability Report. Margin is the converted net less the cost of sales (which is always recorded in base currency). The export notes how many invoices were converted.
+- Only **finalised** invoices count; drafts and voided invoices do not. Items returned at the till are **deducted** on the day of the return. Credit notes are not deducted.
+- **All amounts are in the company's base currency** (e.g. TZS). An invoice raised in another currency is converted at the exchange rate stamped on it when it was finalised — the same rate its accounting entry used. Each line is converted and rounded on its own, so every grouping adds up to the same total as the Sales Report and the Profitability Report.
 - **Cashier** means the user who created the invoice (at a till, the cashier who rang the sale). **Day** uses the company's time zone.
-- Cost of sales is what the goods cost at the moment of sale. When an item was sold before its stock had ever been costed, its group's cost, margin and margin % show a dash (unknown — not zero), the group is left out of the Cost and Margin totals, and a yellow banner says how many groups and items are affected.
-- Exports (PDF, Excel, CSV) additionally require `REPORT.EXPORT`.
+- Cost of sales is what the goods cost at the moment of sale. When an item was sold before its stock had ever been costed, its group's cost and margin show a dash (unknown — not zero), the group is left out of the cost and margin totals, and a yellow banner says how many groups and items are affected.
+- **Print / PDF**, **Export Excel** and **Export CSV** additionally require `REPORT.EXPORT`.
 
 ### 10.2 Payment Summary (daily cash-up)
 
-Navigate to **Sales > Payment Summary (Cash-up)** (`/admin/reports/payment-summary`). Requires `POS.CASHUP.VIEW` — a managers' permission (Sales Manager, Branch Manager, Accountant, Finance Director). Cashiers do not hold it: the till's X-read and Z-read show their own session, while this report shows every cashier's takings.
+Navigate to **Sales › Payment Summary (Cash-up)** (`/admin/reports/payment-summary`). Requires `POS.CASHUP.VIEW` — a managers' permission (Sales Manager, Branch Manager, Accountant, Finance Director). Cashiers do not hold it: the till's X-read and Z-read show their own session, while this report shows every cashier's takings.
 
-The screen opens on today. Optionally pick a date range, a **Branch** and a **Cashier** (the cashier list shows everyone who took a payment in the period). Each line is one day, cashier and currency, with columns for **Cash**, **Mobile money**, **Card**, **Cheque**, **Total** and the number of payments. There is one TOTAL row per currency — amounts in different currencies are never added together.
+The report (**Takings by payment method**) opens on today. Optionally pick a date range, a **Branch** and a **Cashier** (the cashier list shows everyone who took a payment in the period). Each line is one day, cashier and currency, with columns for **Cash**, **Mobile money**, **Card**, **Cheque**, **Total** and the number of payments. There is one TOTAL row per currency — amounts in different currencies are never added together.
 
-- Amounts are what the business kept: tendered amount less change given back.
+- Amounts are what the business kept: tendered amount less change given back. Cash refunded for items returned at the till is subtracted from **Cash** on the day of the return, under the cashier who made the return.
 - Payments are counted on the day they were taken, by the person who took them, for sales rung at a till or settled at the counter. A voided sale's payment is not counted.
 - Not included: payments received later against credit invoices (Receivables receipts), till payouts and expenses, and the opening float. To balance one drawer, use the session's X-read / Z-read.
-- Exports additionally require `REPORT.EXPORT`.
+- **Print / PDF**, **Export Excel** and **Export CSV** additionally require `REPORT.EXPORT`.
 
 ### 10.3 Restaurant Dashboard and Flash Report
 
-Navigate to **Point of Sale > Restaurant Dashboard** (`/admin/restaurant/dashboard`). Requires `SALES.INVOICE.VIEW` — the same permission as the Sales Report. In the search palette (Ctrl+K) it is also found as "flash report", "daily summary" or "busy hours".
+Navigate to **Point of Sale › Restaurant Dashboard** (`/admin/restaurant/dashboard`). Requires `SALES.INVOICE.VIEW`. In the search box (Ctrl+K) it is also found as "flash report", "daily summary" or "busy hours".
 
-The screen opens on today. Pick a **From date** and **To date**, or tap **Today**, **Yesterday**, **Last 7 days** or **This month**; optionally choose a **Branch** (left empty, it covers every branch you may see), then click **Refresh**. A range can be at most one year.
+The screen opens on today. Pick a **From date** and **To date**, or tap **Today**, **Yesterday**, **Last 7 days** or **This month**; then narrow it if you wish:
 
-- **Key figures** — Sales, Receipts, Average receipt, Table orders paid, Guests, Spend per guest, Discounts, Complimentary, Refunds, Receipts voided, Orders cancelled and Items voided. Each shows how it changed against the same number of days just before (for **Today**, against yesterday), marked green when the change is good and red when it is not — for discounts, refunds and voids, *down* is good. No change is shown when the earlier figure was zero.
-- **Right now** — tables open, bills printed but not paid, and the money waiting to be paid. This part always shows the present moment, whatever dates are chosen.
-- **Sales by day** (for a range of two days or more), **Busy hours**, **Days of the week** (the average per day, so a month with five Mondays compares fairly), **Departments** (the product's category), **Best sellers**, **Waiters** and **How bills were paid**.
+- **Branch** — left empty, it covers every branch you may see.
+- **Waiter** — *All waiters*, or one waiter (shown to users who also manage restaurant orders or setup). With a waiter chosen, counter sales drop out.
+- **Item** (type to search) and **Department** (the product's department, or *(no department)*). **Clear item filters** removes both. With an item or department filter, sales, spend per guest, discounts, days, hours, departments, items and voided items count only the matching lines; receipts, orders, guests, payments, complimentary and refunds count the whole bills that contain a match.
+
+Click **Refresh**. A range can be at most one year (*Choose a range of one year or less.*).
+
+- **Key figures** — Sales, Receipts, Average receipt, Table orders paid, Guests, Spend per guest, Discounts, Complimentary, Refunds, Receipts voided, Orders cancelled and Items voided. Each shows how it changed against the same number of days just before (for **Today**, against yesterday), for example *+12% vs before*, marked green when the change is good and red when it is not — for discounts, refunds and voids, *down* is good.
+- **Right now** — **Tables open**, **Bills printed, not paid**, and the money **Waiting to be paid**, with a **See pending bills** link. This part always shows the present moment, whatever dates are chosen.
+- **Sales by day** (for a range of two days or more), **Busy hours**, **Days of the week** (the average per day, so a month with five Mondays compares fairly), **Departments**, **Best sellers**, **Waiters** and **How bills were paid**.
 - **Complimentary** — every bill settled as complimentary, with its receipt, time and who it was given to.
 
-Links under the cards open the matching report in **Restaurant Reports** (10.4).
+Links under the cards open the matching report in **Restaurant Reports** (10.4) for the month so far.
 
-**Flash Report.** **Flash report PDF** and **Flash report Excel** download the dashboard as a one-page daily summary: every key figure next to the earlier period and the change, then right now, payments, departments, best sellers, waiters and complimentary bills. Downloading requires `REPORT.EXPORT` as well.
+**Flash Report.** **Flash report PDF** and **Flash report Excel** download the dashboard as a one-page daily summary: every key figure next to the earlier period and the change, then right now, payments, departments, best sellers, waiters and complimentary bills, with any filters stated at the top. Downloading requires `REPORT.EXPORT` as well.
 
 How the figures are counted:
 
-- **Sales** are finalised receipts at their full amount including VAT, after discounts, in the company's base currency, counted at the time they were paid. A receipt voided afterwards is left out of sales and counted under **Receipts voided**.
+- **Sales** are finalised receipts at their full amount including VAT, after discounts, in the company's base currency, counted at the time they were paid, less items returned at the till (on the day of the return). A receipt voided afterwards is left out of sales and counted under **Receipts voided**.
 - **Table orders**, **Guests** and **Waiters** come from restaurant orders paid in the period. Sales rung up without a table order appear in the waiter list as **Counter sales (no table order)**, so the waiter list adds up to total sales.
 - **Spend per guest** is what the tables that gave a guest count spent, divided by those guests.
-- **Discounts** are everything taken off the bills, including VAT. **Complimentary** is what was settled with the Complimentary payment type. **Refunds** are cash paid back at a till as a refund payout.
-- The waiter is whoever holds the table: whoever opened it, or the waiter it was last moved to.
+- **Discounts** are everything taken off the bills, including VAT. **Complimentary** is what was settled with the Complimentary payment type. **Refunds** are cash paid back at a till as a refund.
+- The waiter is whoever holds the table at payment: whoever opened it, or the waiter it was last moved to.
 - Not shown: staff (labour) cost, meal periods (breakfast, lunch, dinner) and menu profitability.
 
 ### 10.4 Restaurant Reports
 
-Navigate to **Point of Sale > Restaurant Reports** (`/admin/restaurant/reports`). Requires `SALES.INVOICE.VIEW`; exports (PDF, Excel, CSV) additionally require `REPORT.EXPORT`. Choose a report along the top, set the filters, then click **Run report**. Filters: **From date** and **To date**; **Waiter** (shown to users who also manage restaurant orders or setup); **Branch** (optional — empty means every branch you may see).
+Navigate to **Point of Sale › Restaurant Reports** (`/admin/restaurant/reports`). Requires `SALES.INVOICE.VIEW`; **Export PDF**, **Export Excel** and **Export CSV** additionally require `REPORT.EXPORT`. Choose a report along the top, set the filters, then click **Run report**. Filters:
+
+- **From date** and **To date**;
+- **Waiter** (shown to users who also manage restaurant orders or setup);
+- **Item** and **Department** (every report except *Payments & completion*);
+- **Branch** (optional — empty means every branch you may see).
+
+When an item or department filter is applied, a banner says what is filtered and whether only the matching items are counted or whole bills that include a match are shown.
 
 The first three reports have a **Summary** / **Detail** switch:
 
 | Report | Summary | Detail |
 |---|---|---|
-| **Sales by waiter** | Per waiter: bills, guests, average bill and amount | The items each waiter sold — item, unit, quantity and amount — with a subtotal per waiter |
-| **Bills paid** | Per waiter: bills, guests and the amount split by payment type (Cash, Mobile money, Card, Cheque, Complimentary) | Every bill: when paid, order, table, waiter, cashier, receipt, how it was paid and amount |
-| **Pending bills** | Per waiter: orders open, bills printed, items, the amount on the printed bills and the oldest order | Every order not yet paid, with its status and items |
+| **Sales by waiter** | Per waiter: bills, guests, average bill and amount | The items each waiter sold — code, item, unit, quantity and amount — grouped by waiter with a subtotal |
+| **Bills paid** | Per waiter: bills, guests and the amount split by payment type (Cash, Mobile money, Card, Cheque, Complimentary) | Every bill: **Paid**, **Order**, **Table**, **Waiter**, **Cashier**, **Receipt**, **Paid by**, **Items**, **Customer** and **Amount** |
+| **Pending bills** | Per waiter: **Open**, **Bill printed**, **Items**, **Printed bills** (amount) and **Waiting since** | Every order not yet paid, with its status and items |
 
-**Pending bills** has no dates: it shows what is unpaid now. An open order has no amount until its bill is printed. In **Bills paid**, a voided receipt is listed in the detail (marked *Void*) but left out of every total.
+**Pending bills** has no dates: it shows what is unpaid now. An open order has no amount until its bill is printed. In **Bills paid**, a voided receipt is listed in the detail (marked *Void*) but left out of every total; amounts are net of change.
 
-**Sales by hour & day** — sales for each hour of the day, then for each day of the week, each split by department, with the number of receipts and the average per day. Use it to see the busy hours and the busy days when planning staff and offers.
+**Sales by hour & day** — sales **By hour of the day** and **By day of the week**, each with **Receipts**, **Sales**, **Average per day** and a column per department. *"Average per day" divides by the number of such days in the period.* Use it to plan staff and offers around busy hours and days.
 
 **Payments & completion** — for the period:
 
-- **Payments**: each payment type, the number of payments, the amount and its share of the total.
-- **Order completion**: of the orders opened in the period, how many were paid, cancelled or are still waiting, and the completion rate (paid ÷ opened).
-- **Refunds** (cash paid back at a till), **Voided receipts**, **Cancelled orders** and **Voided items**, each with when, who and the reason given.
+- **How bills were paid**: each payment type, the number of payments, the amount and its share.
+- **Orders opened in this period**: how many were paid, cancelled or are still open or unpaid, and the completion rate (paid ÷ opened).
+- **Refunds at the till**, **Receipts voided**, **Orders cancelled** and **Items voided**, each with when, who and the reason given.
 
-*Sales by hour & day* and *Payments & completion* have no waiter filter. Amounts in every restaurant report are in the company's base currency.
+Amounts in every restaurant report are in the company's base currency and are net of items returned at the till.
+
+### 10.5 Sales Report (sales by product)
+
+Navigate to **Accounting › Sales Report** (`/admin/reports/sales`). Requires `SALES.INVOICE.VIEW`. *Sales by product for a selected period — optionally filtered by agent, route, or supplier.*
+
+1. Set **From date** and **To date** (the month so far by default).
+2. Optionally choose an **Agent**, a **Route**, a **Supplier** (the items whose preferred supplier it is) and a **Branch** (*All branches* means every branch you may see).
+3. Click **Run report**.
+
+The report starts with your company's name, address, TIN and VRN and a line stating the period and filters. Each row is one product: **Code**, **Description**, **Stock** (on hand now, in the chosen branch or all branches), **Qty** (in the base unit), **Disc**, **VAT**, **Margin** and **Amount** (VAT inclusive, in base currency), with a **Totals** row.
+
+- Only finalised invoices count, by the time they were finalised. Items returned at the till are deducted; credit notes are not.
+- The **Margin** column is shown only to users who can see costs (`INVENTORY.VALUATION.VIEW`), on screen and in exports. A product sold before its stock was ever costed shows *not costed* and is left out of the margin total, with a footnote saying how many.
+- **Export PDF**, **Export Excel** and **Export CSV** need `REPORT.EXPORT`.
+
+### 10.6 Profitability Report
+
+Navigate to **Accounting › Profitability Report** (`/admin/reports/profitability`). Requires both `SALES.INVOICE.VIEW` and `INVENTORY.VALUATION.VIEW`, so counter staff cannot open it. In the search box it is also found as "profit", "gross profit", "margin" or "cost of sales".
+
+The report opens on the month so far. Change **From**, **To** and **Branch (optional)** in the **Period** card and click **Run report**.
+
+- Summary tiles: **Gross sales**, **VAT**, **Net sales** and **Profit** (marked *partial* when some costs are unknown).
+- **By department**: for each department (or *(no department)*) — Gross sales, Discount, Net sales, Net amount, VAT amount, Vatable, Exempt, Zero rated, Cost less VAT, Net contribution, Margin % and Markup %.
+- **By item**: Code, Description, Qty sold, Gross sales, VAT, Net sales, Cost of sales and Profit, with a TOTAL row.
+
+As the footnote says, *Gross sales include VAT; net sales are what is left after it. Profit is net sales less what the goods cost you at the time you sold them. A dash means the figure is not known — not zero.* Items returned at the till are deducted, with their cost put back. A warning banner lists items sold before their stock had ever been costed. **Print / PDF**, **Export Excel** and **Export CSV** need `REPORT.EXPORT`.
+
+---
+
+## 11. Restaurant back office
+
+Restaurants take orders, send them to the kitchen and bar, print bills and take payment on the **OrbixPOS** till (see its user manual). The web screens set the restaurant up, show the orders on the floor and run the kitchen display. All three screens work on one branch at a time: if you are assigned to more than one branch, a **Branch** picker at the top chooses it.
+
+| Screen | What it is for | Permission |
+|---|---|---|
+| **Restaurant Setup** | Kitchen and bar stations, what prints where, item departments, choices and add-ons, tables | `RESTAURANT.SETUP.MANAGE` (Branch Manager) |
+| **Restaurant Orders** | The orders open on the floor now | `RESTAURANT.ORDER.MANAGE` |
+| **Kitchen Display** | A screen at a station showing what to make | `RESTAURANT.KITCHEN.MANAGE` (Kitchen role, Branch Manager) |
+
+Waiters sign in on the till with the **Waiter** role and a POS PIN (Administration chapter). Discounts on restaurant bills follow the **Discounts above a limit** setting in Sales Settings; a complimentary bill needs a manager (`SALES.DISCOUNT.OVERRIDE`) and is booked as an expense, not as cash.
+
+### 11.1 Restaurant Setup
+
+Navigate to **Point of Sale › Restaurant Setup** (`/admin/restaurant/setup`) — *Tables, kitchen and bar printers, and which items print where.* The page has four cards. Stations, routing and tables belong to the chosen branch; departments and choices & add-ons are shared by the whole company.
+
+#### Kitchen & bar printers (stations)
+
+**What a station is.** A place where orders are prepared — for example *Kitchen* or *Bar*. Each station gets its own slip when an order is sent. One station is the **default**: anything not routed elsewhere prints there.
+
+**How each station prints.** As the card explains:
+
+- **Network printer** (cable or WiFi) — enter its IP address and port (usually 9100). Every till prints to it directly.
+- **Printer plugged into a PC by USB** — leave the IP empty. On that PC, open OrbixPOS → Settings, choose the printer for this station and tick *Print ALL slips here*. That PC then prints for every till.
+- **No printer** — leave the IP empty and use the **Kitchen Display** on a screen at the station.
+
+To add a station:
+
+1. In **Add a station**, enter the **Name** (e.g. *Kitchen*), the **Printer IP address** (empty for USB or display) and the **Port**.
+2. Tick **Default station (prints anything not routed)** if this is the default.
+3. Click **Add station** (*Station added*).
+
+The table shows **Station** (with a *Default* tag), **Printer**, **Status** and **Edit**. To change a station, click **Edit**, change the fields (including **Active**) and click **Save station**. A branch's first station becomes its default automatically, and only one station can be the default. Stations are never deleted — untick **Active** to stop using one. If no station is marked default, the first active station (alphabetically) acts as the default.
+
+#### What prints where
+
+**What it is.** Every item has a **department** (the *Department / Category* on the product). Here you route each department to a station — for example *Drinks* to the *Bar*. *Category* and *department* mean the same thing on these screens.
+
+1. For each **Category** in the list, choose where it **Prints at**: a station, or **Default (\<default station\>)**.
+2. Click **Save routing** (*Routing saved*).
+
+Saving replaces the branch's whole routing: rows left on Default are no longer routed. When an item is sent from the till, it prints at its department's station; a department that is not routed — or routed to an inactive station — prints at the default station; an item with no department prints at the default station. If the branch has no active stations at all (for example a counter café), items are marked sent but no slip prints. A department called "Kitchen" is not routed anywhere just because of its name — route it here.
+
+The station is recorded on each item when it is sent, so changing the routing later never changes what was already sent.
+
+**Items and their departments.** Holders of `PRODUCT.MANAGE` also see this section, which changes items' departments without opening each product. *An item prints where its department prints. … the department is the same in every branch; where a department prints is set per branch, above.*
+
+- Use **Search items** (*Name or code*) and the **Department** filter (*All departments*, *No department*, or one department). Up to 100 items are shown at a time.
+- To change one item: type or choose its **Department** and click **Save** (*Department saved*). Clearing the box removes the department; the item then prints at the default station. If the department is new to this branch, choose a station in **Prints at** first — **Save** stays disabled until you do; the department is routed, then the item is moved into it.
+- To move several items: tick them (or **Select all items shown**), type the **Move to department**, choose **New department prints at** if the department is new, and click **Move items**. Confirm the prompt. **Clear** removes the ticks.
+
+You can also set a department's station from the Product Master (**Prints at (this branch)**, chapter 02), and copy routing to another branch with **Copy from…** on the Branches screen (Administration chapter).
+
+#### Choices & add-ons
+
+**What they are.** Choices the till asks for when an item is tapped — for example **Milk** (choose one) or **Extras** (any). An option linked to an item is **charged** (for example "Syrup extra"); an option without an item is a free **instruction** to the kitchen (for example "No sugar"). Choices are shared by every branch of the company.
+
+1. Click **Add a choice**.
+2. Enter the **Name** (e.g. *Milk*), and set **Guest must choose at least** (0 = optional) and **At most** (blank = any).
+3. Under **Options**, enter each **Option** (e.g. *Oat milk*). To charge for it, choose the item in **Charged as (optional item)**; leave it as *Free instruction* otherwise. Click **Add option** for more.
+4. Under **Offered on**, use **Add a menu item** to choose the items that ask this choice.
+5. Click **Save choice** (*Choice added*).
+
+The table shows **Choice**, **Rule** (for example *Choose 1* or *Optional — any number*), **Options**, **Items** and **Edit**. To stop using a choice, edit it and untick **In use**. A charged option is added to the bill as its own line, priced, taxed and taken from stock like any item, and follows its main item; a free instruction is added to the item's note for the kitchen.
+
+#### Tables
+
+1. In **Add a table**, enter the **Name** (e.g. *T1*), an optional **Area** (e.g. *Terrace* — the till groups the floor by area), **Seats** and **Order on the floor**.
+2. Click **Add table** (*Table added*).
+
+To add many tables at once, use **Add several tables**: enter **Name starts with** (e.g. *T*), **From** and **To**, and click the button (it reads, for example, **Add T1 to T10**). Up to 100 are added at a time, each with 4 seats; names the branch already has are skipped.
+
+The table list shows **Table**, **Area**, **Seats**, **Now** (*Free*, *Occupied* or *Bill printed*), **Status** and **Edit**. Tables are never deleted — untick **In use** to hide one from the till. A table can hold several open orders (separate parties). Takeaway orders need no table.
+
+### 11.2 Restaurant Orders (the floor right now)
+
+Navigate to **Point of Sale › Restaurant Orders** (`/admin/restaurant/orders`) — *Orders on the floor now. They are taken, sent and paid on the till.* The screen lists the branch's open and billed orders, oldest first; click **Refresh** to update it (it does not refresh by itself). *No open orders. Every table is free.* means nothing is waiting.
+
+| Column | Shows |
+|---|---|
+| **Order** | The order number (click it to see the items) |
+| **Where** | *Table …* or *Takeaway*, and the customer name if one was given |
+| **Opened** | When, and the waiter who now holds the table |
+| **Items** | Number of items (add-ons count as items) |
+| **Status** | *Open*, *Open · N not sent*, *Bill printed* or *Bill printed (N×)* |
+| **Bill total** | The total on the last printed bill (if items were added after printing, this is the old total until the bill is printed again) |
+
+Each item shows its quantity, course, note and state: *not sent*, *held*, *sent to \<station\>* (with *· ready* once the kitchen marks it), or *voided* with the reason.
+
+**Cancelling an order.** Click **Cancel**, enter a **Reason** and click **Cancel order** (**Keep it** to go back). An order with items already sent to the kitchen or bar needs a reason, and the person cancelling must hold `RESTAURANT.ORDER.VOID` (Sales and Branch Managers) — the web has no manager-approval step. Everything else — opening tables, adding items, sending, moving, splitting, merging, discounts, billing and payment — is done on the till.
+
+> **Note.** When an order is cancelled from this screen, the cancellation appears on the Kitchen Display and on a kitchen PC that prints all slips, but a network kitchen printer receives no cancellation slip. Tell the kitchen.
+
+### 11.3 Kitchen Display
+
+Navigate to **Point of Sale › Kitchen Display** (`/admin/restaurant/kitchen`) on any screen at the station — a PC, tablet or TV. Choose the **Station**. *Tap an item when it is ready, or Done for the whole ticket. Refreshes by itself.* — the screen updates every 10 seconds.
+
+- Each ticket is one order's send round, oldest first: *Table …* or *Takeaway*, the minutes since it was sent (the ticket turns red after 15 minutes), the order number, the round and who sent it. Items are grouped by course, with add-ons and notes.
+- **Tap an item** to mark it ready (with its add-ons). **Done** marks the whole ticket ready. **Undo last** brings back the last item you marked.
+- Items cancelled after being sent are struck through with a red **VOID** and the reason; tap to clear them.
+- When everything is made the screen reads *All caught up — nothing to make.* If the branch has no stations: *No kitchen or bar stations are set up for this branch (Restaurant Setup).*
+
+"Ready" shows on the till and on **Restaurant Orders**, so waiters know what to collect.

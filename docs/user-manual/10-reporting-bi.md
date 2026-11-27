@@ -5,6 +5,23 @@ Reporting and Business Intelligence (BI) is the read-only analytical layer of th
 
 This chapter describes the financial statements, the GL account-ledger drill-down, and the analytics dashboard. All reports are read-only and computed on demand — nothing is stored or posted when you run a report.
 
+**Where the other reports are described.** Operational reports live next to the screens they report on, and are documented in the chapter for that module:
+
+| Report | Sidebar location | Where it is described |
+|---|---|---|
+| Sales Summary, Payment Summary (Cash-up), Sales Report, Profitability Report | Sales / Accounting | Chapter 03, section 10 |
+| Restaurant Dashboard and Restaurant Reports | Point of Sale | Chapter 03, sections 10.3–10.4 |
+| Goods Received Register, Purchases by Supplier, Open Purchase Orders, Purchase Price Variance | Purchasing | Chapter 04, section 10 |
+| Stock Valuation, Reorder Report, Stock Ageing, Stock Report (Current Balances), Stock Report (Opening & Closing), Product List, Stock Value | Inventory | Chapter 05, section 9 |
+| Item Inquiry (counter lookup) | Inventory | Chapter 05, section 2.6 |
+| Fixed Asset Register, FA Reconciliation | Finance / Fixed Assets | Chapter 06, section 9 |
+| Project P&L, WIP Report | Projects | Chapter 07, sections 8–9 |
+| Trial Balance, Posting Exceptions, customer and supplier statements, AR and AP ageing, cash statement, VAT return and schedules, WHT register | Accounting | Chapter 08 |
+| Payroll Statutory Report | HR & Payroll | Chapter 11 |
+| CRM Pipeline Dashboard | CRM | Chapter 09 |
+
+Most of these have **Export PDF / Excel / CSV** buttons for users who also hold `REPORT.EXPORT`, and a **Branch** filter that offers only the branches you are assigned to ("All branches" means all of *your* branches if you are limited to some).
+
 ---
 
 ## Financial Statement Reports
@@ -37,7 +54,7 @@ Navigate to **Accounting › Income Statement** (`/admin/reporting/income-statem
 
 1. Select the company by name.
 2. Set **Period from** and **Period to** (date inputs).
-3. Optionally set a **Comparative from** and **Comparative to** to add a prior-period column.
+3. Optionally set a **Comparative from** and **Comparative to** to add a prior-period column, and a **Branch**.
 4. Click **Run**.
 
 The statement shows:
@@ -92,8 +109,8 @@ Navigate to **Accounting › Balance Sheet** (`/admin/reporting/balance-sheet`).
 ![Balance sheet](images/10-reporting-bi/balance-sheet.png)
 
 1. Select the company by name.
-2. Set the **As-at date**.
-3. Optionally set a **Compare as-at** date to add a prior-date column.
+2. Set the **As at date**.
+3. Optionally set a **Comparative as at** date to add a prior-date column, and a **Branch**.
 4. Click **Run**.
 
 The statement shows sections for Current Assets, Non-Current Assets, Current Liabilities, Non-Current Liabilities, and Equity, each with detail lines, subtotals, and four total rows in the footer: **Total Assets**, **Total Liabilities**, **Total Equity**, and a grand-total **Total Liabilities + Equity** row. A balanced set of books shows Total Assets equal to the Total Liabilities + Equity row, confirmed by a green **Balanced** bar (helper text *Assets = Liabilities + Equity.*).
@@ -116,7 +133,7 @@ If a journal ever carried lines for different branches, the branch statement wou
 Rehema Mwangi needs the balance sheet as at 30 June 2026 compared with 30 June 2025.
 
 1. Navigate to **Accounting › Balance Sheet** (`/admin/reporting/balance-sheet`).
-2. Company: `Kijenge Trading Ltd`; As-at date: `2026-06-30`; Compare as-at: `2025-06-30`.
+2. Company: `Kijenge Trading Ltd`; As at date: `2026-06-30`; Comparative as at: `2025-06-30`.
 3. Click **Run**.
 
 The green **Balanced** bar appears, with the helper text *Assets = Liabilities + Equity.* Rehema spots that "Trade Receivables" has grown from TZS 12.4M to TZS 19.7M year-on-year. She clicks the "Trade Receivables" account name to open its ledger for the full fiscal year and reviews each transaction. She then exports to PDF for the audit file.
@@ -134,7 +151,7 @@ Navigate to **Accounting › Cash-Flow Statement** (`/admin/reporting/cash-flow`
 
 1. Select the company by name.
 2. Set **Period from** and **Period to**.
-3. Optionally set a comparative period.
+3. Optionally set **Comparative from** / **Comparative to** and a **Branch**.
 4. Click **Run**.
 
 The indirect-method statement shows movements in three sections:
@@ -269,7 +286,7 @@ Opening balance: TZS 12,350,000. The ledger shows 28 lines — 15 customer recei
 
 ### Trial Balance
 
-The Trial Balance is covered fully in the Finance chapter (Accounting › Trial Balance, `/admin/gl/trial-balance`). It can also be reached from the Accounting navigation group. Permission required: `GL.VIEW`. See the General Ledger section for full usage.
+The Trial Balance is covered fully in the Finance chapter (Accounting › Trial Balance, `/admin/gl/trial-balance`). Permission required: `GL.VIEW`. Besides the classic totals view, it can be run **as at a date** with opening, movement and closing columns and a branch filter, and exported to PDF, Excel or CSV. See the General Ledger section for full usage.
 
 ---
 
@@ -321,7 +338,7 @@ Finance director Gideon Moshi logs in and opens **Analytics › Dashboard** (`/a
 
 4. **Working Capital panel** — AR Outstanding: 19,700,000.00 (green **AR-GL** pill). AP Outstanding: 6,450,000.00 (green **AP-GL** pill). Below AR Outstanding a small line reads *Not converted: USD 1,200.00* — older US-dollar invoices that carry no reliable exchange rate, so they are listed separately instead of being added into the TZS figure. He clicks **View Receivables** to drill into the AR invoices list.
 
-5. **Inventory panel** — Stock Value: 38,250,000.00, with a **Stock-GL (acct 1300)** pill reading **Reconciled**. He uses the heading drill icon to open the stock valuation screen.
+5. **Inventory panel** — Stock Value (at cost): 38,250,000.00; Stock Sales Value: 51,400,000.00 with *Profit on shelf 13,150,000.00* beneath it; and a **Stock-GL (acct 1300)** pill reading **Reconciled**. He uses the heading drill icon to open the stock valuation screen.
 
 6. **CRM panel** — **Pipeline by stage** shows 15 open deals across five stages, one bar per stage with its number of opportunities and value; **Win rate** reads 62.0% with a meter bar, above Won, Lost and Avg cycle; the **Forecast** block shows Open opportunities and a Weighted value of TZS 29,340,000.00. He uses the heading drill icon to open the CRM pipeline dashboard.
 
@@ -368,7 +385,9 @@ All amounts are shown with two decimals and no currency symbol unless stated; th
 
 **Inventory panel (requires `BI.OPS.VIEW`; Group-wide):**
 
-- **Stock Value** and a **Stock-GL (acct 1300)** pill showing whether the stock sub-ledger ties to the GL inventory account (**Reconciled**, or **Difference: …** with the figure when it does not tie).
+- **Stock Value (at cost)** — what the stock on hand cost, at average cost.
+- **Stock Sales Value** — the same stock at the selling prices on the company's default price list, with **Profit on shelf** (sales value − cost) beneath it. Items holding stock with no selling price are left out of this figure and counted underneath ("3 items have no selling price (not counted)"), so it is never read as complete when it is not. It shows **Not priced** when no selling prices are available. This figure is the same as the total of the Stock Value report (chapter 05, section 9.8).
+- A **Stock-GL (acct 1300)** pill showing whether the stock sub-ledger ties to the GL inventory account (**Reconciled**, or **Difference: …** with the figure when it does not tie).
 - The drill icon in the panel heading opens the stock valuation screen.
 
 **CRM panel (requires `BI.CRM.VIEW`; follows the Branch filter):**

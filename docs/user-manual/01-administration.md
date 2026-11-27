@@ -1,91 +1,83 @@
 # Administration and Access
 
-This chapter is for administrators — typically users who hold the **ORG_ADMIN** role. It covers how to set up the organisation hierarchy (companies and branches), manage user accounts, define roles and their permissions, assign roles and branches to users, and review the audit trail.
+This chapter is for administrators — typically users who hold the **ORG_ADMIN** role. It covers how to set up the organisation hierarchy (companies and branches), open a new branch, manage user accounts, define roles and their permissions, assign companies, roles and branches to users, configure company-wide sales settings, and review the audit trail.
 
-> **Permissions required.** You need specific permissions for each section below. If a menu item or button is not visible to you, your role does not include that permission. See the table in each section.
+> **Note — permissions required.** You need specific permissions for each section below. If a menu item or button is not visible to you, your role does not include that permission. Some buttons on the administration screens are visible to everyone who can open the screen, but the action is refused unless you hold the permission named in that section.
 
-> **The sidebar adapts to your permissions.** Navigation items you cannot use are hidden, and a navigation group whose every item is hidden disappears entirely — you will never see an empty group header. If a whole section of this chapter seems to be missing from your sidebar, your role lacks the permissions for it.
+> **Note — the sidebar adapts to your permissions.** Menu items you cannot use are hidden, and a group whose every item is hidden disappears entirely. The **Administration** group holds **Companies**, **Branches**, **Users**, **Roles** and **Audit**.
 
 ---
 
 ## Organisation, Companies, and Branches
 
-**What the three-level hierarchy is.** The system is structured in three nested levels. An **organisation** is the top-level entity representing your entire business group — think of it as the holding entity that owns everything else. A **company** is a distinct legal entity under the organisation (for example, a registered limited company or a subsidiary with its own tax ID). A **branch** is a physical or logical operating unit under a company — a shop, warehouse, regional office, or cost centre.
+**What the three-level hierarchy is.** The system is structured in three nested levels. An **organisation** is the top-level entity representing your entire business group — the holding entity that owns everything else. A **company** is a distinct legal entity under the organisation (for example, a registered limited company or a subsidiary with its own tax ID). A **branch** is a physical or logical operating unit under a company — a shop, warehouse, restaurant, regional office, or cost centre.
 
-**Why this structure exists.** Different businesses have different legal and operational structures. A retail chain might operate a single registered company with many store branches. A group of businesses might operate several legally distinct companies sharing one ERP platform. Separating these levels allows each company to have its own data, its own base currency, and its own set of branches, while all of them are administered through one system.
+**Why this structure exists.** Different businesses have different legal and operational structures. A retail chain might operate a single registered company with many store branches. A group of businesses might operate several legally distinct companies on one system. Separating these levels allows each company to have its own data, its own base currency, and its own set of branches, while all of them are administered together.
 
 **When each level matters.**
-- The organisation is set up once during deployment and is resolved automatically — you never need to type an organisation identifier.
+- The organisation is set up when your business is first registered on the system and is resolved automatically — you never type an organisation identifier. (A server may host several separate businesses; each is its own organisation and never sees the others' data. Creating organisations is done by the service provider, not from this chapter.)
 - Companies are created by an administrator with `COMPANY.MANAGE` permission, typically during the initial rollout or when a new legal entity is formed.
 - Branches are created whenever a new location or operating unit is needed.
 
-**How the levels connect.** Every transaction in the system is tagged with the branch it was performed in. A branch belongs to exactly one company, and from there the company's base currency, fiscal calendar, and legal details apply. A user's session is always scoped to an active branch; switching branches changes the company context as well (the active company is always the company that owns the active branch).
+**How the levels connect.** Every transaction in the system is tagged with the branch it was performed in. A branch belongs to exactly one company, and from there the company's base currency, fiscal calendar, and legal details apply. A user's session is always working in one active branch; switching branches changes the company as well (the active company is always the company that owns the active branch).
 
-The system is structured in three levels:
-
-- **Organisation** — the top-level entity representing your business group. It is configured by IT during deployment and is resolved automatically; you never type an organisation ID.
-- **Company** — a legal entity under the organisation (for example, a registered company or subsidiary). Each company has its own data.
-- **Branch** — a physical or logical office, store, or cost centre under a company. Transactions are scoped to a branch.
+> **Note — plan limits.** Your subscription plan may limit how many companies, branches, users and POS tills you can have. When a limit is reached, creating another one (or re-enabling a disabled user) is refused with a message such as *Your Standard plan allows up to 3 branches, and all of them are in use. Ask your provider to upgrade your plan or raise the limit.*
 
 ### Viewing companies
 
 **Required permission:** `COMPANY.VIEW`
 
-Navigate to **Administration › Companies** (`/admin/companies`) in the sidebar.
+Navigate to **Administration › Companies** (`/admin/companies`).
 
 ![Companies administration](images/01-administration/companies.png)
 
-The list shows each company's code, name, status (Active or Archived), and a **Manage branches** link in the last column. Above the list, the organisation name for this deployment is shown. The list is scoped to your access: a **root administrator** sees every company in the organisation, while everyone else (even holders of `COMPANY.VIEW`) sees only the companies they belong to — those they are assigned to via company membership, a branch, or a role. This keeps the company list from revealing companies you have no access to.
-
-> The Companies screen is intentionally lean: it lets you create a company (code and name), rename it inline (see below), re-provision its default data (see below), and open each company's branches. There is no separate company detail screen — the company code can never be changed after creation.
+Above the list, the line **Organisation:** shows your organisation's name. The list has the columns **Code**, **Name**, **Status** (`ACTIVE` or `ARCHIVED`) and **Branches** (a **Manage branches** link), plus a last column with **Edit** and **Provision defaults** for holders of `COMPANY.MANAGE`. A root administrator sees every company in the organisation; everyone else sees only the companies they belong to — through company membership, a branch, or a role.
 
 ### Creating a company
 
-**What a company record is.** A company record represents one legal entity — a separately registered business with its own identity, tax registration, and (optionally) its own functional currency. Creating a company in the system establishes the container under which that entity's branches, users, and transactions will live.
+**What a company record is.** A company record represents one legal entity — a separately registered business with its own identity, tax registration, and (optionally) its own functional currency. Creating a company establishes the container under which that entity's branches, users, and transactions will live.
 
-**Why you would create one.** You create a new company when a new legal entity joins your group, or when you first deploy the system and need to register your existing companies. Without at least one company, no branches can exist and no users can be assigned a working context.
+**Why you would create one.** You create a new company when a new legal entity joins your group. Without at least one company, no branches can exist and no users can be given a working context.
 
 **Required permission:** `COMPANY.MANAGE`
 
-The create form is an inline card at the top of the Companies list (it appears only if you hold `COMPANY.MANAGE`).
+The create form is an inline card at the top of the Companies list.
 
-1. On the Companies list, in the create card fill in:
-   - **Code** — a short, unique code. Cannot be changed after creation.
+1. In the create card fill in:
+   - **Code** — a short, unique code (up to 20 characters). It cannot be changed after creation.
    - **Name** — the company display name.
 2. Click **Add company**.
 
-The new company appears in the list with status **Active**. The organisation is resolved automatically; you do not choose it. Code and name are the only fields you enter — there is no Legal Name, Tax ID, or Timezone field on this screen.
+The new company appears in the list with status **ACTIVE** and the confirmation *Company created*. It is set up automatically with its default reference data — tax rates, chart of accounts, units of measure, sales settings and currencies (base currency TZS, with the East African currencies plus USD and EUR enabled). Add the legal details next with **Edit** (below).
 
-> A duplicate code is rejected with a conflict (409) error shown beneath the form.
+> **Note.** A duplicate code is refused with *Company code already exists: \<CODE\>*.
 
-### Renaming a company
+### Editing a company's details
 
-**When to rename.** The system ships with a seeded **Default Company**. When you go live you will usually want to give it your real trading name. Renaming lets you correct that — and any later name change — without touching the code (which stays fixed forever).
+**When to edit.** A new installation starts with a seeded **Default Company**. When you go live, give it your real trading name and legal details. The details you enter here — VRN, address and contact details — are printed on POS receipts and printed reports.
 
 **Required permission:** `COMPANY.MANAGE`
 
-Each company row carries an **Edit** button (it appears only if you hold `COMPANY.MANAGE` — a view-only user with only `COMPANY.VIEW` sees no Edit control). To rename a company:
+1. On the Companies list, click **Edit** on the company's row. A details panel opens beneath the row.
+2. Change any of: **Name** (required), **Legal name**, **Tax ID (TIN)**, **VRN**, **Contact phone**, **Contact email**, **Time zone**, **Address line 1**, **Address line 2**, **City**, **Region**, **Country**. The note on the panel reads *VRN, address and contact details appear on POS receipts and printed reports.*
+3. Click **Save** to keep the changes (the confirmation reads *Company updated*), or **Cancel** to discard them.
 
-1. On the Companies list, click **Edit** on the company's row. The Name cell turns into an editable text box.
-2. Type the new name.
-3. Click **Save** to keep the change, or **Cancel** to discard it.
-
-Only the name changes — the code, status, and other attributes are untouched. There is no Archive control on the Companies list. (Archiving exists in the underlying API but is not exposed in the admin UI.)
+The **Code** never changes. There is no Archive control on the Companies list.
 
 ### Provisioning a company's default data
 
-**What "Provision defaults" does.** A newly created company is automatically seeded, in the same transaction as its creation, with the baseline operational and reference data every module expects to find — default tax rates, GL accounts, units of measure, enabled currencies, and the like. **Provision defaults** re-runs that same seeding for an existing company, on demand. It is idempotent: anything the company already has is left alone — the action only fills in whatever is missing.
+**What "Provision defaults" does.** A newly created company is automatically seeded with the baseline reference data every module expects to find — default tax rates, GL accounts, units of measure, enabled currencies, and the like. **Provision defaults** re-runs that same seeding for an existing company, on demand. Anything the company already has is left alone — the action only fills in whatever is missing.
 
-**When to use it.** Use it if a company is missing expected reference data — for example, a company created before automatic provisioning existed, one whose original provisioning only partially completed, or one you simply want to heal after noticing a gap (a missing tax rate, an unset default account). It is safe to click on a company that is already fully provisioned; nothing is duplicated.
+**When to use it.** Use it if a company is missing expected reference data — for example, a company created before automatic provisioning existed, or one you want to heal after noticing a gap (a missing tax rate, an unset default account). It is safe to click on a company that is already fully provisioned; nothing is duplicated.
 
 **Required permission:** `COMPANY.MANAGE`
 
-Each company row carries a **Provision defaults** button alongside **Edit** (visible only if you hold `COMPANY.MANAGE`).
-
 1. On the Companies list, click **Provision defaults** on the company's row.
 2. Confirm the prompt — *"Restore the default setup (tax rates, accounts, units, …) for "\<company name\>"?"*.
-3. The button switches to **Provisioning…** while the request is in flight. The Provision-defaults and Edit actions are interlocked across the **whole** company list, not per row: while any row is being renamed the **Provision defaults** button is disabled on every row, and while a Provision-defaults request is in flight **Edit** is disabled on every row.
-4. On success, a confirmation alert ("Default setup restored") appears. On failure, an error alert explains what went wrong.
+3. The button reads **Provisioning…** while it works. While any row is being edited, **Provision defaults** is disabled on every row, and while a provisioning request is running, **Edit** is disabled on every row.
+4. On success the confirmation *Default setup restored* appears. On failure, *Could not restore defaults* explains what went wrong.
+
+This action is recorded in the audit trail.
 
 ---
 
@@ -95,538 +87,587 @@ Each company row carries a **Provision defaults** button alongside **Edit** (vis
 
 There are two ways to reach a company's branch list:
 
-- **From the sidebar.** Navigate to **Administration › Branches** (`/admin/branches`). This standalone page is reachable with `BRANCH.VIEW` alone — you do not need `COMPANY.VIEW`. It first shows a **Company** picker listing only the companies you can act in; choose one to load its branches. If you can act in exactly one company, the page selects it for you automatically and goes straight to that company's branch list.
-- **From the Companies screen.** Navigate to **Administration › Companies** (`/admin/companies`), then click the **Manage branches** link on the company's row to open its branch list at `/admin/companies/<companyUid>/branches`. (This path requires `COMPANY.VIEW` to reach the Companies screen.)
+- **From the sidebar.** Navigate to **Administration › Branches** (`/admin/branches`). Choose the **Company** (options read *Name (CODE)*) to load its branches. If you can act in exactly one company, it is selected for you. If you are not assigned to any company yet you see *You aren't assigned to any company yet. Ask an administrator to assign you to a branch.*
+- **From the Companies screen.** Click **Manage branches** on the company's row.
 
 ![Branches administration](images/01-administration/branches.png)
 
-Either way, the branch list shows each branch's code, name, default flag, and status.
+The branch list has the columns **Code**, **Name**, **Default** (a **Default** tag, or a **Make default** button), **Status**, and the row actions **Copy from…**, **Edit** and **Archive**.
 
 ### Creating a branch
 
-**What a branch record is.** A branch is the smallest organisational unit in the system. It represents one operating location or logical division — a physical store, a warehouse, a regional sales office, or an accounting department. Every transaction (a sales invoice, a goods receipt, a payment) is tagged to the branch that was active when it was created.
+**What a branch record is.** A branch is the smallest organisational unit in the system. It represents one operating location or division — a physical store, a restaurant, a warehouse, a regional sales office, or an accounting department. Every transaction is tagged to the branch that was active when it was created.
 
-**Why branches exist.** Without branches, all transactions for a company would be lumped together with no way to separate one location's performance from another's. Branches let management analyse stock levels by store, compare revenue by region, control what each staff member can see and do (a storekeeper at one branch cannot access another branch's data), and ensure that GL postings land in the right cost centre.
+**Why branches exist.** Branches let management analyse stock and revenue by location, control what each staff member can see and do, and make sure accounting entries land in the right place.
 
-**When to create one.** Create a branch when a new physical location opens, when a new department or cost centre is established, or during initial setup to represent your existing offices and stores.
+**How a branch interacts with users.** A user must be assigned to at least one branch to have an active working context. One of their assigned branches is their **default branch** — the branch that activates automatically on sign-in.
 
-**How a branch interacts with users.** A user must be assigned to at least one branch to have an active session. One of their assigned branches is marked as their **default branch** — this is the branch that activates automatically on login. A user can be assigned to many branches and can switch between them during a session without logging out.
-
-**Required permission:** `BRANCH.MANAGE`
+**Required permission:** `BRANCH.MANAGE` (and `PRODUCT.BRANCH.ASSIGN` to copy a menu at the same time)
 
 The create form is an inline card at the top of the branch list.
 
-1. From the branch list of a company, in the create card fill in:
+1. Fill in:
    - **Code** — a unique code within this company.
    - **Name** — the branch display name.
-   - **Set as default** — check this to make the new branch the company's default branch. If another branch was already the default, that branch's default flag is cleared automatically.
+   - **Set as default** — tick to make the new branch the company's default branch. The previous default is cleared automatically.
+   - **Start menu & prices from (optional)** — choose an existing branch to give the new branch that branch's menu and branch prices, or leave **— Don't copy —**. The hint reads *Items sold only at some branches are not sold at a new branch until it is ticked there. Copying from a branch starts this one with that branch's items and prices.* (Shown only to holders of `PRODUCT.BRANCH.ASSIGN`.)
 2. Click **Add branch**.
 
-There is no Timezone field on the form — branches inherit the company's settings.
+The confirmation reads *Branch created*, followed by a summary of the copy when you chose one — for example *Menu & prices: 42 item(s) now sold here, 12 with the other branch's price.* If the branch was created but the copy failed, the message says so and tells you to use **Copy from…** on the branch to try again; the branch itself is kept.
+
+Each new branch is given its own default stock location automatically. There is no time-zone field on the form — branches follow the company's settings.
 
 ### Setting the company default branch
 
-**What the company default branch is.** Each company has exactly one branch flagged as its default. This default is the branch that new users in this company start in when they have no personal default of their own, and it is used by the system in contexts where a company-level default is needed (for example, documents that auto-populate a branch).
-
-**Why only one default per company.** Having more than one "default" is ambiguous — the system would not know which one to apply. The uniqueness rule (enforced at the database level) ensures there is always one unambiguous answer.
-
-Only one branch per company can be the default. The default branch is the one users are taken to on login when no other preference is active.
+**What the company default branch is.** Each company has exactly one branch flagged as its default. It is used where a company-level default branch is needed — for example, for documents that fill in a branch automatically.
 
 1. On the branch list, find the branch you want to make default.
 2. Click **Make default** on that row.
 
-The current default branch shows a **Default** status tag instead of a button. The previously default branch is cleared automatically.
+The new default shows a **Default** tag instead of a button, and the previous default is cleared automatically.
 
 ### Renaming a branch
 
-**When to rename.** A new deployment seeds a **Head Office** branch. Rename it (and any other branch) to match how your locations are actually called — a store name, a depot, a regional office. As with companies, the code is fixed at creation; only the name can change.
+**When to rename.** A new installation seeds a default branch. Rename it (and any other branch) to match how your locations are actually called. The code is fixed at creation; only the name can change.
 
 **Required permission:** `BRANCH.MANAGE`
 
-Each branch row carries an **Edit** button (it appears only if you hold `BRANCH.MANAGE` — a view-only user with only `BRANCH.VIEW` sees no Edit control). To rename a branch:
-
-1. On the branch list, click **Edit** on the branch's row. The Name cell turns into an editable text box.
+1. On the branch list, click **Edit** on the branch's row. The Name cell becomes an editable box.
 2. Type the new name.
-3. Click **Save** to keep the change, or **Cancel** to discard it.
+3. Click **Save** to keep the change (*Branch updated*), or **Cancel** to discard it.
 
 ### Archiving a branch
 
-A branch's code is fixed at creation; the per-row actions are **Edit** (rename), **Make default**, and **Archive**.
+Click **Archive** on the branch's row. There is no confirmation: the status changes to **ARCHIVED** at once and the branch is removed from branch-selection lists. There is no Restore, so archive only branches that have closed for good.
 
-To archive a branch, click **Archive** on its row. The branch status changes to **Archived** and it is removed from branch-selector lists. Any users whose default was this branch will lose their active branch on next login.
+Users whose default branch it was get their earliest remaining branch assignment as their new default. A user who had no other branch is left with no active branch until an administrator assigns one.
 
-> The current default branch cannot be archived directly — its row shows the **Default** tag and no Archive button. Make another branch the default first, then archive the former default.
+> **Note.** The current default branch cannot be archived — its row shows the **Default** tag and no Archive button. Make another branch the default first.
+
+### Copying a menu, prices and kitchen routing between branches
+
+**What "Copy from…" does.** When your branches do not all sell the same items, each item can be restricted to the branches that sell it, and given a different price per branch (see *Different menus and prices per branch* in the Master Data chapter). **Copy from…** fills in a branch's menu, branch prices and — for restaurants — kitchen and bar routing from another branch in one step, instead of ticking items one at a time.
+
+**Required permission:** `PRODUCT.BRANCH.ASSIGN` for the menu and prices; `RESTAURANT.SETUP.MANAGE` for kitchen routing. The button appears on active branches when the company has at least two active branches.
+
+1. On the branch list, click **Copy from…** on the branch you want to fill. A **Copy into \<branch\>** panel opens with the reminder *Only fills what \<branch\> has not set yet — nothing it already has is changed.*
+2. In **Copy from**, choose the branch to copy from.
+3. Tick what to copy:
+   - **Menu & prices** (ticked by default) — every item that is restricted to particular branches, is sold at the source branch, and has not been set at this branch yet becomes sold here, with the source branch's price.
+   - **Kitchen routing — only to stations \<branch\> already has** (not ticked by default) — each department this branch does not route yet is sent to this branch's station **of the same name** (for example *Bar* to *Bar*). No station is created, no existing route is moved, and the default station is not changed.
+4. Click **Copy**. A summary lists what happened, for example:
+   - *Menu & prices: 18 item(s) now sold here, 6 with the other branch's price. 3 item(s) this branch had already set were left as they were.*
+   - *Kitchen routing: 4 department(s) routed. This branch has no Bar station, so 2 department(s) still print at its default station.*
+5. Click **Close** when done.
+
+The copy only ever fills gaps: an item this branch already has a setting for — sold, not sold, or its own price — is never changed. Items with no branch restrictions need nothing, because they are already sold everywhere. You can run the copy again at any time; a second run copies only what is still missing.
+
+### Opening a new branch — checklist
+
+Work through these steps whenever a new shop, restaurant or warehouse opens.
+
+1. **Create the branch** (*Creating a branch* above). If your branches sell different items or prices, choose **Start menu & prices from** a similar branch.
+2. **Check the menu.** Items fall into two groups:
+   - **Items with no branch restrictions are sold at every branch automatically**, including the new one, at the company price.
+   - **Items restricted to some branches stay hidden at the new branch** — the till does not show them and a sale is refused — until you copy them (**Start menu & prices from** or **Copy from…**), tick **Sold here** for the new branch on the product, or set them with the **Branch menu & prices** bulk sheet (Master Data chapter).
+   > **Note.** Nothing warns you if you forget this step. Before the branch's first day of trading, open a few restricted items, or export the **Branch menu & prices** sheet, and check the new branch's column.
+3. **Restaurants: set up stations and routing.** In **Point of Sale › Restaurant Setup**, switch to the new branch, add its kitchen and bar stations (and tables), then either route departments there or use **Copy from…** with **Kitchen routing**. Routing can only be copied onto stations that already exist with the same name.
+4. **Assign staff** to the new branch and grant their roles (*Assigning Branches to Users* and *Assigning Roles to Users* below).
+5. **Create the tills** for the branch (**Point of Sale › POS Tills**, Sales chapter).
+6. **Load opening stock** at the branch (Inventory chapter, or the **Stock on-hand levels** bulk sheet).
 
 ---
 
 ## Users
 
-**What a user account is.** A user account is a named login identity in the system. It consists of a username (the login name), a display name (shown in the interface and in audit logs), a password, and optional contact details (email, phone). A user is an organisation-wide record — the same account can be active in multiple companies, though its permissions depend on which company and branch it is working in at any given moment.
+**What a user account is.** A user account is a named sign-in identity. It consists of a username, a display name (shown in the interface and in audit logs), and a password. A user belongs to the organisation and can work in several companies; their permissions depend on the company and branch they are working in.
 
-**Why user accounts exist.** Shared logins (for example, a single "accountant" password passed around the team) make audit trails meaningless — the log shows "accountant did X" and you cannot know who actually did it. Named individual accounts mean every action is attributable to a real person, accounts can be individually disabled without disrupting others, and each person can be given exactly the permissions their job requires.
+**Why user accounts exist.** Shared logins make audit trails meaningless — the log shows "accountant did X" and you cannot know who actually did it. Named individual accounts mean every action is attributable to a real person, accounts can be disabled individually, and each person gets exactly the permissions their job requires.
 
-**When to create a user.** Create a user when a new employee joins, when a contractor needs access, or when a role needs an automated service account. If you create the user while acting as a non-root company administrator, the system automatically makes the new user a member of your active company in the same step — you do not need a separate action for this common case. You then still need to assign at least one branch and grant at least one role; a user with no branches and no roles can log in but will see no menu and have no active branch. (The `rootadmin` account has no single active company, so a user created while signed in as root is left with no company membership — assign one explicitly first; see [Assigning Companies to Users](#assigning-companies-to-users).) Branches and roles can only be assigned within a company the user already belongs to.
+**When to create a user.** When a new employee joins or a contractor needs access. If you create the user while acting as a non-root administrator, the user is automatically made a member of your active company in the same step. You then still need to assign at least one branch and grant at least one role; a user with no branches and no roles can sign in but sees only the **Home** link and a **No branch** chip. (A root administrator has no single active company, so a user created as root is left with no company membership — assign one first; see [Assigning Companies to Users](#assigning-companies-to-users).)
 
-**How the user lifecycle works.** A user starts `ACTIVE`. An administrator can `DISABLE` the account (status becomes `INACTIVE`) to prevent login while preserving the account and its history — for example, during a leave of absence or pending investigation. `ENABLE` restores it to `ACTIVE`. The `rootadmin` account cannot be disabled. If too many wrong-password attempts are made, the account is automatically locked for 15 minutes; an administrator can clear this with **Unlock**. User accounts are never hard-deleted.
+**How the user lifecycle works.** A user starts `ACTIVE`. An administrator can **Disable** the account (status becomes `INACTIVE`) to prevent sign-in while keeping the account and its history. **Enable** restores it. Root accounts cannot be disabled. After 5 wrong-password attempts the account locks for 15 minutes; an administrator can clear this with **Unlock**. User accounts are never deleted.
 
 **Required permission to view:** `USER.VIEW`
-**Required permission to create/edit/disable/unlock/reset password:** `USER.MANAGE`
+**Required permission to create / disable / enable / unlock / reset password / set a POS PIN:** `USER.MANAGE`
 
-Navigate to **Administration › Users** (`/admin/users`) in the sidebar.
+Navigate to **Administration › Users** (`/admin/users`).
 
 ### The users list
 
 ![Users list](images/01-administration/users.png)
 
-The list shows columns for **Username**, **Display name**, **Status**, **Locked**, and **Root** (a marker on the `rootadmin` account), plus a per-row action area. The actions on each row are **Disable**/**Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form), and **Assignments** (a link that opens the user's Assignments page at `/admin/users/uid/<uid>`, where you manage the user's companies, branches, and roles). Root accounts do not show a Disable action.
+The list has the columns **Username**, **Display name**, **Status**, **Locked** (a *locked* tag) and **Root** (a *root* tag), sorted by username. Each row has the actions **Disable** / **Enable**, **Unlock** (only when the account is locked), **Password** (an inline set-password form) and **Assignments** (opens the user's Assignments page). Root accounts do not show **Disable**.
 
-The list is scoped to your access: a **root administrator** sees every user in the organisation, while everyone else sees only the (non-root) users who are members of their active company — including any user they have just created, since creating a user makes it a member of the creator's active company automatically (see below, and [Assigning Companies to Users](#assigning-companies-to-users)).
+A root administrator sees every user in the organisation; everyone else sees only the non-root users who are members of their active company — including anyone they have just created.
+
+> **Note.** The row actions are visible to everyone who can open the list, but they work only for holders of `USER.MANAGE`. If nothing happens when you click one, ask an administrator to check your role.
 
 ### Creating a user
 
-The create form is an inline card (**Add User**) at the top of the Users list.
+The create form is the **Add User** card at the top of the Users list.
 
-1. On the Users list, in the **Add User** card fill in:
-   - **Username** — must be unique. Stored in lowercase. May contain only letters, digits, dots (`.`), underscores (`_`), and hyphens (`-`); spaces and other characters are rejected. Up to 80 characters.
-   - **Display name** — the name shown in the UI. Up to 160 characters.
-   - **Temporary password** — must be at least 8 characters and contain at least one letter and one number. Common passwords (such as `password1` or `admin123`) are rejected.
+1. Fill in:
+   - **Username** — letters, digits, dots (`.`), underscores (`_`) and hyphens (`-`) only, up to 80 characters; it is stored in lower case. On most installations the box is followed by a fixed **@yourcompany** part that you cannot change, and the hint reads *Will be created as name@yourcompany — give the new user the full name to sign in with.* Type only the first part; do not type **@** yourself.
+   - **Display name** — the name shown in the system (up to 160 characters).
+   - **Temporary password** — at least 8 characters, with letters and at least one number; common passwords are refused.
 2. Click **Add user**.
 
-The user is created with status **Active** and no role or branch assignments. The create form captures only the username, display name, and temporary password — there are no email or phone fields here. Assign roles and branches next (see below). If you created the user while acting as a non-root administrator, the user is also automatically made a member of your active company — no separate step is needed, and the user immediately appears in your Users list.
+The confirmation *User created* shows the full username. The user is **ACTIVE**, with no roles or branches yet — assign them next (see below). Give the user their full username and temporary password: the first time they sign in, they must choose their own password before they can use the system (see *Temporary passwords* in Getting Started).
 
-> Usernames are compared case-insensitively. `Alice.Smith` and `alice.smith` refer to the same account. Creating a user whose username already exists is rejected with a conflict (409) error.
+> **Note.** Usernames are compared without regard to capitals: `Alice.Smith` and `alice.smith` are the same account. A username that already exists is refused with *Username already exists: \<name\>*.
 
 ### Disabling and enabling a user
 
-- **Disable** — click **Disable** on the user's row. The user's persisted status changes to **Inactive** and they can no longer sign in. The account and its history are preserved. (Immediately after you click, the row may briefly show **Disabled** as an optimistic in-memory label; on the next refresh it settles to the stored **Inactive** status.)
-- **Enable** — click **Enable** on the row to restore the user to **Active** status.
+- **Disable** — click **Disable** on the user's row. The user can no longer sign in and any open session ends. The row briefly shows **DISABLED**, and settles to **INACTIVE**. The account and its history are kept.
+- **Enable** — click **Enable** to restore the user to **ACTIVE**. Re-enabling counts towards your plan's user limit.
 
-The **rootadmin** account cannot be disabled.
+Root accounts cannot be disabled.
 
 ### Unlocking a locked account
 
-**What account locking is.** After 5 consecutive wrong-password attempts, the system locks the account for 15 minutes — a security measure to slow down automated guessing attacks. While locked, even the correct password is rejected and the user sees a specific message.
+**What account locking is.** After 5 wrong-password attempts in a row (or 5 wrong waiter PINs at the till), the system locks the account for 15 minutes to slow down guessing. While locked, even the correct password is refused.
 
-**When to unlock manually.** If a user cannot wait 15 minutes (for example, during a time-sensitive business operation), an administrator with `USER.MANAGE` can clear the lockout immediately. The failed-attempt counter resets on unlock.
-
-If a user has been locked out after too many failed sign-in attempts, a locked indicator appears on their row. Click **Unlock** to clear the lockout. The user can then sign in again with the correct password.
+**When to unlock manually.** If the user cannot wait 15 minutes, click **Unlock** on their row (the row shows a *locked* tag). The failed-attempt counter is reset and the user can sign in again straight away.
 
 ### Resetting a user's password
 
-**When to reset.** Reset a password when a user forgets theirs, when you suspect a password has been compromised, or when a new user needs to change the temporary password set on account creation.
+**When to reset.** When a user forgets their password or you suspect it has been seen by someone else.
 
-1. On the Users list, click **Password** on the user's row to expand the inline set-password form.
-2. Enter a new password that meets the policy (at least 8 characters, at least one letter and one number, not a common password).
-3. Click **Save**.
+1. On the Users list, click **Password** on the user's row.
+2. Enter a **New password** that meets the rules (at least 8 characters, letters and at least one number, not a common password).
+3. Click **Save** (or **Cancel**).
 
-The user can sign in immediately with the new password. Passwords are never stored in plain text and are not shown in audit logs.
+The confirmation reads *Password updated*. The new password is a **temporary password**: the user signs in with it and is then asked to choose their own. Passwords are never stored in readable form and never appear in audit logs.
+
+> **Note.** You can only reset the password of — or set a PIN for — a user whose permissions do not exceed your own. This stops an administrator from taking over a more powerful account.
 
 ### The user Assignments page
 
-Click **Assignments** on a user's row to open their Assignments page (`/admin/users/uid/<uid>`). This page shows a **read-only header** (username, display name, and status, locked, and root tags) followed by three management cards in order: **Companies**, **Branch Assignments**, and **Role Assignments** (see the sections below). It does not contain a form for editing display name, email, or phone — there is no contact-details edit screen in the current interface.
+Click **Assignments** on a user's row to open their Assignments page. It starts with a **← Back to Users** link and a header showing the username and display name with status, locked and root tags, followed by these cards in order:
 
-> **Assign a company first.** Company membership is the prerequisite for the other two cards. Until the user belongs to at least one company, the Branch and Role cards show a hint to assign a company first, and their company pickers are empty. Once you assign a company, that company becomes selectable when assigning the user's branches and roles. (See [Assigning Companies to Users](#assigning-companies-to-users) below.)
+1. **POS PIN** (only for holders of `USER.MANAGE`) — see below.
+2. **Companies** — see [Assigning Companies to Users](#assigning-companies-to-users).
+3. **Branch Assignments** — see [Assigning Branches to Users](#assigning-branches-to-users).
+4. **Role Assignments** — see [Assigning Roles to Users](#assigning-roles-to-users).
+
+There is no form for changing a user's display name or contact details.
+
+> **Note — assign a company first.** Company membership is the prerequisite for the branch and role cards. Until the user belongs to at least one company, those cards show a hint to assign a company first, and their company pickers are empty.
+
+### Setting a waiter's POS PIN
+
+**What it is.** In a restaurant, waiters sign in on a shared till by tapping their name and typing a short PIN instead of a full password. The PIN works only for **waiters** — users whose role lets them take restaurant orders but not open a till shift (for example the **WAITER** role). Cashiers and managers always sign in with their password, even if a PIN is set for them.
+
+**Required permission:** `USER.MANAGE`
+
+1. Open the waiter's Assignments page. The **POS PIN** card explains: *A 4-digit PIN lets a waiter sign in on the POS by tapping their name. Cashiers and managers always use their password. Easy PINs (1111, 1234…) are refused.* **Status** shows **PIN set** or **No PIN**.
+2. Type four digits in **New PIN**.
+3. Click **Set PIN** (it reads **Reset PIN** when a PIN already exists). The confirmation reads *POS PIN set*.
+
+To stop PIN sign-in, click **Remove PIN** (*POS PIN removed*). A PIN that is all one digit or a straight run (such as 1234 or 4321) is refused with *That PIN is too easy to guess. Choose another.* Waiters can also change their own PIN on the till. A wrong PIN at the till counts towards the account lock-out. Setting and removing PINs is recorded in the audit trail; the PIN itself never is.
+
+For a waiter to appear on the till's sign-in tiles they must hold the **WAITER** role and be assigned to that branch.
 
 ---
 
 ## Roles
 
-**What a role is.** A role is a named, reusable bundle of permissions. For example, an `ACCOUNTANT` role might include permissions such as `GL.POST`, `AR.VIEW`, `AP.BILL.ENTER`, and `CASH.RECONCILE`. Once defined, the role can be granted to any number of users. If the business needs to change what accountants can do, the administrator updates the role once and the change takes effect for every holder immediately.
+**What a role is.** A role is a named, reusable bundle of permissions. For example, the `ACCOUNTANT` role includes permissions such as `GL.POST`, `AR.VIEW` and `AP.BILL.ENTER`. Once defined, the role can be granted to any number of users. If the business needs to change what a custom role can do, the administrator updates it once and the change takes effect for every holder immediately.
 
-**Why roles exist — RBAC.** This design is called Role-Based Access Control (RBAC). It exists because managing permissions per-user does not scale: a company with 50 staff and over 220 permission codes would require thousands of individual permission grants, each needing manual maintenance. With roles you manage a small set of job functions, not a large matrix of individual grants. RBAC also makes compliance simpler: you can demonstrate to an auditor exactly which capabilities any given role confers.
+**Why roles exist.** Managing permissions per user does not scale: with dozens of staff and more than 260 permission codes, you would face thousands of individual grants. With roles you manage a small set of job functions. Roles also make compliance simpler: you can show an auditor exactly which capabilities any given role confers.
 
-**When roles are created.** Roles are created during initial setup (to match the job functions in your organisation) and updated whenever those functions evolve. A small set of **system roles** (such as `ORG_ADMIN`) are seeded during deployment and cannot be archived; custom roles can be freely created and modified.
+**How a role's permissions take effect.** When a role's permissions are saved, holders see the change on their very next action — there is no need to sign out and back in.
 
-**How a role's permissions take effect.** When a role's permission set is saved, the system invalidates its permission cache. Users who hold the role see the change on their very next request — there is no need to log out and back in.
-
-**The effective permission set.** A user may hold multiple roles. Their effective permissions at any moment are the **union** of all permissions from all their active role grants in the current company and branch context. If Role A grants `GL.VIEW` and Role B grants `GL.POST`, a user with both roles has both.
+**The effective permission set.** A user may hold several roles. Their permissions at any moment are everything that all their roles give them in the current company and branch. If Role A grants `GL.VIEW` and Role B grants `GL.POST`, a user with both roles has both.
 
 **Required permission to view:** `ROLE.VIEW`
-**Required permission to create / edit / set permissions:** `ROLE.ADMIN` (the role catalogue itself is guarded by `ROLE.ADMIN`; the separate `ROLE.MANAGE` permission governs assigning existing roles to users — see *Assigning Roles to Users* below)
+**Required permission to create / edit / set permissions:** `ROLE.ADMIN` (the separate `ROLE.MANAGE` permission governs *granting* existing roles to users — see *Assigning Roles to Users* below)
 
-Navigate to **Administration › Roles** (`/admin/roles`) in the sidebar.
-
-Roles are named bundles of permissions. A user can be granted one or more roles; the effective permissions are the union of all granted roles in the active branch context.
+Navigate to **Administration › Roles** (`/admin/roles`).
 
 ### The roles list
 
-![The Roles list, including the 12 built-in operational roles](images/01-administration/roles.png)
+![The Roles list, including the built-in operational roles](images/01-administration/roles.png)
 
-The list shows each role's code, name, a permission count, and its status, plus a marker on **system** roles (pre-defined and cannot be archived). The code and name cells are plain text — they are not clickable. To open a role's edit page at `/admin/roles/uid/<uid>`, click the **Edit** button in the row's actions column.
+The list has the columns **Code**, **Name** (with a grey *system* tag on built-in roles), **Permissions** (the number of permissions), **Status**, and two actions:
 
-### Built-in operational roles
+- **View permissions** — opens a **Permissions — \<role name\>** window listing the role's permission codes grouped by module (*This role has no permissions.* when empty). Click **Close** to return. Available to everyone who can see the list.
+- **Edit** — opens the role's edit page. Shown only to holders of `ROLE.ADMIN`.
 
-**What they are.** The system ships with **12 ready-made operational roles** — one for each common job function — so you can put staff to work without composing a permission set from scratch. They appear in the Roles list from day one, alongside `ORG_ADMIN`, ready to grant to users in the [Assigning Roles to Users](#assigning-roles-to-users) section below. Each is a **system role**: it is marked as **system** in the list, cannot be deleted or archived, and its permission set is fixed (view it on the role edit page, but you cannot change it — see [Setting a role's permissions](#setting-a-roles-permissions)).
+### Built-in roles
 
-**How they differ from ORG_ADMIN.** `ORG_ADMIN` holds *every* permission in the system — it is the full administrator. The 12 operational roles are **least-privilege**: each holds only the permissions its job actually needs, so a Cashier cannot manage users, a Salesperson cannot void invoices or change pricing settings, and an Accountant cannot close the fiscal year. This is deliberate — you assign people the narrowest role that lets them do their work.
+**What they are.** The system ships with ready-made roles for common job functions, so you can put staff to work without composing a permission set from scratch. They appear in the Roles list from day one, marked *system*. A built-in role cannot be deleted, archived, renamed or changed — view its permissions, but you cannot edit them.
 
-**How to use them.** Grant one (or more) of these roles to a user for a company, exactly as you would any other role (see [Assigning Roles to Users](#assigning-roles-to-users)). If none of them fits a person's responsibilities exactly, use them as a starting reference and create your own **custom** role (custom roles are freely editable; the 12 shipped roles are not).
+**How they differ from ORG_ADMIN.** `ORG_ADMIN` (*Organisation Administrator*) holds every permission available to your business — it is the full administrator. The operational roles are **least-privilege**: each holds only what its job needs, so a Cashier cannot manage users, a Salesperson cannot void invoices or change pricing settings, and an Accountant cannot close the fiscal year.
+
+**How to use them.** Grant one or more of these roles to a user for a company (see [Assigning Roles to Users](#assigning-roles-to-users)). If none fits a person's responsibilities exactly, create your own **custom** role.
 
 | Code | Name | What it can do |
 |------|------|----------------|
-| `SALESPERSON` | Salesperson | Quotes, orders, invoices, deliveries and returns; issue fiscal receipts; onboard customers. No overrides, voids, or settings. |
-| `CASHIER` | Cashier | POS till (open, sell, close, reconcile), customer receipting, end-of-day cash count and petty cash. Front-line cash only. |
+| `SALESPERSON` | Salesperson | Quotes, orders, invoices, deliveries and returns; take payments on invoices; issue fiscal receipts; onboard customers. No overrides, voids, or settings. |
+| `CASHIER` | Cashier | POS till: open and close a shift, sell, reverse a sale while the shift is open, record till expenses; restaurant orders; customer receipting, end-of-day cash count and petty cash. Does **not** reconcile a till — a manager does that. |
 | `FIELD_SALES_AGENT` | Field Sales Agent | Route/van selling: capture orders, invoice and deliver on a route, collect cash receipts, reconcile van stock. |
-| `STOREKEEPER` | Storekeeper | Stock control: view, adjust, count, post, transfer, locations; receive goods against a PO; supplier returns; batch/serial/expiry. |
+| `STOREKEEPER` | Storekeeper | Stock control: view, adjust, count, transfer and receive transfers, manage locations, opening stock and the stock bulk sheet; receive goods against a PO or without one; supplier returns; batch/serial/expiry views. Posting a count is for a manager. |
 | `ACCOUNTANT` | Accountant | GL journals (not close), AR and AP sub-ledgers, cash & bank, VAT preparation (not filing), WHT, cost tagging and financial reports. |
-| `SALES_MANAGER` | Sales Manager | Full sales including overrides, voids, credit override and settings; pricing rules, CRM, agents and routes, and sales approvals. |
-| `BRANCH_MANAGER` | Branch Manager | Broad single-branch oversight: cross-module views, approvals and operational sign-offs (POS reconcile, cash count, stock post, PO/requisition approve). Usually assigned branch-scoped. |
-| `PROCUREMENT_OFFICER` | Procurement Officer | Requisition, RFQ, purchase order, receive and returns; landed cost and suppliers. No approve, void, or settings. |
+| `SALES_MANAGER` | Sales Manager | Full sales including overrides, voids, credit override and settings; price lists, mass price change and pricing rules; CRM, agents and routes; sales approvals; restaurant orders and voids; offline-sales review. |
+| `BRANCH_MANAGER` | Branch Manager | Broad branch oversight: cross-module views, approvals and sign-offs (POS reconcile, cash count, stock post, PO/requisition approve), tills and offline-sales review, restaurant set-up, kitchen display and voids. Usually granted for one branch. |
+| `PROCUREMENT_OFFICER` | Procurement Officer | Requisition, RFQ, purchase order, receive and returns; landed cost; suppliers; product and unit master data. No approve, void, or settings. |
 | `PROCUREMENT_MANAGER` | Procurement Manager | Everything the officer has, plus PO/requisition approval, PO/goods-receipt void, and purchase settings. |
-| `HR_PAYROLL_MANAGER` | HR & Payroll Manager | Employees, leave and loans; pay components; the full payroll run/approve/post/disburse/reverse cycle; statutory deductions. |
-| `FINANCE_DIRECTOR` | Finance Director | Everything the Accountant has, plus GL configuration, period/year close, VAT filing, FX revaluation, fixed assets, budgeting and approvals policy. Not user or company administration. |
+| `HR_PAYROLL_MANAGER` | HR and Payroll Manager | Employees, leave and loans; pay components; the full payroll run/approve/post/disburse/reverse cycle; statutory deductions. |
+| `FINANCE_DIRECTOR` | Finance Director | Everything the Accountant has, plus GL configuration, period/year close, VAT filing, currencies and FX revaluation, fixed assets, budgeting and approvals policy. Not user or company administration. |
 | `PRODUCTION_MANAGER` | Production Manager | Work-order lifecycle, BOMs, material movements and WIP/costing views. |
+| `WAITER` | Waiter | Takes restaurant orders, sends them to the kitchen and bar, and prints bills. Takes no payment. Can sign in on the till with a PIN. |
+| `KITCHEN` | Kitchen | The Kitchen Display: sees what to make and marks it ready. |
 
-> The `SALESPERSON`/`SALES_MANAGER`, `PROCUREMENT_OFFICER`/`PROCUREMENT_MANAGER`, and `ACCOUNTANT`/`FINANCE_DIRECTOR` pairs are split on purpose: the manager/director role adds the approve, void, close and settings capabilities that the day-to-day role deliberately lacks (segregation of duties). Assign the day-to-day role to front-line staff and the manager role to whoever signs off their work.
+> **Note.** The `SALESPERSON`/`SALES_MANAGER`, `PROCUREMENT_OFFICER`/`PROCUREMENT_MANAGER`, and `ACCOUNTANT`/`FINANCE_DIRECTOR` pairs are split on purpose: the manager/director role adds the approve, void, close and settings capabilities that the day-to-day role deliberately lacks. Give the day-to-day role to front-line staff and the manager role to whoever signs off their work.
 
 ### Creating a role
 
-The create form is an inline card at the top of the Roles list.
+The create card at the top of the Roles list is shown to holders of `ROLE.ADMIN`.
 
-1. In the create card, fill in:
-   - **Code** — a short identifier, unique within the organisation. Cannot be changed after creation.
+1. Fill in:
+   - **Code** — a short identifier (up to 40 characters). It cannot be changed later, and it cannot reuse the code of a built-in role.
    - **Name** — a human-readable label.
    - **Description** — optional notes.
 2. Click **Add role**.
 
-The new role is created with no permissions. Assign permissions next.
+The role is created (*Role created*) with no permissions. Set its permissions next. A code that already exists is refused with *Role code already exists: \<CODE\>*. Custom roles belong to your organisation only.
 
-> A duplicate role code is rejected with a conflict (409) error.
+### Editing a role
 
-### Editing a role's name or description
+Click **Edit** on the role's row. The edit page starts with **← Back to Roles** and the heading *\<CODE\> — \<Name\>*, followed by two cards.
 
-Open the role's edit page (`/admin/roles/uid/<uid>`) and update the name or description fields, then click **Save details**. The code cannot be changed.
+**Role Details.** The **Code** is shown but cannot be changed (*Immutable — set at creation.*). Update **Name** or **Description** and click **Save details**. *Saved.* appears beside the button.
 
-### Setting a role's permissions
+**Permissions.** Every permission is listed with its code and a short description, grouped by module (for example **iam**, **sales**, **pos**). A counter shows how many are selected, for example *18 of 260 selected*.
 
-**What the permission catalogue is.** A permission is the finest-grained unit of access control in the system — a named capability that says "the holder may perform this specific action." Permissions are grouped by module (for example, all `GL.*` permissions belong to the General Ledger module). The full catalogue contains over 220 codes covering every module.
-
-> **System roles cannot have their permissions changed.** Built-in system roles (such as **ORG_ADMIN**) are marked with a notice on their edit page — *"This is a built-in system role. The code cannot be changed."* Their permission set is fixed: attempting to save a changed permission selection on a system role is rejected with a conflict (409) error (*"System role permissions cannot be modified"*). Only custom roles can have their permissions edited.
-
-**How the "replace" save works.** When you click **Save permissions**, the system replaces the role's entire permission set with exactly the codes you have checked. Unchecking a box removes that permission. This means saving an empty selection leaves the role with no permissions — which is valid and means the role grants no access.
-
-On the role edit page, the permissions panel lists every available permission grouped by module (for example, **iam**, **sales**, **accounting**).
-
-1. Check the boxes for the permissions this role should have.
-2. Uncheck any permissions to remove them.
+1. Tick the permissions this role should have.
+2. Untick any you want to remove.
 3. Click **Save permissions**.
 
-Saving replaces the role's entire permission set with the checked selections. Removing a permission takes effect for users who hold this role on their next request (the system re-resolves permissions promptly after changes).
+Saving **replaces** the role's whole permission set with exactly the ticked boxes, so saving with nothing ticked leaves the role granting no access. Holders see the change on their next action.
 
-> The permission catalogue contains over 220 codes across all modules. An empty permission set is valid — it means the role grants no access.
+> **Note — built-in roles cannot be changed.** Their edit page shows *This is a built-in system role. The code cannot be changed.* Saving details is refused with *System role cannot be modified: \<CODE\>*, and saving permissions with *System role permissions cannot be modified: \<CODE\>*.
+
+> **Note — you can only give what you have.** An administrator who is not a root administrator can only tick permissions they hold themselves. The five permissions that let someone hand out access — `USER.MANAGE`, `USER.COMPANY.MANAGE`, `ROLE.MANAGE`, `ROLE.ADMIN` and `BRANCH.ASSIGN` — can be added only by someone who holds all five. Otherwise the save is refused with *You do not have permission to perform this action.*
 
 ### Read-closure advisory
 
-**What it is.** Below the Permissions card, the role edit page can show a **Read-closure advisory** panel. It flags screens the role's checked permissions let a user *open* (because the role holds that screen's primary action permission) where the role is still missing one or more supporting **read** permissions the same screen needs on load — for example, a role that can create a sales order but was not also given the customer and product picker reads. The panel is advisory only: it never blocks **Save permissions**, and saving an incomplete selection is always allowed.
+**What it is.** Below the Permissions card, the edit page can show a **Read-closure advisory** panel. It flags screens the role lets a user *open* where the role is still missing a supporting **read** permission the screen needs — for example, a role that can create a sales order but cannot read the customer and product lists. The panel introduces itself with *The following screens will be partially blocked for users who hold only this role. Grant the missing read permissions to resolve each gap.* It is advisory only: it never blocks **Save permissions**.
 
-**Why it exists.** A screen's primary action and its reference-data pickers are separate permission checks. Without this advisory, a role that is missing a picker's read looks complete to the administrator composing it (everything saves without error) but a real user holding only that role hits a partial, confusing block once they open the screen — the button they can see, but a supporting dropdown 403s. Testing as `rootadmin` never reveals this, because root holds every permission. The advisory surfaces the gap to the administrator at grant time instead.
+**Why it exists.** A screen's main action and its drop-down lists are checked separately. Without this advisory, a role missing a list's read permission looks complete to the administrator, but a real user holding only that role finds a drop-down empty or refused. Testing as a root administrator never reveals this, because root holds every permission.
 
-**When you see it.** The panel appears automatically on the role edit page (`/admin/roles/uid/<uid>`) whenever the role's current permission set leaves at least one reachable screen with a missing required read; it is empty and hidden otherwise. It refreshes each time you click **Save permissions**, so you can immediately confirm a fix.
-
-Each gap reads in the form:
+Each gap reads:
 
 > This role can open **\<screen name\>** but is missing `<CODE>`, `<CODE>` — users with only this role will be blocked on that screen.
 
-Grant the listed codes on the Permissions panel above and click **Save permissions** again to clear the gap.
+Tick the listed codes and click **Save permissions** again; the panel refreshes after each save.
 
 ### Archiving a role
 
-There is no Archive control in the current interface. The role edit page offers only **Save details** and **Save permissions**, and the roles list has no Archive action — its only per-row action is **Edit**. (Archiving exists in the underlying API but is not exposed in the admin UI; system roles such as **ORG_ADMIN** cannot be archived in any case.)
+There is no Archive control in the interface. To retire a custom role, revoke it from every user who holds it.
 
 ---
 
 ## Assigning Companies to Users
 
-**What company membership is.** Company membership is an explicit record that a user belongs to a specific company. It is the foundation of a user's access: before a user can be given any branch or role in a company, they must first be made a member of that company. A user can be a member of several companies.
+**What company membership is.** Company membership is an explicit record that a user belongs to a specific company. Before a user can be given any branch or role in a company, they must be a member of it. A user can be a member of several companies.
 
-**Why membership is required first (assign-company-first).** Tying branch and role assignment to an explicit company membership makes "which companies is this person part of?" a single, deliberate decision rather than a side effect of the first role grant. It also keeps the company pickers on the Branches and Roles cards focused — they list only the companies the user actually belongs to, so you cannot accidentally grant access in the wrong company.
+**Why membership comes first.** Tying branch and role assignment to membership makes "which companies is this person part of?" a single, deliberate decision. It also keeps the company pickers on the branch and role cards focused on the companies the user actually belongs to.
 
-**When to assign a company.** A non-root administrator's active company is assigned automatically the moment they create the user (see [Creating a user](#creating-a-user)), so you will usually only need this screen when a user created by `rootadmin` needs their first company, or whenever an existing user takes on responsibilities in an additional company.
+**When to assign a company.** A non-root administrator's active company is assigned automatically when they create the user, so you usually need this card only for a user created by a root administrator, or when a user takes on work in an additional company.
 
-**How removal is protected.** You cannot remove a user's company membership while they still hold any branch assignment or role grant in that company — the system blocks it with a message asking you to remove those first. This prevents leaving a user with branches or roles in a company they are no longer a member of.
+**How removal is protected.** You cannot remove a membership while the user still holds any branch assignment or role grant in that company.
 
 **Required permission:** `USER.COMPANY.MANAGE`
 
-> The **Companies** card appears on every user's Assignments page, but the **Assign company** and **Remove** controls are shown only to administrators who hold `USER.COMPANY.MANAGE`. Other administrators can see which companies a user belongs to but cannot change them.
+> **Note.** The **Companies** card appears on every user's Assignments page, but the assign form and **Remove** buttons are shown only to holders of `USER.COMPANY.MANAGE`.
 
 ### Assigning a user to a company
 
 1. Open the user's Assignments page (**Assignments** on the user's row in **Administration › Users**).
-2. In the **Companies** card, choose a company from the **Assign Company** picker. (Root and full administrators can choose any company in the organisation; other administrators choose from the companies they can act in.)
+2. In the **Companies** card, under **Assign Company**, choose the **Company**.
 3. Click **Assign**.
 
-The company appears in the user's Companies list. Its branches and roles can now be assigned in the cards below.
+The confirmation reads *Company assigned* and the company appears in the list with the date it was assigned. If the user already belongs to it you see *Already a member of that company.*
 
 ### Removing a company membership
 
-In the **Companies** card, click **Remove** on the company's row.
+Click **Remove** on the company's row.
 
-- If the user still has any branch assignment or role grant in that company, the removal is **rejected** — remove those branches and roles first (see the two sections below).
-- Otherwise the membership is removed. The user is no longer a member of that company and can be re-assigned later if needed.
+- If the user still has a branch or role in that company, the removal is refused with *Remove this user's roles and branch assignments in \<Company\> before removing the company membership.* Remove those first (see the sections below).
+- Otherwise the membership is removed (*Company membership removed*). The user can be assigned again later.
 
 ---
 
 ## Assigning Roles to Users
 
-**What a role grant is.** A role grant is a record that links a specific user to a specific role, scoped to a company and optionally to a single branch. It is not a permanent property of the user; it is an explicit, revocable assignment. A user can hold many grants, and each grant has its own scope.
+**What a role grant is.** A role grant links a user to a role for a company, and optionally for a single branch. It is an explicit, revocable assignment; a user can hold many grants.
 
-**Why grants are scoped to a company (and optionally a branch).** A user might be an accountant in the Head Office branch and a read-only viewer in the Mwanza branch. Scoping the grant to a company-and-branch means the right permissions apply in the right context. A company-wide grant (no branch restriction) gives the role's permissions in every branch of that company. A branch-scoped grant gives those permissions only when the user is active in that specific branch.
+**Why grants are scoped.** A user might be an accountant at the head office and a read-only viewer elsewhere. A company-wide grant gives the role's permissions in every branch of that company. A branch grant gives them only while the user is working in that branch.
 
-**When to grant a role.** After creating a new user, before they can do meaningful work. Also when an existing user takes on new responsibilities. Role grants take effect immediately on the user's next request — no re-login required.
+**When to grant a role.** After creating a new user, before they can do meaningful work, and whenever someone takes on new responsibilities. Grants take effect on the user's next action — no new sign-in is needed.
 
-**How revocation works.** Revoking a grant marks it as revoked (the record is kept for audit purposes) and removes its permissions from the user's effective set immediately. The user's currently open session will lose those permissions on their next request.
+**How revocation works.** Revoking a grant removes its permissions immediately; the record is kept for the audit trail.
 
 **Required permission:** `ROLE.MANAGE`
 
-Navigate to **Administration › Role Grants** (`/admin/role-grants`) in the sidebar.
+> **Note — company membership is required.** A role can only be granted in a company the user already belongs to (see [Assigning Companies to Users](#assigning-companies-to-users)).
 
-![Granting roles to a user](images/01-administration/role-grants.png)
-
-This screen lets you grant a role to a user for a specific company, optionally restricted to a single branch.
-
-> You can also manage one user's role grants directly from their Assignments page. The **Role Assignments** card on `/admin/users/uid/<uid>` (reached via **Assignments** on the user's row) has the same **Grant Role** form (Role, Company, optional Branch) and a per-row **Revoke** action, scoped to that single user. On this card the **Company** picker lists only the companies the user is a member of (see [Assigning Companies to Users](#assigning-companies-to-users)).
-
-> **Company membership is required.** A role can only be granted in a company the user already belongs to. If the user is not yet a member of the target company, assign the company first — otherwise the grant is rejected. (On the user's Assignments page the Role card simply will not offer a company the user does not belong to.)
+> **Note — you can only grant what you have.** A non-root administrator can grant a role only if they already hold every permission in it. Granting a more powerful role is refused with *You do not have permission to perform this action.*
 
 ### Granting a role
 
-1. On the Role Grants screen (`/admin/role-grants`), choose the **User** in the picker (placeholder *Select user*).
-2. Choose the **Role** from the dropdown — each option is shown as `code — name` (for example `ACCOUNTANT — Accountant`).
-3. Choose the **Company** in the picker. It starts empty (placeholder *Select company*) and is required — there is no default company; you must pick one.
-4. Optionally choose a **Branch** to restrict the grant to one branch. Leave it blank (the picker reads *Leave blank for company-level*) to grant the role across all branches of that company.
-5. Click **Grant**.
+1. Open the user's Assignments page and find the **Role Assignments** card.
+2. Under **Grant Role**, choose the **Role** (shown by name), the **Company** (only companies the user belongs to are listed), and optionally a **Branch**. Leave **Branch** on **— All branches (company-wide) —** to grant the role in every branch of the company.
+3. Click **Grant**.
 
-The grant appears in the grants list. The user's effective permissions update on their next request.
+The confirmation reads *Role granted*. The grant appears in the card's table with the columns **Role**, **Company**, **Branch** (*All branches* for a company-wide grant) and **Granted at**.
 
-> You can only grant roles within a company you are active in. The `rootadmin` account can grant across companies.
+![Granting roles to a user](images/01-administration/role-grants.png)
 
 ### Revoking a role grant
 
-On the Role Grants screen, look up the user's current grants by selecting their name. Each active grant is listed. Click **Revoke** on the grant row you want to remove.
+In the **Role Assignments** card, click **Revoke** on the grant's row. The confirmation reads *Role revoked*; the user loses those permissions on their next action.
 
-The grant is revoked immediately. The user loses those permissions on their next request.
+> **Note — the last administrator.** You cannot revoke `ORG_ADMIN` from the last active administrator of your organisation: *This is the last administrator. Give someone else the administrator role first.*
 
-> Revoking a grant that was already revoked is a no-op.
+### The Role Grants screen
+
+A separate **Role Grants** screen (`/admin/role-grants`) does the same job from one place for any user. It is not in the sidebar; open it by typing its address. It has two cards:
+
+
+- **Grant a Role** — choose the **User**, **Role** (*CODE — Name*), **Company** and optionally **Branch (optional)** (*Leave blank for company-level*), then click **Grant**.
+- **Look Up Grants** — choose a user and click **Search** to list their grants (**Role**, **Company**, **Branch**, **Granted at**), each with a **Revoke** button. *No grants found for this user.* means they hold none.
+
+The user list on this screen is available only to holders of `USER.MANAGE`. Revoking a grant that was already revoked is refused with *This role assignment has already been revoked.*
 
 ---
 
 ## Assigning Branches to Users
 
-**What a branch assignment is.** A branch assignment is a record that links a user to a specific branch, granting them the ability to switch to that branch and operate within it. Without at least one branch assignment, a user has no active branch after login and can only view limited screens.
+**What a branch assignment is.** A branch assignment lets a user switch to a branch and work in it. Without at least one, a user has no active branch after sign-in.
 
-**Why branch assignments are separate from role grants.** Branch access (which branches you can switch to) and permission access (what you can do in each branch) are two different concerns that can be managed independently. You might assign a user to a branch for data-visibility reasons without granting them any elevated permissions there, or you might grant a company-wide role that applies to all branches simultaneously while still controlling which branches the user can physically switch to.
+**Why branch assignments are separate from role grants.** Which branches you can work in and what you can do there are two different decisions. A company-wide role applies in every branch, but the user can still only switch to the branches they are assigned to.
 
-**The default branch rule.** Each user has exactly one default branch — the branch that becomes active on login. The system enforces this at the database level: you cannot have two defaults for the same user simultaneously. If you set a new default, the previous one is cleared automatically. If a user's default branch is removed or archived, the system automatically promotes the earliest-assigned remaining branch as the new default. If no branches remain, the user has no active branch (read-only session) until an administrator assigns one.
-
-**When to use "Make default".** Tick **Make default** when assigning the branch that should be this user's primary working location — typically their home branch or the branch they will use most often. You can change the default at any time.
+**The default branch rule.** Each user has exactly one default branch — the one that becomes active on sign-in. Setting a new default clears the old one. If a user's default branch is removed or archived, the earliest-assigned remaining branch becomes the new default. If none remains, the user has no active branch until an administrator assigns one.
 
 **Required permission to view branch assignments:** `USER.VIEW`
 **Required permission to assign / change default / remove:** `BRANCH.ASSIGN`
 
-Branch assignments control which branches a user can switch to and which data they can access. Open a user's Assignments page (`/admin/users/uid/<uid>`) by clicking **Assignments** on the user's row in the **Administration › Users** (`/admin/users`) list. A branch can only be assigned within a company the user is already a member of (see [Assigning Companies to Users](#assigning-companies-to-users)).
-
 ### Assigning a user to a branch
 
 1. On the user's Assignments page, find the **Branch Assignments** card.
-2. Choose the **Company** by name. The picker lists only the companies this user is a member of — if the company you want is not listed, assign it first in the **Companies** card above.
-3. Once a company is selected, the **Branch** picker loads that company's branches. Choose one by name.
-4. Check **Make default** if you want this branch to become the user's new default.
+2. Under **Assign Branch**, choose the **Company** (only companies the user belongs to are listed). If the company you want is missing, assign it in the **Companies** card first.
+3. Choose the **Branch** (options read *CODE — Name*).
+4. Tick **Make default** if this branch should become the user's default.
 5. Click **Assign**.
 
-The branch appears in the user's assignments list. If **Make default** was checked and the user already had a different default branch, the old default is cleared automatically — a user can only have one default at a time.
+The confirmation reads *Branch assigned*. The table shows **Branch code**, **Branch name**, **Default** (a *default* tag) and **Assigned at**. A branch the user already has is refused with *User is already assigned to that branch.*
 
 ### Changing the default branch
 
-In the user's branch assignments list, click **Set Default** on the row for the branch you want to make default. The previous default is cleared automatically.
+Click **Set default** on the row of the branch you want. The previous default is cleared automatically (*Default branch updated*).
 
 ### Removing a branch assignment
 
-Click **Remove** on the assignment row. If you remove the user's current default branch:
+Click **Remove** on the row (*Branch removed*). If it was the user's default:
 
-- If other branches remain, the system automatically promotes the earliest-assigned remaining branch as the new default.
-- If no branches remain, the user will have no active branch on their next login (read-only session).
-
-> You can only assign or remove branches within a company you are active in.
+- If other branches remain, the earliest-assigned one becomes the new default.
+- If none remain, the user has no active branch until one is assigned.
 
 ---
 
-**Example — Create the ACCOUNTANT role and assign it to a new user scoped to the Head Office branch**
+**Example — set up a new accountant at the Main Branch**
 
-This example walks through the complete new-staff onboarding flow for Amina Juma, who joins as an accountant at the Head Office branch of Orbix Trading Co.
+Amina Juma joins Example Trading Co. as an accountant at the Main Branch. The administrator works as a non-root administrator in Example Trading Co.
 
-**Step 1 — Create the role (if it does not already exist)**
+**Step 1 — Create the user account**
 
-1. Navigate to **Administration › Roles** (`/admin/roles`).
-2. In the create card, enter Code `ACCOUNTANT`, Name `Accountant`, Description `GL posting, AR, AP, Cash & Bank, Tax`.
-3. Click **Add role**. The role is created with no permissions.
-4. Click **Edit** on the `ACCOUNTANT` row to open `/admin/roles/uid/<uid>`.
-5. In the permissions panel, check the following codes: `GL.VIEW`, `GL.POST`, `AR.VIEW`, `AR.RECEIPT.RECORD`, `AR.STATEMENT.VIEW`, `AP.VIEW`, `AP.BILL.ENTER`, `AP.PAYMENT.RUN`, `CASH.VIEW`, `CASH.ENTRY.RECORD`, `CASH.TRANSFER`, `CASH.RECONCILE`, `VAT.VIEW`, `TAXRATE.VIEW`, `REPORT.PL.VIEW`, `REPORT.BS.VIEW`, `REPORT.CASHFLOW.VIEW`, `REPORT.LEDGER.VIEW`.
-6. Click **Save permissions**. The panel refreshes showing 18 of the total codes selected.
+1. Open **Administration › Users**.
+2. In the **Add User** card enter Username `amina.juma` (the form shows it will be created as `amina.juma@exampletrading`), Display name `Amina Juma`, and a temporary password such as `Welcome2026`.
+3. Click **Add user**. The row appears as **ACTIVE**, and Amina is already a member of Example Trading Co.
 
-**Step 2 — Create the user account**
+**Step 2 — Assign the Main Branch**
 
-1. Navigate to **Administration › Users** (`/admin/users`).
-2. In the **Add User** card, enter Username `amina.juma`, Display name `Amina Juma`, Temporary password `Amina2024#`.
-3. Click **Add user**. The row appears with status **Active**. (Email and phone are not collected on this form.)
+1. Click **Assignments** on Amina's row.
+2. In **Branch Assignments**, choose Company `Example Trading Co.`, Branch `BR-01 — Main Branch`, tick **Make default**, and click **Assign**.
 
-**Step 3 — Assign the Head Office branch**
+**Step 3 — Grant the Accountant role**
 
-1. Click **Branches** on Amina Juma's row to open `/admin/users/uid/<uid>`.
-2. In the **Branch Assignments** panel, select Company `Orbix Trading Co.`, Branch `HO — Head Office`.
-3. Check **Make default**.
-4. Click **Assign**. The branch appears in the list marked as default.
+1. In **Role Assignments**, choose Role `Accountant`, Company `Example Trading Co.`, and leave Branch on **— All branches (company-wide) —** (or choose the Main Branch to limit her to it).
+2. Click **Grant**.
 
-**Step 4 — Grant the ACCOUNTANT role**
+**Step 4 — Check**
 
-1. Navigate to **Administration › Role Grants** (`/admin/role-grants`).
-2. Select User `Amina Juma`, Role `ACCOUNTANT`, Company `Orbix Trading Co.`, Branch `HO — Head Office`.
-3. Click **Grant**. The grant row appears immediately.
-
-**Step 5 — Verify**
-
-1. Navigate to **Administration › Audit** (`/admin/audit`).
-2. Filter by Actor `rootadmin` (or whichever admin performed these steps). Confirm five audit entries: `ROLE.CREATE` and `ROLE.PERMISSIONS_SET` (Step 1), `USER.CREATE` (Step 2), `BRANCH.ASSIGN` (Step 3), and `ROLE.GRANT` (Step 4).
-3. Sign in as `amina.juma` / `Amina2024#`. Confirm the **Accounting** sidebar group is visible and items such as **Chart of Accounts** (`/admin/gl/accounts`) and **Payables** (`/admin/ap/supplier-bills`) are accessible.
+1. Open **Administration › Audit** and filter by your own name as **Actor**. You should see `USER.CREATE`, `USER.COMPANY.ASSIGN`, `BRANCH.ASSIGN` and `ROLE.GRANT`.
+2. Give Amina her full username `amina.juma@exampletrading` and the temporary password. When she signs in she is asked to choose her own password; then the **Accounting** menu group appears, with screens such as **Chart of Accounts** and **Payables**.
 
 ---
 
-## Sales Settings — sales-order approval and stock control
+## Sales Settings — approval, stock, pricing and till policies
 
-**What this screen is.** Sales Settings is a per-company configuration screen that holds one setting group per company. It controls two independent things: whether large **sales orders** must be approved before they can be confirmed (and above what value that approval kicks in), and whether sales that would take **stock negative** are blocked or allowed.
+**What this screen is.** Sales Settings holds one set of sales policies per company. It controls:
 
-**Why it exists.** Many businesses want a manager to sign off on unusually large orders — an unusually big customer order can tie up stock, extend a lot of credit, or signal an error in data entry. Rather than force approval on every order (which slows the counter down), you set a **threshold**: orders at or above it route to approval automatically, while smaller everyday orders confirm straight through. The check happens automatically at the moment an order is confirmed, so nobody has to remember to submit large orders manually.
+- whether large **sales orders** need approval before they can be confirmed;
+- whether sales that would take **stock negative** are blocked;
+- what happens when an item is sold **at or below cost**;
+- the largest **discount** a salesperson may give, and what happens above it;
+- how long a **till shift** may stay open.
 
-**When to configure it.** During initial setup for each company that wants order approval, or whenever the threshold needs to change. The workflow is **off by default** — a brand-new company confirms every sales order without approval until you turn this on.
+**Why it exists.** These are business decisions, not technical ones, and they differ between companies. Setting them once here means every invoice, sales order and till sale follows the same rules automatically — nobody has to remember them at the counter.
 
-**Required permission:** `SALES.SETTINGS.MANAGE` (the same permission both opens the screen and allows saving — there is no view-only tier). If you lack it the menu item is hidden and the screen shows *"You don't have permission to view sales settings."*
+**When to configure it.** During initial set-up for each company, and whenever a policy changes. Every new company already has a settings record with safe defaults (approval off, overselling blocked, no below-cost check, no discount limit, the server's shift limit).
 
-Navigate to **Sales › Sales Settings** (`/admin/sales-settings`) in the sidebar.
+**Required permission:** `SALES.SETTINGS.MANAGE` (the same permission opens the screen and saves it). Without it the menu item is hidden and the screen shows *"You don't have permission to view sales settings."*
+
+Navigate to **Sales › Sales Settings** (`/admin/sales-settings`). Choose the **Company** at the top; every control below belongs to that company. All the controls sit in one card headed **SO Approval**; change what you need and click **Save Settings** at the bottom (*Sales settings saved*).
 
 ![Sales settings — the sales-order approval threshold and the block-negative-stock control](images/01-administration/sales-settings.png)
 
-### Setting the sales-order approval threshold
+### Sales-order approval threshold
 
-1. On the Sales Settings screen, choose the **Company** from the picker at the top. The settings below load for that company. (Each company is configured independently; switching the picker reloads its own settings.)
-2. In the **SO Approval** card, use the **Enable SO Approval Workflow** switch:
-   - **Off** (default) — every sales order confirms immediately, with no approval step. When the switch is off, no other fields are shown.
-   - **On** — the threshold fields appear and the approval check becomes active for this company.
-3. With the workflow enabled, fill in:
-   - **Approval Threshold Amount** — the order value at or above which approval is required. The hint beneath the field reads *"Sales orders above this value require approval."* An order whose gross total is **below** this amount confirms straight through; an order **at or above** it is routed to approval when confirmed.
-   - **Currency** — the currency the threshold amount is expressed in (defaults to `TZS`).
-4. Click **Save Settings**. A confirmation *"Sales settings saved"* appears.
+1. Use the **Enable SO Approval Workflow** switch:
+   - **Off** (default) — every sales order confirms immediately, with no approval step.
+   - **On** — two more fields appear: **Approval Threshold Amount** and **Currency**.
+2. With the workflow on, enter the **Approval Threshold Amount**. An order whose gross total is **below** it confirms straight through; an order **at or above** it is routed to approval when someone clicks **Confirm Order**. Choose the **Currency** the amount is expressed in.
+3. Click **Save Settings**.
 
-**What happens next.** Once enabled, the check runs automatically every time someone confirms a sales order for this company (including orders placed through the counter/POS path). Orders that meet or exceed the threshold are handed to the approvals engine and wait for a decision instead of confirming; orders below it are unaffected. Turning the switch back off removes the check entirely — subsequent orders confirm without approval.
+**What happens next.** The check runs every time someone confirms a sales order for this company. Orders at or above the threshold are handed to the approvals engine (see the Sales chapter); smaller orders are unaffected. An approval policy for sales orders must also exist (**Approvals › Approval Policies**); otherwise a large order is refused with *This order exceeds the approval threshold but no approval policy is configured. Ask an administrator to set one up.*
 
-> **A zero or empty threshold catches everything.** If the workflow is enabled and you leave the threshold at `0`, every order (any value) requires approval. The amount must be zero or positive — a negative value is rejected with *"Threshold amount must be zero or positive."*
-
-> **The threshold is per company, not per branch.** All branches of the selected company share the same threshold. Configure each company separately.
+> **Note.** With the workflow on and the threshold left at `0`, every order needs approval. A negative threshold is refused with *"Threshold amount must be zero or positive."* The threshold is per company — all its branches share it.
 
 ### Blocking sales that would take stock negative
 
-**What this control does.** Below the SO Approval card, the same screen carries a **Block sales that would take stock negative** switch. It decides what happens when someone tries to sell more of a product than the branch actually has on hand:
+**What this control does.** The **Block sales that would take stock negative** switch decides what happens when someone tries to sell more of an item than the branch has:
 
-- **On (Block)** — finalising an invoice or creating a delivery is **rejected** when there isn't enough stock to cover it. The user sees a friendly message naming the product, how much is available and how much was requested, and telling them to *"enable backorder in Sales Settings"* if the sale should go through anyway. Stock can never be driven below zero this way.
-- **Off (Allow / backorder)** — overselling is permitted: the sale completes even when there isn't enough on hand, and stock is allowed to go negative (a backorder). Use this when you routinely sell ahead of receiving goods.
+- **On (Block)** — finalising a walk-in or till invoice, or creating a delivery, is refused when there is not enough stock. The message names the item, for example *Not enough stock of Sugar 1kg to complete this sale — 3 available, 5 requested. Ask a supervisor to enable backorder if this should be allowed.* Stock can never be driven below zero this way.
+- **Off (Allow / backorder)** — overselling is allowed: the sale completes and stock goes negative. Use this only if you routinely sell ahead of receiving goods.
 
-The hint beneath the switch reads *"When on, a sale is blocked if there isn't enough stock. Turn off to allow overselling (backorder)."* The check applies to ordinary stock-tracked products; services and other non-stocked items are never affected.
+The hint reads *"When on, a sale is blocked if there isn't enough stock. Turn off to allow overselling (backorder)."* Services and other non-stock items are never affected.
 
-**When it takes effect.** The switch sits on its own, independent of the SO Approval workflow above — you can use either, both, or neither. To change it:
+> **Note.** Blocking is the default for every company, including one whose settings have never been opened.
 
-1. On the Sales Settings screen, choose the **Company** at the top.
-2. Set the **Block sales that would take stock negative** switch on or off.
-3. Click **Save Settings**. (The same `SALES.SETTINGS.MANAGE` permission governs this control.)
+### Selling at or below cost
 
-> **Allow until configured, then block by default.** A brand-new company that has **never opened and saved** Sales Settings is *not* yet guarded — its sales are allowed to oversell until you configure the screen. The moment you save Sales Settings for the first time, the switch defaults to **Block**, so a saved company blocks negative-stock sales unless you deliberately turn the switch off.
+The **Selling at or below cost** drop-down decides what happens when an item is priced the same as, or less than, what it cost to buy. The hint under it explains the chosen option:
+
+| Option | What happens |
+|---|---|
+| **No check** (default) | Sell at any price. Nothing is checked against cost. |
+| **Allow, but record it** | The sale goes through and is recorded for review. |
+| **Needs supervisor approval** | The sale is stopped until a supervisor with permission to sell below cost approves it. |
+| **Never allow** | The sale is always stopped. Nobody can override it. |
+
+A stopped sale shows a message naming the item and *… priced at or below cost, so this sale cannot be completed. Raise the price, or ask a supervisor to review the pricing policy.*
+
+> **Note.** Supervisor approval for a below-cost sale is given on the till. On the web invoice screen a below-cost sale under **Needs supervisor approval** is simply refused — raise the price or ring it on the till.
+
+### Discounts above a limit
+
+Two controls set how much a salesperson may take off a line on their own:
+
+- **Discounts above a limit** — what happens when a line discount is larger than the limit:
+
+  | Option | What happens |
+  |---|---|
+  | **No limit** (default) | Any discount a salesperson types is accepted. |
+  | **Allow, but record it** | A discount over the limit still goes through and is recorded for review. |
+  | **Needs supervisor approval** | A discount over the limit is held until a supervisor with permission to approve discounts signs for it. |
+  | **Never allow** | A discount over the limit is always refused. Nobody can override it. |
+
+- **Discount a salesperson may give (%)** — shown when the option is not **No limit**. Enter a percentage from 0 to 100 (up to two decimal places), for example `10`. If you leave it empty, no discount at all is allowed on its own — every discount goes to the policy above.
+
+With **Needs supervisor approval**, the salesperson sees **Ask a supervisor** beside the refused line; a supervisor holding `SALES.DISCOUNT.OVERRIDE` signs in to approve it on the spot (see the Sales chapter). Restaurant bill discounts on the till follow the same limit.
 
 ### Till shift time limit
 
 **What this control does.** A till stops taking sales on a shift (POS session) that has been open too long. The cashier sees *"This till session has been open too long to take new sales. Close and reconcile it, then open a new session."* — nothing is charged. The limit exists so that each cash count and Z-report covers one trading day. Open restaurant bills are **not** lost: they are not tied to a shift, so after closing the old shift and opening a new one, the bill can be paid as normal.
 
-**The choices.**
+**The choices** (drop-down **Till shift time limit**):
 
-- **Use the server setting** (the default) — the limit set on the server, normally **36 hours**. The hint under the control shows the actual number.
-- **Set my own limit** — enter a whole number of hours from **12 to 168** (one week).
+- **Use the server setting** (the default) — the limit set on the server, normally **36 hours**. The hint shows the actual number.
+- **Set my own limit** — enter **Hours a shift may stay open**: a whole number from **12 to 168** (one week).
 - **No limit** — a shift can stay open for days. Its cash count and Z-report then cover every day it was open, so differences are harder to trace. Choose this only if the business deliberately does not close shifts daily.
 
-**To change it:** choose the **Company**, pick an option under **Till shift time limit** (and the hours, for *Set my own limit*), then click **Save Settings**. The new limit applies to the next sale on every till of that company — no till update or restart is needed. Same permission: `SALES.SETTINGS.MANAGE`.
+Click **Save Settings**. The new limit applies to the next sale on every till of that company — no till update or restart is needed.
 
 ---
 
 ## Fiscal / EFD Configuration
 
-**What this is.** In markets that require it (for example Tanzania's TRA), a finalised sales invoice must produce a **fiscal / EFD receipt** — a tax-authority-registered receipt number and verification link. The system has a fiscalisation *seam*: a pluggable provider that talks to the fiscal device or service. Which provider is active is a **deployment-level setting an administrator/IT sets at the server**, not a screen inside the app — but the result of that setting is visible to operators on every finalised invoice, so administrators need to understand it.
+**What this is.** In markets that require it (for example Tanzania's TRA), a finalised sales invoice must produce a **fiscal / EFD receipt** — a tax-authority-registered receipt number and verification link. Which fiscal provider is active is a **server setting your IT administrator sets**, not a screen inside the app — but the result is visible on every finalised invoice, so administrators need to understand it.
 
-**Why it is a deployment setting, not an in-app form.** A real fiscal device integration needs credentials and a certified adapter that are configured once per environment, not per user. The system deliberately **never fabricates** a fiscal number: until a real device is wired, it reports honestly that none is configured rather than inventing a receipt that would look like a filed tax document but is not.
+**Why it is a server setting.** A real fiscal device integration needs credentials and a certified adapter that are configured once per installation. The system deliberately **never invents** a fiscal number: until a real device is connected, it says honestly that none is configured rather than producing a receipt that would look like a filed tax document but is not.
 
-**The provider options.** IT selects the active provider (`erp.fiscal.provider`) when deploying:
+**The provider options.**
 
-- **`none`** (the default) — no device is wired. Every fiscalisation attempt returns the honest status **NOT_CONFIGURED**; nothing is invented.
-- **`simulated`** — a demo provider that produces a clearly-marked fake number, for **development and QA only**. The application **refuses to start in production** with this setting, so a demo receipt can never masquerade as a real one.
-- **`tra`** (future) — the real tax-authority adapter, dropped in when it ships; selecting it is a configuration change, not an app change.
+- **none** (the default) — no device is connected. Every attempt returns the status **NOT_CONFIGURED**; nothing is invented.
+- **simulated** — a demonstration provider that produces a clearly marked fake number, for training and testing only. The system refuses to start in production with this setting.
+
+A real tax-authority connection will be added as a new option when it is certified.
+
+> **Note — shared servers.** A server that hosts several separate businesses does not issue fiscal receipts. Every attempt is recorded as **NOT_CONFIGURED**, and the invoice panel shows *No EFD device is configured for this company yet.*
 
 **Required permissions (operator side).**
 - `FISCAL.VIEW` — see the Fiscal Receipt panel on an invoice.
 - `FISCAL.MANAGE` — issue or retry a fiscal receipt.
 
-These codes are seeded and granted to **ORG_ADMIN** automatically.
+Both are included in ORG_ADMIN, Salesperson, Cashier, Field Sales Agent and Sales Manager.
 
 ### Where operators see fiscal status
 
-Fiscalisation happens on a **finalised** sales invoice (a draft has no invoice number or frozen totals yet; a voided invoice is not fiscalised). Open the invoice at **Sales › Invoices** and scroll to the **Fiscal Receipt** panel (shown only on finalised invoices, and only to holders of `FISCAL.VIEW`).
+Fiscalisation happens on a **finalised** sales invoice. Open the invoice at **Sales › Invoices** and scroll to the **Fiscal Receipt** panel (shown only on finalised invoices, and only to holders of `FISCAL.VIEW`).
 
-The panel shows a status tag and, for holders of `FISCAL.MANAGE`, an **Issue EFD receipt** button (labelled **Retry EFD receipt** once an attempt already exists):
+The panel shows a status tag and, for holders of `FISCAL.MANAGE`, an **Issue EFD receipt** button (labelled **Retry EFD receipt** once an attempt exists):
 
-- **NOT_CONFIGURED** — no EFD device is configured for this company yet. The panel reads *"No EFD device is configured for this company yet."* This is expected whenever the provider is `none`; the attempt can be retried later once a device is wired.
-- **ISSUED** — a real fiscal number and verification link were obtained; both are shown, with the verification URL opening in a new tab. This is terminal — an issued receipt is never re-issued (re-issuing would double-report to the tax authority), so no button is offered.
-- **FAILED** — a device was attempted but errored (offline, rejected, timeout); a friendly reason is shown and you can **Retry**.
-- **PENDING / VOID** — transitional/reserved states shown as a neutral tag.
+- **Not issued** — no attempt yet.
+- **NOT_CONFIGURED** — no EFD device is configured; the panel reads *"No EFD device is configured for this company yet."* The attempt can be retried once a device is connected.
+- **ISSUED** — a real fiscal number and verification link were obtained; both are shown. This is final — a receipt is never re-issued — so no button is offered.
+- **FAILED** — a device was tried but failed (offline, rejected, timeout); the reason is shown (or *The last fiscal receipt attempt failed.*) and you can **Retry**.
+- **PENDING / VOID** — transitional or closed states, shown as a neutral tag with no button.
 
-> **NOT_CONFIGURED and FAILED are surfaced as errors, not silent successes.** Clicking Issue on a company with no device wired does not produce a receipt — the system tells you so plainly rather than pretending it worked. To actually issue real receipts, IT must configure a fiscal provider for the environment.
+> **Note.** NOT_CONFIGURED and FAILED are shown as problems, not silent successes. Clicking **Issue EFD receipt** with no device connected does not produce a receipt — the system tells you so plainly.
 
 ---
 
 ## Audit Trail
 
-**What the audit trail is.** The audit trail is a chronological, append-only log of every significant action performed in the system. Each record captures who did it (the actor), what they did (the action code), which record was affected (the target), in which company and branch, and when. It cannot be edited, backdated, or deleted — not even by `rootadmin`.
+**What the audit trail is.** The audit trail is a chronological, append-only log of significant actions. Each record captures who did it (the actor), what they did (the action), which kind of record was affected (the target), in which company and branch, and when. It cannot be edited, backdated, or deleted through the application.
 
-**Why it exists.** The audit trail serves several business and legal purposes. It creates accountability: every change to a user account, every permission grant, every password reset has a named, timestamped owner. It supports security investigations: if an account is suspected of misuse, the audit log shows exactly what actions it took and when. It satisfies compliance requirements: many financial regulations require evidence that access controls were applied and that privilege changes were authorised.
+**Why it exists.** It creates accountability (every user change, permission grant and password reset has a named, timestamped owner), supports security investigations, and gives auditors evidence that access controls were applied.
 
-**When audit records are written.** Every create, update, status change (such as enabling or disabling a user), role grant, and role revocation generates an audit record. Login successes, failures, and lockout events are also recorded. Actions by `rootadmin` that cross company boundaries produce an additional `ROOT.BYPASS` record. Audit records are written in the same database transaction as the action they record — if the action rolls back, the audit record rolls back with it.
+**What is recorded.** In administration, the audit trail records:
 
-**What is and is not recorded.** Action codes and target identifiers are always recorded. For profile-field edits (email, phone, display name) only the fact of the change is recorded — not the old or new values — to minimise personal data in the audit store. Passwords and token values are never recorded.
+- user changes — `USER.CREATE`, `USER.DISABLE`, `USER.ENABLE`, `USER.UNLOCK`, `USER.PASSWORD_SET`, `USER.UPDATE`, `USER.POS_PIN.SET`, `USER.POS_PIN.CLEAR`;
+- access changes — `USER.COMPANY.ASSIGN` / `REMOVE`, `ROLE.GRANT`, `ROLE.REVOKE`, `BRANCH.ASSIGN`, `BRANCH.UNASSIGN`, `BRANCH.SET_DEFAULT`;
+- sign-in events — `LOGIN.SUCCESS`, `LOGIN.FAIL`, `ACCOUNT.LOCKED`, supervisor approvals given at a till or screen, and `BRANCH.SWITCH` when someone switches to a branch of another company;
+- `COMPANY.PROVISION_DEFAULTS`, and `ROOT.BYPASS` for actions by a root administrator across companies;
+- many business actions in the other modules (voids, overrides, price changes, branch menu changes and so on).
+
+Creating or renaming companies and branches, archiving a branch, and creating or editing custom roles are **not** currently written to the audit trail.
+
+**What is never recorded.** Passwords, PINs and session tokens. For profile edits only the fact of the change is recorded, not the old or new values.
 
 **Required permission:** `AUDIT.VIEW`
 
-Navigate to **Administration › Audit** (`/admin/audit`) in the sidebar.
+Navigate to **Administration › Audit** (`/admin/audit`). The screen is headed **Audit Trail** — *Read-only, append-only record of access and administration changes.*
 
 ![The audit log](images/01-administration/audit.png)
 
-The audit trail is an append-only log of every significant action performed in the system — who did it, what they did, and when. It cannot be edited or deleted.
-
-### What the audit trail records
-
-Every create, update, state change (such as enabling or disabling a user), grant, and revoke generates an audit record. Records include:
-
-- The **action** (for example, `USER.CREATE`, `ROLE.GRANT`, `BRANCH.UNASSIGN`). Action codes are dotted throughout.
-- The **actor** — the username who performed the action (shown as *system* when there is no signed-in user).
-- The **target** — the type of the affected record (for example `USER`, `user_branch`).
-- The **timestamp** (date and time).
-- For cross-company actions by `rootadmin`, a special `ROOT.BYPASS` entry is also recorded.
-
-The audit list is a table with columns **When**, **Actor**, **Action**, **Target**, **Scope** (Company or Branch), **IP**, and **Detail** (an expandable *view* link for any extra context). It is paginated.
-
 ### Reviewing the audit log
 
-1. Navigate to **Administration › Audit** (`/admin/audit`).
-2. Use the filter bar at the top to narrow the results:
-   - **Action** — a dropdown of known action codes (choose *Any action* for all).
-   - **Target type** — a free-text field (for example `USER`).
-   - **Actor** — a name picker that resolves to the chosen user.
-   - **From** and **To** — a date-and-time range.
-   Click **Filter** to apply, or **Clear filters** to reset.
-3. The list shows the most recent events first. Use the pager to browse older records.
+The list has the columns **When**, **Actor** (the username, or *system*), **Action** (colour-coded), **Target** (the kind of record), **Scope** (company or branch), **IP**, and **Detail** (a *view* link that expands the extra recorded data). The most recent events are shown first; use the pager to go back in time.
 
-Audit records show the actor's username and the action and target *type* — not raw internal identifiers. Sensitive data (such as password hashes) is never included in audit details; for profile-field edits only the fact of the change is recorded, not the old or new values.
+1. Use the filter bar to narrow the results:
+   - **Action** — choose one of the common administration actions listed in the drop-down, or *Any action*. Other actions cannot be picked here; leave *Any action* and narrow by the other filters instead.
+   - **Target type** — the stored name of the kind of record, typed exactly as shown in the Target column (for example `app_users` for users, `user_role` for role grants, `user_branch` for branch assignments).
+   - **Actor** — pick the user (*Any actor* for everyone).
+   - **From** and **To** — a date-and-time range.
+2. Click **Filter** to apply, or **Clear filters** to reset.
+
+If nothing matches you see *No audit entries match the current filters.*
 
 ---
 
@@ -634,16 +675,16 @@ Audit records show the actor's username and the action and target *type* — not
 
 ### uid vs id — why records have two identifiers
 
-**What they are.** Every record in the system carries two numeric identifiers. The `id` is an internal database sequence number used only for database-level joins between tables — you never see it in the interface or in URLs. The `uid` is a ULID (Universally Unique Lexicographically Sortable Identifier) — a 26-character string such as `01HY7FKMQ5T3V6NP8A2X4BQERD` — used in every URL and in every place where a record is referenced outside the database.
+**What they are.** Every record carries two identifiers. The `id` is an internal number used only inside the database — you never see it. The `uid` is a 26-character code such as `01HY7FKMQ5T3V6NP8A2X4BQERD`, used in screen addresses and wherever a record is referred to from outside the database.
 
-**Why two identifiers.** Sequential numeric IDs in URLs expose information about record counts (a competitor could learn how many orders you have by looking at the URL of the latest one). ULIDs are opaque and reveal nothing about volume or sequence. They are also time-sortable, collision-resistant, and URL-safe without encoding. The internal `id` remains for efficient database foreign-key joins, which are performance-sensitive. This duality is a deliberate design choice throughout the system.
+**Why two identifiers.** Sequential numbers in addresses would reveal information such as how many orders you have. The `uid` reveals nothing about volume or order and is safe to use in addresses.
 
-**What this means for you.** You never need to know or type a uid. The system passes uids between pages in URLs automatically. When you pick a user, a branch, or a role by name in a form, the picker stores the uid in the background — the interface always works by name.
+**What this means for you.** You never need to know or type a uid. When you pick a user, a branch, or a role by name in a form, the picker stores the uid in the background — the interface always works by name.
 
 ### Fiscal period
 
-**What a fiscal period is.** A fiscal period is a defined accounting time window — typically a calendar month — within a financial year. Transactions (invoices, payments, journal entries) are posted to an open period; once a period is closed, historical records in it cannot be altered.
+**What a fiscal period is.** A fiscal period is an accounting time window — typically a calendar month — within a financial year. Transactions are posted to an open period; once a period is closed, its records cannot be altered.
 
-**Why fiscal periods matter.** They are the foundation of financial reporting: a profit-and-loss statement, a balance sheet, and a cash-flow report all aggregate transactions by period. Closing a period locks the numbers so that prior-period reports are stable and comparable. Without fiscal periods, a transaction entered late could silently change a figure that was already reported.
+**Why fiscal periods matter.** Financial reports aggregate transactions by period. Closing a period locks the numbers so that reports already issued stay stable.
 
-**When you interact with periods.** Accountants and finance managers interact with fiscal periods when posting journal entries, running period-end reports, and performing the year-end close. Transactions in operational modules (sales, purchases, inventory) automatically post to the current open period of the active branch's company.
+**When you interact with periods.** Accountants and finance managers work with periods when posting journals, running period-end reports, and closing the year. Transactions from sales, purchases and inventory post automatically to the open period of the company they belong to.

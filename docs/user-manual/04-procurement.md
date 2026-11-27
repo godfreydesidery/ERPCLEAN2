@@ -16,22 +16,28 @@ Purchase Requisition → RFQ → Supplier Quotes → Award → Purchase Order
     → Goods Receipt → [Landed Cost] → Supplier Bill → 3-Way Match → AP Payment
 ```
 
-For direct purchases without a sourcing process, the chain can start at the Purchase Order (created from a converted requisition or from the RFQ award).
+For direct purchases without a sourcing process, the chain can start at the Purchase Order (created directly, from a converted requisition, or from the RFQ award). For stock that simply turns up with no order at all — a walk-in or cash supplier — use **Receive Without Order** (section 4.5), which records the purchase and the stock in one step.
+
+**Where it lives.** Everything in this chapter is under the **Purchasing** group of the sidebar, except the supplier bill and payment screens, which are under **Accounting** (Payables, Enter Bill, Record Payment, Payments).
 
 **Required permissions** — the navigation menu only shows items your role includes:
 
 | Activity | Permission codes |
 |---|---|
-| Requisitions | `PURCHASE.REQUISITION.VIEW`, `PURCHASE.REQUISITION.CREATE`, `PURCHASE.REQUISITION.APPROVE` |
+| Requisitions | `PURCHASE.REQUISITION.VIEW`, `PURCHASE.REQUISITION.CREATE`, `PURCHASE.REQUISITION.APPROVE` (approve, reject and convert) |
 | RFQ / Supplier Quotes | `PURCHASE.RFQ.VIEW`, `PURCHASE.RFQ.MANAGE` |
 | Purchase Orders | `PURCHASE.ORDER.VIEW`, `PURCHASE.ORDER.CREATE`, `PURCHASE.ORDER.VOID`, `PURCHASE.ORDER.APPROVE` |
-| Goods Receipt | `PURCHASE.GOODS_RECEIPT.VIEW`, `PURCHASE.RECEIVE` |
+| Goods Receipt | `PURCHASE.GOODS_RECEIPT.VIEW`, `PURCHASE.RECEIVE`, `PURCHASE.VOID` (void a receipt) |
+| Receive Without Order | `PURCHASE.RECEIVE.DIRECT` |
 | Landed Cost | `PURCHASE.LANDEDCOST.VIEW`, `PURCHASE.LANDEDCOST.MANAGE` |
-| Supplier Bills / AP | `AP.VIEW`, `AP.BILL.ENTER`, `AP.BILL.MATCH` |
+| Supplier Bills / AP | `AP.VIEW`, `AP.BILL.ENTER`, `AP.BILL.MATCH`, `AP.PAYMENT.RUN` |
 | Purchase Returns | `PURCHASE.RETURN.VIEW`, `PURCHASE.RETURN.CREATE` |
 | Purchase Settings | `PURCHASE.SETTINGS.MANAGE` |
+| Printing a PO, GRN or return | `DOCUMENT.RENDER` |
 
 Contact your administrator if an expected menu item is missing.
+
+> **Note.** If you work for more than one company, the list and create screens in this chapter show a **Company** selector at the top; pick the company first. With only one company the selector is hidden.
 
 ---
 
@@ -41,7 +47,7 @@ Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisiti
 
 ![Purchase requisitions](images/04-procurement/purchase-requisitions.png)
 
-The list shows every requisition with its number, status, required-by date, cost centre, line count, and creation date. Use **+ New Requisition** to raise one, and the **Open** button on a row to view or act on it.
+The list shows every requisition with its **Requisition #**, **Status**, **Required By** date, **Cost Centre**, number of **Lines**, and **Created** date. Use the **Status** filter to narrow the list, **New Requisition** to raise one, and the **Open** link on a row to view or act on it.
 
 **What a purchase requisition is.**
 A purchase requisition (also called a "purchase request" or PR) is a formal internal document raised by a member of staff to request that the business buys goods or services. It is not sent to a supplier — it is an internal request that must be reviewed and approved before any external commitment is made. Think of it as a "permission to buy" request.
@@ -59,8 +65,8 @@ A requisition starts as a DRAFT (being prepared) and must be submitted before it
 
 1. Navigate to **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
 2. Click **New Requisition**, or go directly to `/admin/purchase-requisitions/create`.
-3. Set the **Required By** date and optionally a cost centre and notes.
-4. Add lines: for each item, pick the **Product** by name, choose a **Unit**, and enter the **Requested Quantity** and an **Estimated Unit Cost**. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units) — not every unit in the system.
+3. Set the **Required By Date** and, optionally, a **Cost Centre Code** (typed, for example `CC-001`) and **Notes**.
+4. Under **Line Items**, for each item pick the **Product** by name, choose a **Unit**, and enter the **Qty** and, optionally, an **Est. Unit Cost** and a line **Note**. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units) — not every unit in the system. Use **Add line** for more lines and the remove button to drop one.
 5. Click **Create Requisition**. The requisition is saved in **DRAFT**.
 
 ### 1.2 Submit a requisition
@@ -76,16 +82,18 @@ When the requisition is complete and ready for approval:
 An approver (a user with `PURCHASE.REQUISITION.APPROVE`) reviews submitted requisitions at **Purchasing › Purchase Requisitions** (`/admin/purchase-requisitions`).
 
 - **Approve** — open the submitted requisition and click **Approve**. Status → **APPROVED**. The Convert action becomes available.
-- **Reject** — click **Reject**, enter a mandatory reason, and confirm. Status → **REJECTED**. The requisitioner is notified via the audit trail.
+- **Reject** — click **Reject**, enter a mandatory **Reason**, and click **Confirm Reject**. Status → **REJECTED**. The rejection is recorded on the requisition and in the audit trail.
+
+The requisition detail shows the header (number, status, required-by date, cost centre, created date, notes, approval status), the lines, and a timeline of when it was submitted, approved, rejected, converted or cancelled.
 
 ### 1.4 Convert a requisition
 
 Converting an approved requisition creates the target document — a Purchase Order or an RFQ — in one step, carrying over the requisition lines. You choose the target type **and** the supplier(s) up front; the requisition then locks to CONVERTED and a link opens the document that was created.
 
-1. Open the approved requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`).
+1. Open the approved requisition (navigate to `/admin/purchase-requisitions/uid/{uid}`). The **Convert** button is shown to users with `PURCHASE.REQUISITION.APPROVE`.
 2. Click **Convert**. An inline **Convert Requisition** form opens.
 3. In **Convert to**, choose the target type. The rest of the form changes to suit it:
-   - **Purchase Order** — pick a single **Supplier** (required; only active suppliers of the requisition's company are listed) and optionally a **Currency** (a 3-letter code such as `USD` — leave blank to use the company default). A DRAFT PO is created at this supplier for the requisition lines.
+   - **Purchase Order** — pick a single **Supplier** (required; only active suppliers of the requisition's company are listed) and optionally a **Currency (optional)** (typed as a 3-letter code such as `USD` — leave blank to use the company default). A DRAFT PO is created at this supplier for the requisition lines.
    - **Request for Quotation (RFQ)** — build the invite list: choose a supplier in **Add a supplier** and click the **+** button to add it, repeating for each supplier you want to quote (remove one with the **✕** on its row). At least one supplier is required. A DRAFT RFQ is created inviting those suppliers.
 4. Click **Confirm Convert**. This button stays disabled until you have chosen the required supplier(s) — a PO needs one supplier, an RFQ needs at least one invitee.
 5. The requisition status changes to **CONVERTED**. A **Converted to …** line appears in the summary card with a **View RFQ** / **View Purchase Order** link that opens the document that was just created — continue there (section 2 for an RFQ, section 3 for a PO).
@@ -95,7 +103,7 @@ Converting an approved requisition creates the target document — a Purchase Or
 A requisition can be cancelled while it is still DRAFT or SUBMITTED:
 
 1. Open the requisition.
-2. Click **Cancel**, enter an optional reason, and confirm. Status → **CANCELLED**.
+2. Click **Cancel**, enter an optional **Reason**, and click **Confirm Cancel** (or **Back** to leave it). Status → **CANCELLED**.
 
 ### 1.6 Requisition status reference
 
@@ -129,7 +137,7 @@ Navigate to **Purchasing › RFQs / Sourcing** (`/admin/rfqs`).
 
 ![Requests for quotation](images/04-procurement/rfqs.png)
 
-The list shows each RFQ with its number, status, how many suppliers were invited, the response-due date, and the creation date. Use **+ New RFQ** to start one, and **Open** to send it, capture quotes, or award it.
+The list shows each RFQ with its **RFQ #**, **Status**, how many **Suppliers** were invited, the **Response Due** date, and the **Created** date. Use **New RFQ** to start one, and **Open** to send it, capture quotes, or award it.
 
 **What an RFQ is.**
 An RFQ (Request for Quotation) is a document sent to one or more suppliers asking them to submit their prices and delivery terms for a specified list of goods or services. It is not a commitment to buy — it is a competitive enquiry. The business collects the responses (supplier quotes), compares them, and chooses the best offer.
@@ -168,13 +176,13 @@ A supplier quote (also called a quotation or bid) is the formal price response a
 When a supplier responds with a price:
 
 1. Open the SENT RFQ (navigate to `/admin/rfqs/uid/{uid}`).
-2. Click **Capture Supplier Quote**. The capture form opens.
+2. Click **Capture Supplier Quote**. The capture form opens (the button changes to **Hide Quote Form** while it is open).
 3. Pick the **Supplier** by name (only invited suppliers are listed).
-4. Optionally set a valid-until date, lead time in days, and notes.
-5. For each RFQ line, enter the **Quoted Quantity** and **Unit Price**.
+4. Optionally set **Valid Until**, **Lead Time (days)** and **Notes**.
+5. Under **Quoted Prices**, for each RFQ line enter the **Quoted Qty** and the **Unit Price** (required). The product, unit and **RFQ Qty** are shown for reference.
 6. Click **Save Quote**. The quote is recorded with status **RECEIVED** and the RFQ status moves to **QUOTES_RECEIVED**.
 
-Repeat for each responding supplier. You can compare their prices side-by-side in the quotes panel on the RFQ detail page.
+Repeat for each responding supplier. The **Supplier Quotes** table on the RFQ detail page lists every quote side by side — **Quote #**, **Supplier**, **Status**, **Total**, **Currency**, **Valid Until** and **Lead (days)** — so you can compare them.
 
 ### 2.4 Award the RFQ
 
@@ -183,7 +191,7 @@ To select the winning supplier and create a Purchase Order:
 1. In the quotes panel on the RFQ detail page (`/admin/rfqs/uid/{uid}`), identify the preferred quote (usually the lowest compliant price).
 2. Click **Award** on that quote row.
 3. The winning quote status changes to **AWARDED** and all other quotes become **NOT_AWARDED**. The RFQ status changes to **AWARDED**.
-4. A **Purchase Order** is created in DRAFT from the awarded quote lines and prices. A link to the PO is shown.
+4. A **Purchase Order** is created in DRAFT from the awarded quote lines and prices. The RFQ header then shows **Awarded PO** with a **View Purchase Order** link.
 
 ### 2.5 Cancel an RFQ
 
@@ -203,7 +211,7 @@ Open the RFQ (navigate to `/admin/rfqs/uid/{uid}`) and click **Cancel RFQ**. Sta
 
 **Example — RFQ for cement (continuing from requisition example, fresh scenario):**
 
-A warehouse requisition for 500 bags of **Saruji 50kg** has been approved and converted to RFQ **RFQ-0031**. Purchasing officer Zawadi opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, and adds two invited suppliers: **Tanzania Cement Distributors** and **Simba Cement Ltd**. Response Due Date is set to **2026-06-17**. She clicks **Send to Suppliers** — RFQ goes to SENT.
+A warehouse requisition for 500 bags of **Saruji 50kg** has been approved and converted to RFQ **RFQ-0031**, inviting **Tanzania Cement Distributors** and **Simba Cement Ltd**. Purchasing officer Zawadi opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, checks the two invited suppliers, and clicks **Send to Suppliers** — RFQ goes to SENT.
 
 Both suppliers respond. Zawadi captures two quotes:
 - **Tanzania Cement Distributors**: 500 bags @ TZS 14,800 each = TZS 7,400,000 (lead time 3 days).
@@ -219,7 +227,7 @@ Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
 
 ![Purchase orders](images/04-procurement/purchase-orders.png)
 
-The list shows each PO with its order number, supplier, status, currency, total, and creation date. A search box and status filter narrow the list. Use **+ New Order** for a direct PO, and **Open** to add lines, place, close, or void one.
+The list shows each PO with its **Order #**, **Supplier**, **Status**, **Total** (with its currency), and **Created** date. Narrow it with **Search** (supplier or order number) and the **Status** filter. Orders raised automatically behind a **Receive Without Order** receipt (section 4.5) are hidden by default; tick **Show direct receipts** to include them — they carry a **Direct receipt** tag. Use **New Order** for a direct PO, and **Open** to add lines, place, close, or void one.
 
 **What a Purchase Order is.**
 A Purchase Order (PO) is the formal, legally binding document that a business sends to a supplier to commit to buying specific goods or services at agreed prices and quantities. It defines what is being ordered, how many units, at what price, and by when. Once placed, it is the reference document for everything that follows — the goods receipt checks deliveries against it, the supplier invoice is matched against it, and the payment settles it.
@@ -253,8 +261,12 @@ The Purchase Orders list (`/admin/purchase-orders`) has an inline create form fo
 1. Navigate to **Purchasing › Purchase Orders** (`/admin/purchase-orders`).
 2. Open the DRAFT PO (navigate to `/admin/purchase-orders/uid/{uid}`).
 3. While the PO is in DRAFT you can:
-   - **Add a line** — pick the product by name, choose a unit, enter the ordered quantity and unit cost. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units).
+   - **Add a line** — in the **Add Line** panel, search the **Product** by name or code, choose a **Unit**, and enter the **Qty**, **Unit Cost** and an optional **Note**. The **Unit** field is disabled until a product is picked; once picked, it lists only that product's configured units (its base unit and any active bulk-pack units).
+   - **See what you already hold** — as soon as a product is picked, the panel shows **In stock:** with the company's total on hand and a split by stock location, so you do not order what is already on the shelf.
+   - **Use the suggested cost** — the **Unit Cost** is pre-filled from the best price the system knows, with a note saying where it came from: **From the last quote**, **From the last purchase**, or **From the product cost price** (and the date). You can change it. If that price was in a different currency from the order, a warning asks you to check the amount before adding the line.
    - **Remove a line** — click the delete icon on the line row. (Lines cannot be edited in place; to change a line, remove it and add it again.)
+
+The **Order Lines** table shows, per line: **Product**, **Unit**, **Ordered Qty**, **Received**, **Outstanding** (in the line's own unit — a line received within the over-receipt tolerance shows, for example, `0 (5 over)`), **Unit Cost**, **Line Total**, and **Status** (**Pending** or **Received**).
 
 ### 3.3 Submit a Purchase Order for approval
 
@@ -266,7 +278,9 @@ If your administrator has enabled a PO approval threshold in Purchase Settings (
 
 Requires `PURCHASE.ORDER.CREATE` (the same permission used to create, add lines to, and place a PO).
 
-**After a decision is made.** When the approver approves or rejects the request in the Approvals inbox (chapter 11), **reopen or refresh the Purchase Order** to pick up the outcome: the banner updates to **Approved** — and **Place Order** reappears so you can place the order — or to **Approval rejected**. The screen reconciles the decision from the approvals engine every time it is opened, so a manual refresh after the approver acts is all that is needed (there is no live auto-refresh yet). An administrator may also record the decision directly via the `PURCHASE.ORDER.APPROVE` action. Orders whose total is *below* the approval threshold never enter this flow and place normally.
+**After a decision is made.** When the approver approves or rejects the request in the Approvals inbox (chapter 11), **reopen or refresh the Purchase Order** to pick up the outcome: the banner updates to **Approved** ("this order has been approved. You can now place it.") — and **Place Order** reappears so you can place the order — or to **Approval rejected** ("Review the order and resubmit, or void it.", with a **View approvals inbox** link). The screen reconciles the decision from the approvals engine every time it is opened, so a manual refresh after the approver acts is all that is needed (there is no live auto-refresh yet). Orders whose total is *below* the approval threshold never enter this flow and place normally.
+
+> **Note.** An order in a foreign currency is converted to the threshold's currency before it is compared, so a USD order is measured against a TZS threshold at the current exchange rate. If no exchange rate exists to convert it, the system plays safe and treats the order as needing approval.
 
 ### 3.4 Place a Purchase Order
 
@@ -276,21 +290,26 @@ Placing the PO sends it to the supplier and locks the lines. If the order requir
 2. Click **Place Order**.
 3. Status → **ORDERED** and a PO number (PO-####) is assigned.
 
+Once an order is placed, its detail page also offers:
+
+- **Receive Goods** — opens the goods receipt form (section 4.1) for this order (status ORDERED, PARTIALLY_RECEIVED or RECEIVED; requires `PURCHASE.RECEIVE`).
+- **Print PDF** — downloads the purchase order as a PDF to send to the supplier (any status except DRAFT; requires `DOCUMENT.RENDER`).
+
 ### 3.5 Close a Purchase Order
 
 Closing finalises the PO without receiving all goods (for example, if a partial shipment is accepted as complete).
 
 1. Open the PO (navigate to `/admin/purchase-orders/uid/{uid}`) — status ORDERED, PARTIALLY_RECEIVED, or RECEIVED.
-2. Click **Close Order**.
-3. Status → **CLOSED**. The PO is read-only.
+2. Click **Close Order**. A **Close this order?** confirmation explains that anything still outstanding can no longer be received against it, and that this cannot be undone.
+3. Click **Yes, close order** (or **Keep it open** to back out). Status → **CLOSED**. The PO is read-only.
 
 ### 3.6 Void a Purchase Order
 
-Voiding cancels the PO if goods have not all been received.
+Voiding cancels a PO that should never have been placed. Requires `PURCHASE.ORDER.VOID`.
 
-1. Open the PO (status DRAFT, ORDERED, or PARTIALLY_RECEIVED).
-2. Click **Void Order**. An inline reason form opens — enter a mandatory reason and click **Confirm Void**.
-3. Status → **VOID**.
+1. Open the PO. A DRAFT or ORDERED order can be voided straight away. If any goods were received against it, **void every goods receipt first** (section 4.3) — an order with a live receipt is refused. A RECEIVED or CLOSED order cannot be voided.
+2. Click **Void Order**. An inline form opens — enter a mandatory **Reason** and click **Confirm Void**.
+3. Status → **VOID**, and the reason is shown on the order.
 
 ### 3.7 PO status reference
 
@@ -301,13 +320,13 @@ Voiding cancels the PO if goods have not all been received.
 | PARTIALLY_RECEIVED | Some lines received; outstanding qty remains |
 | RECEIVED | All lines fully received |
 | CLOSED | Manually closed |
-| VOID | Cancelled before full receipt |
+| VOID | Cancelled; no live goods receipt against it |
 
 ---
 
 **Example — Placing the cement PO:**
 
-Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088 (DRAFT, 500 bags @ TZS 14,500), reviews the line, and clicks **Place Order**. Status → ORDERED. The formal PO number is confirmed and the document is locked for editing. A PDF can be generated and sent to Simba Cement Ltd.
+Zawadi opens **Purchasing › Purchase Orders** (`/admin/purchase-orders`), finds PO-0088 (DRAFT, 500 bags @ TZS 14,500), reviews the line, and clicks **Place Order**. Status → ORDERED. The formal PO number is confirmed and the document is locked for editing. She clicks **Print PDF** and sends the PDF to Simba Cement Ltd.
 
 ---
 
@@ -317,7 +336,7 @@ Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`).
 
 ![Goods receipts](images/04-procurement/goods-receipts.png)
 
-The list shows each receipt with its GRN number, status, a **View PO** link to the originating Purchase Order, when it was received, and any notes. Use **+ New Receipt** to record an arrival, and **Open** to view a receipt.
+The list answers who delivered, when and how much: each receipt shows its **Receipt #**, **Supplier**, **Status**, a **View PO** link to the originating Purchase Order, **Received At**, the **Amount** (currency and total value), and any **Notes**. Use **Search** (receipt number or PO) to find one. Use **New Receipt** to record an arrival against an order, **Receive Without Order** for stock that came with no purchase order (section 4.5), and **Open** to view a receipt.
 
 **What a Goods Receipt is.**
 A Goods Receipt (GR), sometimes called a Goods Received Note (GRN), is the document that records the physical arrival of goods from a supplier. It is raised by the storekeeper or receiving officer at the moment goods are checked in, linking the delivery to the Purchase Order that authorised it. The GR is the point at which inventory increases: the quantities received are added to stock on-hand at the branch.
@@ -329,15 +348,15 @@ A Goods Receipt serves three critical purposes. First, it records what actually 
 A GR is created by the storekeeper or receiving officer each time a supplier delivers goods against an outstanding Purchase Order. If a supplier delivers in multiple shipments, a separate GR is created for each delivery. The permission required is `PURCHASE.RECEIVE`. Only placed Purchase Orders (ORDERED or PARTIALLY_RECEIVED) can have a GR raised against them.
 
 **How it flows.**
-The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 6–7). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (section 4.3) or by raising a Purchase Return (section 7).
+The storekeeper picks the PO and the system shows all outstanding (unreceived) lines pre-filled with the remaining quantities. The storekeeper adjusts the quantities if the delivery is partial (and unchecks any lines not included in this delivery), optionally records a lot/batch number, manufacture date, expiry date, or serial numbers per line, adds notes, and records the receipt. The GR is created with status RECEIVED, a GRN number is assigned, stock increases at the branch, and the PO's outstanding quantities are updated. Any batch or serial details captured at receipt feed the read-only Stock Batches and Stock Serials screens (see the Inventory & Manufacturing chapter, sections 7–8). The PO moves to PARTIALLY_RECEIVED or RECEIVED depending on whether all lines are now complete. A GR cannot be edited after submission; errors are corrected by voiding the GR (section 4.3) or by raising a Purchase Return (section 7).
 
 ### 4.1 Receive goods
 
-1. Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`) and click **New Receipt**, or go directly to `/admin/goods-receipts/create`.
-2. Pick the **Purchase Order** by its PO number.
-3. The form lists all open (unreceived) lines, each with a tick box (included by default) and the outstanding quantity pre-filled in the **Receive Qty** field.
+1. Navigate to **Purchasing › Goods Receipts** (`/admin/goods-receipts`) and click **New Receipt**, or click **Receive Goods** on a placed purchase order. The **Receive Goods** form opens (`/admin/goods-receipts/create`).
+2. In **Purchase Order**, type the PO number or supplier name and pick the order (only placed orders that still have something to receive are offered). The order's number, supplier, currency and status are shown.
+3. Under **Lines to Receive**, the form lists every line with an **Include** tick box (ticked by default), **Product**, **Unit**, **Ordered**, **Previously Received**, **Outstanding**, and the **Receive Qty** pre-filled with the outstanding amount. Quantities are in the line's own unit (for example cartons, not bottles); for a pack line the form shows the equivalent in base units beneath the field (`= 240 base units`). If every line is already fully received, the form says there is nothing to receive.
 4. Adjust individual quantities if you are receiving a **partial shipment**, and untick any lines not in this delivery. By default the quantity cannot exceed the outstanding balance on each line — unless your company has set an **over-receipt tolerance** (see below), in which case each line may go up to that percent over, and the field shows a **max** hint of the amount allowed.
-5. For any line — typically a lot-tracked or serialised product — click **Batch** to expand its batch/serial details, and optionally enter the **Lot / Batch number**, **Manufacture date**, **Expiry date**, and **Serial / IMEI numbers** (one per line). The **Batch** toggle appears on every receipt line regardless of the product's tracking settings; all of these fields are optional at receipt time.
+5. For any line — typically a lot-tracked or serialised product — click **Batch** to expand its batch/serial details (the button changes to **Hide**), and optionally enter the **Lot / Batch number**, **Manufacture date**, **Expiry date**, and **Serial / IMEI numbers** (one per line). The **Batch** toggle appears on every receipt line regardless of the product's tracking settings; all of these fields are optional at receipt time.
 6. Optionally add **Notes**.
 7. Click **Record Receipt**.
 
@@ -350,7 +369,7 @@ The goods receipt is created with status **RECEIVED** and assigned a GRN-#### nu
 
 - An information banner at the top of the receipt form reads *"Over-receipt tolerance: 5% — each line may be received up to 5% over its outstanding quantity."*
 - Each **Receive Qty** field shows a **max** hint of the ceiling for that line (outstanding × (1 + tolerance), for example `max 105` on a line of 100 outstanding at 5%).
-- Entering more than the ceiling is refused with a plain message naming the line (product) and stating that the quantity received exceeds what is outstanding — reduce it and try again; nothing is posted. (The allowed maximum is shown up front as the **max** hint on the field, not repeated in the rejection message.)
+- Entering more than the ceiling is refused with a plain message naming the line (product), stating that the quantity received exceeds the outstanding amount and how much is still outstanding in the line's unit — reduce it and try again; nothing is posted.
 
 When no tolerance is configured (the default), receiving stays strict and the banner does not appear. See section 8.2 for how to set it.
 
@@ -367,11 +386,17 @@ If a receipt was recorded in error, void it to fully reverse it. Voiding is avai
 3. Enter a mandatory **Reason** and click **Confirm Void**.
 4. The receipt status changes to **VOID** and the void reason is shown on the receipt.
 
+A void is refused — with a message saying why — in three situations, because reversing the whole receipt would then be wrong:
+
+- **Some of the goods were already returned** to the supplier on a purchase return. Raise a further purchase return for the rest instead.
+- **A supplier bill already claims the receipt.** Raise a purchase return for the goods (or a debit note on the bill) instead.
+- **Some of the goods have already been sold or used**, so less is left in stock than the receipt brought in. Correct it with a purchase return or a stock adjustment instead.
+
 **What the void reverses.** Voiding is a complete unwind of the receipt, not just a stock adjustment:
 
 - **Quantity** — the received quantity is removed from stock on-hand at the branch, and the PO's outstanding quantities are restored so the lines can be received again.
 - **General ledger** — the goods-received accounting entry is reversed.
-- **Batch (lot) and serial/IMEI tracking** — any lot/batch quantities and serial or IMEI numbers that were captured on the original receipt (see section 4.1, step 5) are backed out too: batch balances are decremented and the serials recorded by that receipt are removed from stock. This keeps the Stock Batches and Stock Serials screens (Inventory & Manufacturing chapter, sections 6–7) consistent with the reversal.
+- **Batch (lot) and serial/IMEI tracking** — any lot/batch quantities and serial or IMEI numbers that were captured on the original receipt (see section 4.1, step 5) are backed out too: batch balances are decremented and the serials recorded by that receipt are removed from stock. This keeps the Stock Batches and Stock Serials screens (Inventory & Manufacturing chapter, sections 7–8) consistent with the reversal.
 
 A serial that has already moved on (for example, one that has since been issued) is left untouched; the rest of the reversal still completes.
 
@@ -381,6 +406,31 @@ A serial that has already moved on (for example, one that has since been issued)
 |---|---|
 | RECEIVED | Active receipt; stock increased |
 | VOID | Voided (reversed); stock, GL, and batch/serial tracking all backed out |
+
+### 4.5 Receive goods without a purchase order
+
+Navigate to **Purchasing › Receive Without Order** (`/admin/goods-receipts/direct`), or click **Receive Without Order** on the Goods Receipts list. Permission required: `PURCHASE.RECEIVE.DIRECT`.
+
+**What it is.** A one-step receipt for stock that arrived with **no purchase order** — a walk-in supplier, a cash purchase at the market, a delivery nobody ordered in the system. It records a real purchase at the price you paid, so the goods enter stock at their true cost.
+
+**Why it exists.** Without it, the only way to put such stock on the shelf would be a stock adjustment or a bulk import, which raise the quantity but record no supplier, no document and no purchase cost — the stock ends up valued wrongly. The direct receipt keeps the purchase trail intact.
+
+**How it works.** Behind the scenes the system raises a purchase order for exactly what you entered, places it, and receives it in full — all in one step, so either everything is recorded or nothing is. The order is tagged as a direct receipt and is hidden from the normal Purchase Orders list (tick **Show direct receipts** to see it). Because nobody could approve the spend before the goods arrived, the receipt goes through even if PO approval is switched on, and a **ratification** request goes to the approvers' **My Inbox** instead (chapter 11, Approvals): a manager confirms the purchase after the event. Until it is ratified, the supplier's bill for it can be entered and matched but **cannot be paid** — the bill shows **Awaiting ratification**; if the manager refuses, it shows **Ratification refused** and will not be paid; once confirmed it shows **Ratified** and pays as normal.
+
+**Steps:**
+
+1. Under **Delivery**, search and pick the **Supplier** (name or code), choose the **Currency**, and optionally enter a **Delivery note reference / notes** (for example the supplier's delivery note number).
+2. Under **Add an item**, search the **Item**, choose the unit it was **Delivered in**, and enter the **Quantity** and the **Unit cost** — what you paid, per unit chosen. The cost is pre-filled from the last quote, the last purchase or the product cost price where one is known; change it if this delivery cost something else. A **Note** is required when the cost is zero.
+3. Click **Add item**. The item joins the **Items on this delivery** table (Item, Unit, Qty, Unit cost, Line total, Note) with a running **Total**. Use **Remove** to take a line off. Repeat for each item.
+4. Click **Receive into stock**. The goods receipt (GRN-####) is created with its backing order, stock increases at your branch, and the ratification request is raised.
+
+### 4.6 Print a goods received note
+
+On a RECEIVED or VOID receipt, click **Print PDF** (requires `DOCUMENT.RENDER`). The goods received note lists each line with its item code, description, quantity, **cost price**, **selling price** (from the company's default price list), the **previous cost price** (from the last earlier receipt of the same item), the **margin** that cost and selling price imply, and the line amount, with a VAT summary at the foot. A negative margin is printed as it is — that is exactly what a buyer checking the delivery wants to see. Pack lines compare the pack cost with the pack price.
+
+How VAT is shown on the printed note depends on the **When receiving goods, the cost I enter is…** setting in Purchase Settings (section 8.3). It changes the printed note only, never the accounts.
+
+The receipt detail page also shows the header (purchase order link, supplier, received at, notes, void reason) and a **Receipt Lines** table — **Product**, **Unit**, **Received Qty**, **Unit Cost**, **Line Cost**, **Currency**, and **Batch / Tracking** (lot, expiry, manufacture date and serial numbers captured) — with the **Total Received Value** at the foot.
 
 ---
 
@@ -398,7 +448,7 @@ Navigate to **Purchasing › Landed Costs** (`/admin/landed-costs`).
 
 ![Landed costs](images/04-procurement/landed-costs.png)
 
-The list shows each landed-cost document with its LC number, status, allocation basis (By Value or By Quantity), currency, total charge, and creation date. Use **+ New Landed Cost** to create one, and **Open** to review and confirm it.
+The list shows each landed-cost document with its **LC Number**, **Status**, **Basis** (BY_VALUE or BY_QUANTITY), **Currency**, **Total Charge**, and **Created** date. Use **New Landed Cost** to create one, and **Open** to review and confirm it.
 
 **What landed costs are.**
 Landed cost is the total cost of getting an imported or shipped product to your warehouse — not just the purchase price, but all the additional charges incurred along the way: freight, customs duty, port clearing fees, insurance, and other incidentals. The "landed cost" is what the goods actually cost you once they are physically in your possession.
@@ -416,11 +466,12 @@ A landed cost document is created (DRAFT) with the allocation basis (By Value or
 
 1. Navigate to **Purchasing › Landed Costs** (`/admin/landed-costs`) and click **New Landed Cost**, or go directly to `/admin/landed-costs/create`.
 2. Select the **Allocation Basis**:
-   - **By Value** — charges are spread proportionally to the value of each GR line.
-   - **By Quantity** — charges are spread proportionally to the quantity received on each GR line.
-3. Pick the **Goods Receipt(s)** by GRN number. You can include multiple GRNs in one landed cost document.
-4. Add one or more **Charges**: select the charge type (Freight, Duty, Clearing, Insurance, or Other) and enter the amount.
-5. Click **Create Landed Cost**. The landed cost is created in **DRAFT**.
+   - **By Value (pro-rata to line cost)** — charges are spread proportionally to the value of each GR line.
+   - **By Quantity (pro-rata to qty in base unit)** — charges are spread proportionally to the quantity received on each GR line, counted in the base unit.
+3. Optionally add **Notes**.
+4. Under **Goods Receipts Covered**, pick a receipt in **Add Goods Receipt** (the picker searches by GRN number, newest first) and click **Add receipt**. Repeat to include several GRNs in one landed cost document; remove one with its ✕.
+5. Under **Charge Lines**, click **Add Charge** for each charge: choose the **Charge Type** (FREIGHT, DUTY, CLEARING, INSURANCE or OTHER) and enter the **Amount**.
+6. Click **Create Landed Cost**. The landed cost is created in **DRAFT**.
 
 ### 5.2 Confirm a landed cost
 
@@ -428,7 +479,9 @@ Confirming allocates the charges to the GR lines and posts the cost adjustment t
 
 1. Open the DRAFT landed cost (navigate to `/admin/landed-costs/uid/{uid}`).
 2. Click **Confirm & Allocate**.
-3. Status → **CONFIRMED**. The allocation per GR line is shown in the detail.
+3. Status → **CONFIRMED**. The header shows **Confirmed At** and a **View GL Entry** link to the journal that was posted.
+
+The detail page also lists the **Goods Receipts Covered** (each a link to the receipt) and a **Charges** table — **Charge Type**, **Amount**, **Currency**, **Billed** (**Billed** or **Unbilled**) and **Supplier Bill** (a **View Bill** link once the freight or duty supplier's bill has been matched to the charge).
 
 A confirmed landed cost cannot be edited. If there is an error, contact your administrator.
 
@@ -448,7 +501,7 @@ The cement shipment also incurred TZS 850,000 in port clearing fees and TZS 600,
 - Type **Clearing**, Amount TZS 850,000.
 - Type **Freight**, Amount TZS 600,000.
 
-Total landed cost TZS 1,450,000. She clicks **Create Landed Cost** (DRAFT), reviews the per-bag allocation (TZS 2,900/bag), and clicks **Confirm & Allocate**. Status → CONFIRMED. The moving-average cost for Saruji 50kg increases by TZS 2,900/bag, and the GL is posted accordingly.
+Total landed cost TZS 1,450,000 — TZS 2,900 per bag across 500 bags. She clicks **Create Landed Cost** (DRAFT), reviews the charges, and clicks **Confirm & Allocate**. Status → CONFIRMED. The moving-average cost for Saruji 50kg increases by TZS 2,900/bag, and the GL is posted accordingly.
 
 ---
 
@@ -463,21 +516,27 @@ A supplier bill (also called a purchase invoice or vendor invoice) is the invoic
 A supplier could, accidentally or deliberately, send an invoice for more units than were delivered, at a higher price than agreed, or for items never ordered at all. Paying it without verification means the business overpays. The 3-way match is the systematic check that prevents this: it compares the bill to both the Purchase Order (what was agreed) and the Goods Receipt (what was actually received). All three must align within an acceptable tolerance before payment is authorised. This process is called "3-way matching" because it matches three documents: the bill, the PO, and the GR.
 
 **When it is used.**
-A supplier bill is entered when the supplier's invoice arrives, after the goods have been received and (optionally) landed costs applied. It is entered by an accounts payable clerk with the `AP.BILL.ENTER` permission. Matching is triggered automatically when the bill is entered (if a PO is linked) or can be run from the bills list.
+A supplier bill is entered when the supplier's invoice arrives, after the goods have been received and (optionally) landed costs applied. It is entered by an accounts payable clerk with the `AP.BILL.ENTER` permission. The match runs automatically when the bill is entered, and can be run again from the bill's detail page.
 
 **How the 3-way match works.**
-The system compares each bill line against the corresponding PO line (agreed price and quantity) and GR line (received quantity). If the billed price and billed quantity are within the configured tolerance of the ordered and received values, the line is MATCHED. If either is outside tolerance, the line is HELD (HELD_PRICE_VARIANCE or HELD_QTY_VARIANCE). A held bill cannot be approved for payment until each held line is either corrected or manually accepted (VARIANCE_ACCEPTED) by a user with `AP.BILL.MATCH`. The GL entry posted at bill-match for goods lines is: **DR GRNI (2150) / CR Accounts Payable (2100)** — this clears the GRNI bridge set up at the goods receipt. Service bill lines (no GR) post: **DR Purchases (5150) / CR Accounts Payable**.
+The system compares each bill line against the purchase order line it is linked to (agreed price) and the goods receipt line it is linked to (quantity received, less anything already billed on other bills for that receipt line, both in the receipt line's unit). The price may differ from the order by up to the company's tolerance (2% by default); the quantity billed may not exceed what was received. If both checks pass, the line is MATCHED; otherwise it is held (HELD_PRICE_VARIANCE or HELD_QTY_VARIANCE). The check **fails closed**: a line linked to an order whose order line or receipt line cannot be found is held, never passed, because nothing was actually checked. Only a line with no purchase link at all — a genuine service charge — passes without a comparison, and it is clearly marked as not checked. A held bill posts nothing and cannot be paid until each held line is either corrected or accepted (VARIANCE_ACCEPTED) by a user with `AP.BILL.MATCH`. When every line is matched or accepted the bill posts to the ledger: goods lines **DR GRNI (2150) / CR Accounts Payable (2100)** — clearing the GRNI bridge set up at the goods receipt — and service lines **DR** the expense or asset account chosen on the line (default Purchases, 5150) **/ CR Accounts Payable**.
 
 ### 6.1 Enter a supplier bill
 
-1. Navigate to **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`).
+1. Navigate to **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`). The screen is headed **Enter Supplier Bill**.
 2. Pick the **Supplier** by name or code (search-as-you-type).
-3. Enter the supplier's own **Supplier Invoice No.**, **Bill Date**, and **Due Date**.
-4. Optionally enter the **VAT Amount** (leave 0 if none).
-5. Choose the **Currency** from the Currency Picker — the list is limited to the company's enabled currencies and defaults to the company default (see "Common UI Patterns" in the Getting Started chapter).
-6. Optionally pick the **Purchase Order** from the picker. Linking the PO enables the 3-way match (see section 6.2). For service bills with no PO, leave this blank.
-7. Add **Bill Lines** with **Add Line**. Each line is a free-text **Description**, a **Billed Qty**, and a **Unit Cost**; the **Line Net** is computed for you. To match a line to the order, choose the corresponding **PO Line** in the optional picker on that row. (There is no product picker on the bill line — the description is free text.)
-8. Click **Enter Bill & Match**. The bill is created and the 3-way match runs automatically; the per-line match result panel appears.
+3. Enter the supplier's own **Supplier Invoice No.** and the **Bill Date**. **Due Date** is optional — leave it blank and it is worked out from the supplier's payment terms (bill date + terms).
+4. Enter the **VAT Amount** (0 if none).
+5. Choose the **Currency** from the Currency Picker — the list is limited to the company's enabled currencies and defaults to the company default (see "Common UI Patterns" in the Getting Started chapter). A foreign-currency bill needs an exchange rate for the bill date.
+6. Optionally pick the **Purchase Order** ("optional — for 3-way match"). For service bills with no PO, leave this blank.
+7. Under **Bill Lines**, use **Add Line** for each line of the invoice. Each line has:
+   - **Description** (free text — there is no product picker), **Billed Qty** and **Unit Cost**; the **Line Net** is computed for you.
+   - **Account (non-stock)** — for a line that is not linked to an order or a receipt (a service, a fixed asset, an expense), choose the expense or asset account it should be charged to; leave it at **Purchases (default)** otherwise. Sub-ledger control accounts are never offered. A line linked to an order or receipt shows "Stock — posts through the receipt." instead.
+   - **PO Line (opt.)** — the order line this invoice line is for.
+   - **Goods Receipt Line (checks the qty)** — the receipt line from the delivery note, labelled with the GRN number, product and quantity received. Attach it: it is what lets the match check the quantity billed against the quantity actually received. A line without one is flagged "Not attached — the quantity billed will not be checked." and will be held.
+8. Check the **Total Net** and click **Enter Bill & Match**. The bill is created and the 3-way match runs automatically; the **3-Way Match Result** panel appears.
+
+> **Note.** If the supplier has no received goods receipts, the screen says so above the lines — ask the store to receive the delivery first (section 4.1), so that the quantity on the bill can be checked.
 
 ### 6.2 Understanding the 3-way match
 
@@ -488,43 +547,52 @@ Supplier Bill line  ←→  Purchase Order line  ←→  Goods Receipt line
     (billed qty/price)       (ordered qty/price)      (received qty/price)
 ```
 
-The match result for each line is one of:
+The **3-Way Match Result** panel shows, per line, the **Status**, **PO Cost**, **Price Var.**, **Price Var. %**, **GR Qty**, **Billed Qty** and **Qty Var.** (a figure that was never computed shows "not checked", never a reassuring 0), with a plain note under each line saying what it needs. The status labels are:
 
-| Match Status | Meaning |
+| Status shown | Meaning |
 |---|---|
-| MATCHED | Quantities and prices are within tolerance; line approved |
-| HELD_PRICE_VARIANCE | Bill unit price is outside the acceptable tolerance versus the PO price |
-| HELD_QTY_VARIANCE | Billed quantity is outside the acceptable tolerance versus the received quantity |
-| VARIANCE_ACCEPTED | A held variance was reviewed and manually accepted |
+| Matched | The price and the quantity billed both agree with the order and the goods receipt |
+| On hold — price differs | The billed unit price is more than the tolerance away from the PO price |
+| On hold — quantity differs | More is billed than was received (or the receipt was already billed on another bill) |
+| On hold — not checked | The line points at an order or receipt line that could not be found, so nothing was checked |
+| Accepted — not checked | A service line with no purchase link; passed without a comparison |
+| Variance accepted | A held line was reviewed and accepted by a user with `AP.BILL.MATCH` |
 
 The overall bill status depends on its lines:
 
 | Bill Status | Meaning |
 |---|---|
-| MATCHED | All lines matched; bill ready for payment approval |
-| HELD | One or more lines have an unresolved variance |
+| MATCHED | All lines matched or accepted; the bill is posted and ready for payment |
+| HELD | One or more lines have an unresolved variance; nothing is posted |
 
-### 6.3 Accept a variance
+### 6.3 Accept a variance or post without checking
 
-If a bill line is HELD due to a price or quantity variance:
+If a bill line is held:
 
-1. On the per-line match result panel shown immediately after **Enter Bill & Match** (section 6.1), review the variance amount and percentage shown on each held line.
-2. If the variance is acceptable, click **Accept Variance** on that line.
-3. When all held lines are resolved, the bill status moves to **MATCHED**.
+1. On the match-result panel (straight after **Enter Bill & Match**), or on the bill detail page after **Run match**, read the note under the held line.
+2. If the difference is acceptable, click **Accept variance** on that line. For a line that was never checked (**On hold — not checked**) the button reads **Post without checking** — an override that is recorded against your name and leaves the amount unverified. The reliable fix is to enter the bill again with the goods receipt line attached.
+3. When all held lines are resolved, the bill status moves to **MATCHED** and the bill posts.
 
-Accepting variances requires the `AP.BILL.MATCH` permission. The **Accept Variance** control appears only on the match-result panel that follows entering the bill — the read-only bill detail page does not offer it.
+Accepting variances requires the `AP.BILL.MATCH` permission.
 
-### 6.4 Reviewing a matched or held bill
+### 6.4 Reviewing and correcting a bill
 
-The 3-way match runs once, automatically, when the bill is entered (see section 6.1); there is no UI to re-run a match after entry. On the bills list at **Accounting › Payables** (`/admin/ap/supplier-bills`), a **Match** action appears for DRAFT and HELD bills — it is a link that opens the read-only bill detail page (`/admin/ap/supplier-bills/uid/{uid}`) where you can review the bill header and lines. Variances are accepted on the match-result panel at entry time (section 6.3), not from this page.
+Open a bill from **Accounting › Payables** (`/admin/ap/supplier-bills`) by clicking its bill number, or with the **Match** link shown on DRAFT and HELD rows. The **Supplier Bill Detail** page shows the supplier invoice number, bill and due dates, net, VAT, gross and outstanding amounts, the source, a **View PO** link and — once posted — a **View Journal** link, then the **Bill Lines**.
+
+A DRAFT or HELD bill that has not posted shows a box headed **This bill is on hold** (or **This bill is not posted yet**) — "Nothing from this bill is in the books yet." It offers:
+
+- **Run match** (`AP.BILL.MATCH`) — runs the 3-way match again after you have fixed the order, the goods receipt or the exchange rate. The **Result** and **Why** for each line appear, with **Accept variance** / **Post without checking** on held lines.
+- **Delete bill** (`AP.BILL.ENTER`) — removes the unposted bill so the invoice can be entered again correctly.
+
+A posted bill offers **Record Payment** (section 6.7). For goods that arrived without a purchase order (section 4.5), the bill also shows the ratification state — **Awaiting ratification**, **Ratification refused** or **Ratified** — and **Record Payment** stays blocked until a manager has confirmed the delivery.
 
 ### 6.5 Service bills (no PO)
 
 For invoices from service suppliers where there is no corresponding PO or GR:
 
-- Leave the Purchase Order field blank when entering the bill.
-- No 3-way match is run.
-- The bill is entered for manual review and approval.
+- Leave the Purchase Order field blank when entering the bill, and leave the PO Line and Goods Receipt Line empty on each line.
+- Choose the expense or asset account for each line in **Account (non-stock)** (or keep the Purchases default).
+- Each line is accepted without a comparison and marked **Accepted — not checked**; the bill posts straight away.
 
 ### 6.6 Bill status reference
 
@@ -542,7 +610,7 @@ For invoices from service suppliers where there is no corresponding PO or GR:
 **What an AP payment is.**
 An Accounts Payable (AP) payment is the settlement of a supplier bill — the act of transferring funds to the supplier to clear the liability created when the bill was entered. Recording the payment in the system updates the bill status and reduces the AP balance, completing the P2P cycle.
 
-Payments against supplier bills are managed in the Accounts Payable module. Navigate to **Accounting › Record Payment** (`/admin/ap/payments/record`) to record a payment. See the Finance chapter for details on recording and reconciling AP payments.
+Payments against supplier bills are managed in the Accounts Payable module. Navigate to **Accounting › Record Payment** (`/admin/ap/payments/record`), or click **Pay** on a payable row of the bills list (or **Record Payment** on the bill detail), to record a payment. Choose the account the money **Pay from**, select the bills, and part-pay or pay in full. See the Finance chapter (*Accounts Payable › Payments*) for details on recording, reversing and reconciling AP payments.
 
 ---
 
@@ -550,7 +618,7 @@ Payments against supplier bills are managed in the Accounts Payable module. Navi
 
 Simba Cement sends Invoice **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22, for 500 bags @ TZS 14,500 each = TZS 7,250,000 net.
 
-Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks supplier **Simba Cement Ltd**, enters Supplier Invoice No **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22, and selects Currency **TZS** from the Currency Picker. She links PO **PO-0088** and adds one bill line: Description **Saruji 50kg**, Billed Qty 500, Unit Cost TZS 14,500, and selects the matching **PO Line** on that row. She clicks **Enter Bill & Match**.
+Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks supplier **Simba Cement Ltd**, enters Supplier Invoice No **SIM/2026/1041**, Bill Date 2026-06-22, Due Date 2026-07-22, and selects Currency **TZS** from the Currency Picker. She links PO **PO-0088** and adds one bill line: Description **Saruji 50kg**, Billed Qty 500, Unit Cost TZS 14,500, selects the matching **PO Line** and the **Goods Receipt Line** from GRN-0061 on that row. She clicks **Enter Bill & Match**.
 
 The system runs the 3-way match:
 - Bill line: 500 bags @ 14,500
@@ -561,7 +629,7 @@ All lines → **MATCHED**. Bill status → MATCHED. Bill **BILL-0051** is ready 
 
 **Example — Bill with price variance (held):**
 
-A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 over the PO price). When the AP manager clicks **Enter Bill & Match**, the match-result panel shows the bill line as **HELD_PRICE_VARIANCE** with variance TZS 200,000. She reviews the variance, decides it is within business tolerance, and clicks **Accept Variance** on that line. Line moves to VARIANCE_ACCEPTED; bill → MATCHED.
+A different shipment arrives and the supplier bills at TZS 14,900/bag (TZS 400 over the PO price). When the AP manager clicks **Enter Bill & Match**, the match-result panel shows the bill line as **On hold — price differs** (TZS 400 a bag, 2.76%). She reviews the variance, decides it is acceptable, and clicks **Accept variance** on that line. The line moves to **Variance accepted**; bill → MATCHED and posts.
 
 ---
 
@@ -571,7 +639,7 @@ Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`).
 
 ![Purchase returns](images/04-procurement/purchase-returns.png)
 
-The list shows each return with its number, supplier, status, currency, gross value, and creation date. Use **+ New Return** to raise one against a goods receipt, and **Open** to review and confirm it.
+The list shows each return with its **Return #**, **Supplier**, **Status**, **Currency**, **Gross** value, and **Created** date. Use **New Return** to raise one against a goods receipt, and **Open** to review, confirm or print it.
 
 **What a purchase return is.**
 A purchase return is the formal process of sending goods back to the supplier — typically because the goods arrived damaged, were incorrect, failed quality inspection, or are surplus to requirements. It is the reverse of a goods receipt: where a GR increases stock, a confirmed purchase return decreases stock and triggers the AP module to raise a debit note against the supplier.
@@ -588,9 +656,9 @@ A purchase return starts as a DRAFT referencing the original GRN and specifying 
 ### 7.1 Create a purchase return
 
 1. Navigate to **Purchasing › Purchase Returns** (`/admin/purchase-returns`) and click **New Return**, or go directly to `/admin/purchase-returns/create`.
-2. Pick the **Goods Receipt** by GRN number (the GR must have status RECEIVED).
+2. Pick the **Goods Receipt** by GRN number (the picker searches, newest first; the receipt must have status RECEIVED).
 3. Enter a mandatory **Reason**.
-4. For each line being returned, enter the **Returned Quantity** (cannot exceed the quantity originally received on that GR line).
+4. Under **Lines to Return**, tick **Include** on each line being sent back. The table shows the **Product**, **Unit**, quantity **Received** and the quantity still **Returnable** (received less anything already returned). Enter the **Return Qty (in line unit)** — in the same unit the line was received in (cartons, not bottles); for a pack line the equivalent in base units is shown beside it. It cannot exceed the returnable quantity.
 5. Click **Create Return**. The return is created in **DRAFT**.
 
 ### 7.2 Confirm a purchase return
@@ -599,9 +667,13 @@ Confirming the return physically ships the goods back and adjusts stock.
 
 1. Open the DRAFT purchase return (navigate to `/admin/purchase-returns/uid/{uid}`).
 2. Click **Confirm Return**.
-3. Status → **CONFIRMED**. Stock is removed from the branch and a purchase return event is posted.
+3. Status → **CONFIRMED**. Stock is removed at the branch where the goods were received, at the cost they came in at. A supplier debit note is raised (the header shows **Debit Note — Issued**) and the journal is posted — **View GL Entry** opens it. The debit note carries the VAT and the order's currency, and only reduces this supplier's bills.
 
-### 7.3 Purchase return status reference
+### 7.3 Print or export a return (debit note)
+
+On the return detail, users with `DOCUMENT.RENDER` see **Print PDF**, **Export Excel** and **Export CSV**. The document is the debit note you hand or send to the supplier: the returned lines (**Product**, **Unit**, **Returned Qty**, **Unit Cost**, **Line Value**, **Currency**), the reason and the total.
+
+### 7.4 Purchase return status reference
 
 | Status | Meaning |
 |---|---|
@@ -628,7 +700,7 @@ Purchase settings are the company-level configuration controls that govern how t
 **Why a PO approval threshold exists.**
 For low-value purchases, requiring a manager to approve every PO would create unnecessary bottlenecks. For high-value purchases, however, committing the business without a second review is a financial control risk. The approval threshold is the balance: below the threshold, POs flow through automatically; above it, they pause for authorisation. This is a common internal control required by auditors and risk frameworks.
 
-Purchase settings control the PO approval workflow and the goods-receipt over-receipt tolerance.
+Purchase settings control the PO approval workflow, the goods-receipt over-receipt tolerance, and how VAT is shown on the printed goods received note. Only users with `PURCHASE.SETTINGS.MANAGE` can open the screen.
 
 ![Purchase Settings — PO approval and over-receipt tolerance](images/04-procurement/purchase-settings.png)
 
@@ -638,11 +710,11 @@ Purchase settings control the PO approval workflow and the goods-receipt over-re
 |---|---|
 | Enable PO Approval Workflow | When turned on, Purchase Orders above the threshold amount require approval before they can be placed |
 | Approval Threshold Amount | The minimum order total that triggers the approval requirement (shown only when the workflow is enabled) |
-| Currency | The currency of the threshold amount, chosen from the Currency Picker (limited to the company's enabled currencies, defaulting to the company default — see "Common UI Patterns" in the Getting Started chapter) |
+| Currency | The currency of the threshold amount, chosen from the Currency Picker (limited to the company's enabled currencies, defaulting to the company default — see "Common UI Patterns" in the Getting Started chapter); shown only when the workflow is enabled |
 
 To change these settings, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), pick the **Company**, update the values, and click **Save Settings**.
 
-When PO approval is enabled, an order that exceeds the threshold is submitted from its detail screen (section 3.3) and decided by an approver in the Approvals inbox (requires `APPROVALS.DECIDE`; see chapter 11, Approvals). `PURCHASE.ORDER.APPROVE` gates a separate, administrative approve/reject action on the order itself, available only via the API — see the Known limitation note in section 3.3.
+When PO approval is enabled, an order that exceeds the threshold is submitted from its detail screen (section 3.3) and decided by an approver in the Approvals inbox (requires `APPROVALS.DECIDE`; see chapter 11, Approvals). `PURCHASE.ORDER.APPROVE` gates a separate, administrative approve/reject action on the order itself, which has no button on screen. Goods received without an order (section 4.5) are never held up by the threshold; they go to the approvers for ratification after the event instead.
 
 ### 8.2 Over-receipt tolerance
 
@@ -653,6 +725,14 @@ When PO approval is enabled, an order that exceeds the threshold is submitted fr
 This governs the goods-receipt behaviour described in section 4.1. It exists because goods delivered by weight or in bulk (rice, produce, cement) seldom match the order exactly, and a delivery a fraction over the ordered amount is normal in trade — blocking it outright would force artificial short-receipts and re-orders. Setting a small tolerance (commonly 2–5%) lets the storekeeper book the actual delivered quantity in one receipt, while the ceiling still stops a grossly wrong quantity being received against the wrong PO.
 
 To set it, navigate to **Purchasing › Purchase Settings** (`/admin/purchase-settings`), pick the **Company**, enter the percent in **Goods-receipt over-receipt tolerance (%)**, and click **Save Settings**. The permission required is `PURCHASE.SETTINGS.MANAGE`.
+
+### 8.3 VAT on the printed goods received note
+
+| Setting | Options |
+|---|---|
+| When receiving goods, the cost I enter is… | **before VAT — add VAT on the printed note** (the default), **VAT included — show the VAT inside it**, or **not a VAT matter — show no VAT at all** |
+
+This changes the printed Goods Received Note only (section 4.6) — never your accounts. Choose **VAT included** if your storekeepers copy costs straight from a supplier invoice that already has VAT in it; otherwise the printed note adds VAT a second time.
 
 ---
 
@@ -688,7 +768,7 @@ Neema clicks **Convert**, sets **Convert to** to **RFQ**, adds the two suppliers
 
 **Step 4 — Invite suppliers and send**
 
-Neema opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, adds invited suppliers **Tanzania Cement Distributors** and **Simba Cement Ltd**, sets Response Due Date **2026-06-17**, and clicks **Send to Suppliers** (status → SENT).
+Neema opens **Purchasing › RFQs / Sourcing** (`/admin/rfqs`), opens RFQ-0031, checks the **Invited Suppliers** panel lists **Tanzania Cement Distributors** and **Simba Cement Ltd**, and clicks **Send to Suppliers** (status → SENT).
 
 **Step 5 — Capture supplier quotes**
 
@@ -716,11 +796,11 @@ Port clearing TZS 850,000 + freight TZS 600,000 are entered as a landed cost aga
 
 **Step 10 — Enter the supplier bill and run 3-way match**
 
-Simba Cement's invoice arrives: SIM/2026/1041, 500 bags @ TZS 14,500. Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks the supplier, selects Currency **TZS** from the Currency Picker, links PO-0088, adds a bill line (Description **Saruji 50kg**, Billed Qty 500, Unit Cost TZS 14,500) and selects the matching **PO Line**, then clicks **Enter Bill & Match**. All lines → MATCHED. BILL-0051 is ready for payment.
+Simba Cement's invoice arrives: SIM/2026/1041, 500 bags @ TZS 14,500. Sarah opens **Accounting › Enter Bill** (`/admin/ap/supplier-bills/enter`), picks the supplier, selects Currency **TZS** from the Currency Picker, links PO-0088, adds a bill line (Description **Saruji 50kg**, Billed Qty 500, Unit Cost TZS 14,500) and selects the matching **PO Line** and **Goods Receipt Line** (GRN-0061), then clicks **Enter Bill & Match**. All lines → MATCHED. BILL-0051 is ready for payment.
 
 **Step 11 — Record AP payment**
 
-Finance officer David opens **Accounting › Record Payment** (`/admin/ap/payments/record`), picks BILL-0051 (TZS 7,250,000 due 2026-07-22), records a bank transfer payment on 2026-07-20. The bill status moves to PAID and the AP balance for Simba Cement is cleared.
+Finance officer David opens **Accounting › Record Payment** (`/admin/ap/payments/record`), picks Simba Cement Ltd, ticks BILL-0051 (TZS 7,250,000 due 2026-07-22), chooses Tender Type **Bank Transfer** and the bank account in **Pay from**, sets the Payment Date to 2026-07-20 and clicks **Record Payment (1 bills)**. The bill status moves to PAID and the AP balance for Simba Cement is cleared.
 
 **Step 12 — Purchase return (if needed)**
 
@@ -739,7 +819,7 @@ Four reports under **Purchasing** answer the questions a buyer, storekeeper or o
 Every item received from suppliers over a period, one line per goods-receipt line: date, GRN number, order number (or **Direct** for stock taken in with **Receive Without Order**), supplier, branch, item, quantity, unit cost and value, with the total at the foot.
 
 - **Filters:** From / To date (required), Branch, Supplier, Product (all optional; type in the supplier or product box to search).
-- **Voided receipts:** the receipt stays on the day it was received, and appears again in red, as a **negative** line marked *Voided*, on the day it was voided — the same way the Stock Movement report shows it. A month's register therefore never changes after the month is over.
+- **Voided receipts:** the receipt stays on the day it was received, and appears again in red, as a **negative** line marked *Voided*, on the day it was voided — the same way the Stock Report (Opening & Closing) shows it. A month's register therefore never changes after the month is over.
 - **Values exclude VAT.** A goods receipt does not hold VAT (VAT comes from the supplier's bill), and landed costs added later are not included.
 - Long registers are paged; the total at the foot always covers **all** pages.
 

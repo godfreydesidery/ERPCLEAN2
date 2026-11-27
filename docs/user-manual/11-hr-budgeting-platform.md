@@ -1,6 +1,6 @@
 # HR & Payroll, Budgeting, and Platform Services
 
-This chapter covers three cross-cutting domains: the Human Resources and Payroll module (departments, employees, contracts, leave, loans, pay components, payroll runs, and statutory setup), the Budgeting module (budget creation, version lifecycle, line entry, and management reports), and the Platform services used by all other modules (document generation, notifications, the approval engine, and the audit trail).
+This chapter covers four areas: the Human Resources and Payroll module (departments, employees, contracts, leave, loans, pay components, payroll runs, payslips, statutory payments and statutory setup), the Budgeting module (budget creation, version lifecycle, line entry, and management reports), the Platform services used by all other modules (document generation, notifications and the approval engine), and — in Part 4 — the platform administration screens that only the service provider running a shared server uses.
 
 ---
 
@@ -22,7 +22,8 @@ The HR & Payroll module is accessible from the **HR & Payroll** navigation group
 | Leave Requests | `HR.LEAVE.VIEW` | `HR.LEAVE.MANAGE` (submit), `HR.LEAVE.APPROVE` (decide) |
 | Employee Loans | `HR.LOAN.MANAGE` | `HR.LOAN.MANAGE` |
 | Pay Components | `HR.PAYCOMPONENT.MANAGE` | `HR.PAYCOMPONENT.MANAGE` |
-| Payroll Runs | `HR.PAYROLL.VIEW` | `HR.PAYROLL.RUN` / `APPROVE` / `POST` / `DISBURSE` / `REVERSE` |
+| Payroll Runs, payslips | `HR.PAYROLL.VIEW` | `HR.PAYROLL.RUN` / `APPROVE` / `POST` / `DISBURSE` / `REVERSE` |
+| Payroll Statutory Report | `HR.PAYROLL.VIEW` | `HR.PAYROLL.DISBURSE` (record statutory payments), `REPORT.EXPORT` (export) |
 | Statutory Setup | `HR.STATUTORY.MANAGE` | `HR.STATUTORY.MANAGE` |
 
 A user holding none of the HR permissions will not see the **HR & Payroll** nav group and will be blocked from accessing any HR route directly.
@@ -326,7 +327,13 @@ Once a run is **POSTED** (and still after it is **PAID**), the run detail shows 
 
 **Statutory Summary on the run (requires `HR.PAYROLL.VIEW`):**
 
-From CALCULATED onwards the run detail shows a **Statutory Summary**: totals for **PAYE** and **SDL** (paid to TRA), **NSSF** employee + employer, **WCF** and **HESLB**, and a per-employee table with each employee's **TIN** and **NSSF number** (blank where none was captured), gross, each deduction/contribution and net. While the run is not yet approved the summary is marked **Provisional** — do not file it; a reversed run is marked likewise. Holders of `REPORT.EXPORT` also see **Export PDF / Excel / CSV**.
+From CALCULATED onwards the run detail shows a **Statutory Summary**: totals for **PAYE (to TRA)** and **SDL (to TRA)**, **NSSF (employee + employer)**, **WCF** and **HESLB**, and a per-employee table with each employee's **TIN** and **NSSF No.** (blank where none was captured), gross, each deduction/contribution and net. While the run is not yet approved the summary is marked **Provisional** — do not file it; a reversed run is marked likewise ("This run was reversed — these figures must not be filed."). Holders of `REPORT.EXPORT` also see **Export PDF / Excel / CSV**.
+
+**Payslips (requires `HR.PAYROLL.VIEW`):**
+
+Payslips are generated once the run is posted, one per employee line. The **Payslips** section at the foot of the run detail lists each **Employee** with **Gross**, **Deductions** and **Net**; click **View** to open a payslip (`/admin/hr/payslips/uid/:uid`). The payslip shows the **Payslip Number**, **Pay Date**, employee name and number, the **Earnings & Deductions** (Gross, Deductions, Net, Employer Cost) and the **Year-to-Date** figures (YTD Gross, YTD PAYE, YTD NSSF (Employee), YTD Net).
+
+The run detail's **Run Summary** shows the period, pay date, **Gross Total**, **Net Total**, **Deduction Total**, **Employer Cost**, who approved it, and — once posted — a **View GL Entry** link. The **Payroll Lines** table lists **Employee #**, **Name**, **Department**, **Gross**, **Net**, **PAYE**, **NSSF (Emp.)**, **Status** and **Flag Reason**.
 
 ### Payroll Statutory Report
 
@@ -337,6 +344,16 @@ Choose a **Pay date from / to** range and click **Run report**. The report lists
 Only **APPROVED**, **POSTED** and **PAID** runs are counted, because their figures are final. Runs still in DRAFT or CALCULATED, and REVERSED runs, are left out; a note under the table says how many, so nothing is silently missing. Click a run number to open that run.
 
 > **Note for administrators:** the seeded *HR Payroll Manager* role holds `HR.PAYROLL.VIEW` but not `REPORT.EXPORT`, so it sees the reports but not the export buttons until `REPORT.EXPORT` is granted.
+
+#### Paying payroll statutory deductions
+
+**What it is.** Posting a payroll run puts what you owe the authorities — PAYE, SDL, NSSF, WCF and HESLB — on their liability accounts. When you pay them, record the payment here: it books the money out of the bank or cash account and clears the liability by the same amount, so the ledger always shows what is still owed.
+
+Users with `HR.PAYROLL.DISBURSE` see a **Statutory payments** section at the top of the Payroll Statutory Report screen, listing each **Liability** with its **Account** and the amount **Still owed** (the ledger balance).
+
+1. Click **Record payment** on the liability you are paying. The panel states the entry it will book: DR the liability account / CR the chosen account.
+2. Choose **Paid from** (the cash or bank account), the **Payment date** and the **Amount**, and enter the **Receipt / control no.** from the authority.
+3. Click **Record payment**. The journal is posted, the payment appears in that account's cash book, and **Still owed** goes down.
 
 ---
 
@@ -631,9 +648,10 @@ Navigate to **Documents > Document Branding** (`/admin/document-branding`). Requ
 
 The branding profile is a per-company singleton (one set of settings per company, no list). It controls what appears in the header and footer of rendered PDF documents.
 
-1. Open the screen. The current branding values load into the form.
-2. Edit: **Display name**, **Legal name**, **Tax ID**, **Address**, **Contact phone**, **Contact email**, **Website**, **Footer terms text**, and **Bank details**.
-3. Click **Save**.
+1. Open the screen. The current branding values load into the **Branding Profile** form (with the date it was last updated).
+2. Edit: **Display Name**, **Legal Name**, **Tax ID (TIN)**, **Contact Phone**, **Contact Email**, **Address Line 1**, **Address Line 2**, **City**, **Region**, **Country**, **Postal Code**, **Website**, **Footer Terms**, and **Bank Details**.
+3. Optionally upload a **Company Logo** (PNG or JPEG; it is automatically shrunk to about 2×2 cm for the document header). Without a logo the header is text-only; **Remove logo** takes it off.
+4. Click **Save Branding**.
 
 Changes take effect on all subsequent document renders. Previously generated documents are not changed (the log is append-only).
 
@@ -698,7 +716,7 @@ The delivery log shows every notification delivery attempt with its outcome and,
 **What is the Approval Engine, and why is it a shared platform service rather than module-specific?**
 The approval engine is a generic governance layer that intercepts certain high-value actions across the system and requires one or more human sign-offs before the action proceeds. Examples include confirming a large purchase order, posting a payroll run, or approving a budget version. Rather than each module building its own approval screen (which would lead to inconsistent behaviour and duplicate maintenance), the approval engine is a single shared service that any module can delegate to. A policy defines when approval is needed (which document type, above what monetary threshold, at which branch) and who must approve (which role). When a matching action is submitted, the engine creates an approval request, routes it to the appropriate approvers in sequence, and releases the action only when all steps are completed. If no policy matches, the action is auto-approved instantly. The engine posts nothing to the books; its sole purpose is to gate other modules' actions (ADR-0022).
 
-Approval requests are created automatically by the relevant modules — there is no "create approval request" screen.
+Approval requests are created automatically by the relevant modules — there is no "create approval request" screen. Examples: a purchase order above the PO approval threshold (chapter 04, section 3.3), and the after-the-event **ratification** of goods received without a purchase order (chapter 04, section 4.5). Requests show friendly document-type labels (Purchase Order, Sales Order, Supplier Bill, …) and link to the document itself.
 
 #### Approval Policies
 
@@ -709,16 +727,18 @@ Navigate to **Approvals > Approval Policies** (`/admin/approvals/policies`). Req
 
 Policies define when human approval is required and who must approve. Each policy targets one document type and a monetary band.
 
+The policy list can be narrowed with the **Document type filter** (click **Filter**).
+
 **Creating a policy (requires `APPROVALS.POLICY.MANAGE`):**
 
-1. Click **New policy**.
-2. Enter a **Name** and choose the **Document type** (e.g. Purchase Order).
-3. Set the **Branch scope**:
-   - **COMPANY\_WIDE** — applies to the entire company. Do not enter a branch.
-   - **BRANCH** — applies to one specific branch. Pick the branch by name from the branch picker. A branch-scoped policy takes priority over a company-wide policy when both match the same request.
-4. Set **Min amount** and **Max amount** (TZS). Leave **Max amount** blank for an unbounded top band (applies to all amounts ≥ Min amount).
-5. Add one or more **Approval steps**. Each step has a **sequence number** (dense from 1) and an **Approver role code** (the permission role whose holders will see this request in their inbox). Click **Add step** to add another level of approval.
-6. Click **Save**.
+1. Click **New Policy**. The **New Approval Policy** form opens.
+2. Choose the **Document Type** (e.g. Purchase Order) and enter a **Policy Name**.
+3. Set the **Branch Scope**:
+   - **Company-wide** — applies to the entire company. Do not enter a branch.
+   - **Branch** — applies to one specific branch. Pick the branch by name from the branch picker. A branch-scoped policy takes priority over a company-wide policy when both match the same request.
+4. Set **Min Amount (TZS)** and **Max Amount (TZS, blank = unbounded)**. Leave the maximum blank for an unbounded top band (applies to all amounts ≥ the minimum). Optionally add **Notes**.
+5. Under **Approval Steps**, add one or more steps. Each step has a sequence number (dense from 1) and an **Approver role code** (the role whose holders will see this request in their inbox). Click **Add Step** to add another level of approval.
+6. Click **Create Policy**.
 
 Policy changes only affect future submissions. In-flight PENDING requests continue under the policy that existed when they were created.
 
@@ -731,14 +751,16 @@ The inbox shows every approval request that is currently waiting for your decisi
 
 Navigate to **Approvals > My Inbox** (`/admin/approvals/inbox`). Requires `APPROVALS.DECIDE`.
 
-The inbox shows PENDING requests whose current open step is routed to one of your roles. These are the requests waiting for your decision. When nothing is awaiting you, the screen shows an "Your inbox is empty" message.
+The inbox (headed **Approval Inbox**) shows PENDING requests whose current open step is routed to one of your roles, with **Request #**, **Branch**, **Document Type**, **Submitted By**, **Amount**, **Status**, **Submitted** and **Current Step Role**. These are the requests waiting for your decision. When nothing is awaiting you, the screen shows an "Your inbox is empty" message.
 
 ![Approvals inbox](images/11-hr-budgeting-platform/approvals-inbox.png)
 
 1. Click a request to open its detail.
-2. Review the request: document type, amount, submitter, submission date, and step chain.
-3. Click **Approve** (and optionally add a comment) or **Reject** (comment required).
-4. Confirm.
+2. Review the **Request Details** — document type (with a link to the document), amount, branch, submitter and submission date — and the **Approval Steps** chain.
+3. Click **Approve** or **Reject**. A panel opens (**Approve Request** / **Reject Request**) with an optional **Comment (optional)** box.
+4. Click **Confirm Approve** or **Confirm Reject** (or **Cancel**).
+
+You cannot decide a request you submitted yourself (separation of duties), and you must hold the role the current step is routed to.
 
 When you approve a step:
 - If this was the last step in the chain, the request moves to **APPROVED** and the originating document is released.
@@ -776,27 +798,120 @@ An administrator can cancel any non-terminal PENDING request. Open the request d
 
 ### Audit Trail
 
-**What is the Audit Trail, and why is it append-only?**
-The audit trail is the system's immutable record of every state-changing action — who did what, to which record, when, and from where. It is the primary tool for investigating a suspicious change, resolving a dispute ("who approved this payment?"), and satisfying auditor and regulatory requirements for a documented chain of custody. The audit trail is append-only: no record can be deleted or edited, not even by a system administrator. This property is fundamental to its integrity — an editable audit trail is no audit trail at all. Every module writes to the same audit trail so that you can search across the entire system in one place.
+**What is the Audit Trail?**
+The audit trail is the system's append-only record of significant actions — who did what, to which record, when, and from where. Every module writes to the same trail, so you can search across the whole system in one place. It is described in full — what is recorded, the columns and the filters — in chapter 01, *Audit Trail* (**Administration › Audit**, `/admin/audit`, permission `AUDIT.VIEW`).
 
-Navigate to **Audit** (`/admin/audit`). Requires `AUDIT.VIEW`.
+---
 
-The audit trail is a read-only, append-only log of all state-changing actions in the system. No records can be added, edited, or deleted from the UI.
+## Part 4 — Platform administration (service provider only)
 
-The list shows:
-- **Actor** (username)
-- **Action** (event code, e.g. `USER.CREATE`, `PAYROLL.POST`, `APPROVAL.STEP.DECIDE`)
-- **Target type and identifier**
-- **Company and branch**
-- **Timestamp** and IP address
+> **Note.** This part is for the **service provider** who runs a shared server hosting several businesses. Ordinary businesses — including their own administrators — never see these screens: the **Platform** menu group and everything below require platform permissions that only the provider's operator account holds. If you run your own business on the system, you can skip this part. What your users see of the subscription (the reminder and overdue banners) is described in chapter 00, *Notices at the top of the page*.
 
-Rows are sorted newest first (default page size 50, maximum 200 per page).
+**What it is.** On a shared server, each customer business is a **tenant** — an organisation with its own companies, branches, users and data, fully separated from every other tenant. The service provider's own **platform organisation** holds no business data; from it the provider's operator creates tenants, sets their subscription plans, records their payments, suspends and reactivates them, and — for support — enters a tenant to work inside it.
 
-**Filters:**
+### The platform organisation
 
-- **Actor** — choose a user from the user picker by name.
-- **Action** — enter or select an action code.
-- **Target type** and **Target UID** — filter to records affecting a specific resource.
-- **From date** and **To date** — filter by time range.
+On a server that hosts several businesses, the operator's account should belong to a separate organisation called **Platform**. Signed in there, the menu shows only the platform screens, Users, Roles and Audit, and a banner reads: *Platform organisation. It holds no business data. To work on a customer's data, open Platform → Tenants and choose Enter.*
 
-Non-root users are confined to their own active company's audit rows. The system administrator (`rootadmin`) can view audit records across all companies.
+**Creating the platform organisation.** A server that started life with one customer has the operator's account inside that customer's organisation. Before enrolling other customers, move it out:
+
+1. Open **Platform › Tenants**. While no platform organisation exists, a notice says "This server has no platform organisation: your account belongs to <customer>. Create one before you enrol other customers."
+2. Click **Create platform organisation**. The panel explains what will happen: an organisation called **Platform** is created and your account moves into it; the customer becomes an ordinary tenant whose data stays exactly as it is, and which you reach with **Enter**. Your account will no longer belong to the customer — their own administrator keeps managing it. If anyone at the customer knows your account's password, change it first.
+3. Type the customer's organisation name to confirm and click **Create platform organisation**.
+4. You are signed out. Sign in again to land in Platform.
+
+### The Tenants console
+
+Navigate to **Platform › Tenants** (`/admin/platform/tenants`). The screen is headed **Platform: Tenants** — "Every organisation on this system. Create a new one or suspend access." Permission required: `ORG.CREATE` (suspending and reactivating need `ORG.SUSPEND`; entering a tenant needs the operator's root account).
+
+The table lists every organisation with **Name** (tagged **Platform** for the platform organisation and **You are here** for the one you are in), **Alias** (the suffix added to its users' sign-in names), **Status** (**Active** or **Suspended**), **Plan**, **Subscription** (the stage — see below), **Created**, **Companies**, **Users**, and the actions **Subscription**, **Enter**, **Suspend** / **Reactivate**.
+
+**Finding a tenant.** Type in **Search** (name or alias) and choose a **Status** — **All**, **Active** or **Suspended**. The line "Showing N of M" counts what is listed; **Clear** removes the filter.
+
+### Creating a tenant
+
+1. Click **New tenant**. If the server holds only one organisation so far, the form warns that creating another turns it into a shared server, which cannot easily be undone, and asks you to type that organisation's name to confirm — only continue if this really is the shared server, not a customer's own.
+2. **Organisation** — enter the **Organisation name** and optionally the **Time zone** (for example `Africa/Dar_es_Salaam`; empty = the system default).
+3. **Company** — **Company code**, **Company name**, and optionally the **Registered legal name**, **Tax ID (TIN)** and **VAT registration number (VRN)**. A company without a tax ID prints no tax-ID line; it can be added later on the Companies screen.
+4. **Branch** — **Branch code** and **Branch name** of the first branch.
+5. **Administrator** — the tenant's first administrator: **Username** (type only the first part; the organisation's sign-in alias is added automatically), optional **Display name**, and a **Password** of at least 12 characters. Hand it over securely; it is not shown again.
+6. **Plan** — choose the **Plan**. The tenant starts a **14-day trial** on this plan. Tick any **Add-ons**: **Restaurant** and **OrbixHQ app**.
+7. **Trading set-up** (all optional; anything left empty is not created and can be added later) — a **Price list code** and **Price list name** (and, if named, whether its prices include VAT — choose carefully, it cannot be corrected on sales already made), a **Walk-in customer name**, and the **First till name** (till names must be unique across the company, so include the branch, for example "Main Counter 1").
+8. **Currency** — optionally the **Base currency**, **Default currency** and **Enabled currencies** (3-letter codes, comma-separated). Empty = the system defaults.
+9. Click **Create tenant**. A confirmation shows "Organisation created: <name>" and the **sign-in name** to give the administrator, together with the password you set.
+
+The organisation, its company, branch, administrator, default data and the chosen trading set-up are all created in one step.
+
+### Suspending and reactivating a tenant
+
+- **Suspend** — on an active tenant's row click **Suspend**, then **Yes, suspend**. Nobody in that organisation can sign in until it is reactivated (sessions already open are refused at their next renewal); its data is kept.
+- **Reactivate** — on a suspended tenant click **Reactivate**, then **Yes, reactivate**. Its people can sign in again.
+
+You cannot suspend the platform organisation or the organisation you are in. A manual suspension always wins: a suspended tenant stays suspended whatever its payments say.
+
+### Entering a tenant (support)
+
+To see or fix something in a customer's data, click **Enter** on its row (root operator only; not offered for the platform organisation or the one you are already in). You land in the tenant's default branch, and a banner stays at the top of every screen:
+
+*Platform operator: you are working inside <organisation> (<branch>). Everything you do here is recorded in their audit log.*
+
+While inside, the branch switcher offers that tenant's branches, and switching between them keeps you inside the tenant. Subscription limits on modules do not apply to the operator, so you see every screen. Click **Return to my organisation** on the banner to go back to Platform.
+
+### Subscriptions and plans
+
+Each tenant on a shared server can be given a **subscription plan**. A tenant with no plan assigned is **Unrestricted**: every module, no limits, never lapses — that is how tenants behave until you assign one.
+
+**The four plans.** Each plan includes everything in the plans before it.
+
+| | **Basic** | **Standard** | **Premium** | **Enterprise** |
+|---|---|---|---|---|
+| Modules | Point of sale, products, stock, sales, customers and suppliers, basic reports, receiving stock (including receiving without an order), tax rates and fiscal receipts | + purchasing (orders, requisitions, RFQs, returns, landed costs), receivables, payables, cash and bank, VAT and WHT returns, transfers between branches, approvals | + general ledger and financial statements, fixed assets, costing, budgeting, foreign exchange, BI dashboard, routes and van sales, CRM | + HR and payroll, manufacturing (bills of materials, work orders), projects |
+| Users | 5 | 20 | 50 | unlimited |
+| Branches | 1 | 5 | 15 | unlimited |
+| POS tills | 3 | 10 | 30 | unlimited |
+| Companies | 1 | 2 | 3 | unlimited |
+
+**Add-ons** (on any plan): **Restaurant** (kitchen and bar orders, bills, waiters, prep stations) and **OrbixHQ app** (the owner's mobile app). A user of the OrbixHQ app in a tenant without the add-on is told "The OrbixHQ app is not part of your plan. Please contact your provider to add it."
+
+**What a plan does.**
+
+- **Modules not in the plan are hidden.** Their menu entries disappear and their actions are refused — on the web, the POS and the OrbixHQ app alike. Roles are not edited: an upgrade lights the screens up immediately.
+- **The books are always complete.** Automatic postings (ledger, stock, receivables, payables) keep running whatever the plan, so a tenant that upgrades finds complete books from day one.
+- **Limits are checked only when something is added.** Adding (or re-enabling) a user, branch, company or till at the limit is refused, for example "Your Standard plan allows up to 5 branches, and all of them are in use. Ask your provider to upgrade your plan or raise the limit." Nothing already there is ever disabled — a tenant that drops to a smaller plan keeps what it has but cannot add more.
+
+**The non-payment ladder.** Every subscription has a **due date** — the **paid-until** date once a payment has been recorded, otherwise the **trial end**. If both are empty the subscription never lapses (for contract or complimentary tenants). After the due date:
+
+| Stage (shown as) | When | Effect for the tenant |
+|---|---|---|
+| **Trial** | During the trial | Full plan; a reminder banner from 7 days before the trial ends |
+| **Active** | Paid up | Full plan; a reminder banner from 7 days before the due date |
+| **Payment overdue** (grace) | The grace days after the due date (default 7) | Full plan; a warning banner giving the date it becomes read-only |
+| **Read-only** | The read-only days after that (default 7) | Everything can be opened, read, reported and reprinted, but every save is refused — the POS cannot sell either. Offline sales made before read-only began are still accepted when the till syncs. |
+| **Suspended** | After that | Sign-in refused: "Your subscription has lapsed and access is suspended. Please contact your provider to restore it." |
+
+Recording a payment returns the tenant to **Active** immediately. The stage is worked out from the dates each time, so nothing needs to run overnight.
+
+### The subscription page
+
+On the Tenants list, click **Subscription** on a tenant's row (`/admin/platform/tenants/uid/:uid/subscription`). The page is headed **Subscription: <tenant>** — "Plan, add-ons, limits and payments for this tenant." Reading it needs `ORG.CREATE`; changing it or recording a payment needs `ORG.SUSPEND` ("Changing a subscription needs the Suspend and reactivate organisations permission.").
+
+- **Current subscription** — the **Plan**, **Status** (stage), **Due date** ("None, never lapses" when there is none), **Read-only from** and **Suspended from**. An unassigned tenant shows **Unrestricted**.
+- **Assign plan / Change plan** — under **Plan settings**, choose the **Plan** and **Billing cycle** (Monthly, Quarterly, Half-yearly, Annual, Custom — it only pre-fills the suggested paid-until date); tick the **Add-ons**; set **Trial ends on**, **Paid until**, **Grace days** and **Read-only days**. The **Limits for the chosen plan** table shows, for **Users**, **Branches**, **POS tills** and **Companies**, the **Plan limit**, an **Override** box and how many are **In use**. Leave an override empty to use the plan's limit; existing users, branches, tills and companies are never removed when a limit is lowered. Add **Notes** if needed and click **Assign plan** (or **Save subscription**).
+- **Record payment** — once a plan is assigned, enter the **Amount**, **Currency**, **Paid on**, **New paid-until** (suggested from the billing cycle — change it if needed), and optionally a **Reference** and **Note**, then click **Record payment**. Payments are append-only; a correction is a new payment.
+- **Payment history** — every payment with **Paid on**, **Amount**, **Paid until**, **Reference**, **Note**, and when and by whom it was **Recorded**.
+- **Enabled modules** — the modules the tenant currently has.
+
+Every subscription change and every payment is written to the audit trail.
+
+### When a customer leaves: export and removal
+
+When a tenant departs, its data can be handed over and then removed from the shared server. These two operations have **no button on screen**; the system administrator runs them for the operator.
+
+- **Export** — produces a single zip file containing every record of that organisation, as a complete copy to hand to the customer. The platform organisation cannot be exported. Each export is recorded in the audit trail.
+- **Removal (delete on departure)** — always run as a **dry run first**: it reports, table by table, how many records would be removed and anything that blocks removal. The real removal is refused unless the organisation:
+  - is **suspended**, has stayed suspended for at least **30 days**, and was not reactivated since;
+  - has had a **complete export made after it was suspended**;
+  - is confirmed by typing its exact name;
+  - is not the platform organisation or the operator's own.
+
+  Audit records are never deleted, so an organisation that has an audit history of its own cannot be removed at all — keep it suspended; its data can still be exported. A completed removal is itself recorded in the audit trail.
