@@ -1,6 +1,6 @@
 # Inventory and Manufacturing
 
-This chapter covers all inventory screens and the manufacturing (Bill of Materials and Work Orders) screens. All screens are available from the **Inventory** and **Manufacturing** groups in the left-hand navigation.
+This chapter covers all inventory screens — including the stock reports under the **Inventory** group — and the manufacturing (Bill of Materials and Work Orders) screens. All screens are available from the **Inventory** and **Manufacturing** groups in the left-hand navigation. Loading or correcting many stock levels at once from a spreadsheet is done with **Data Tools › Bulk Import** (entity type **Stock on-hand levels**) — see chapter 02, *Bulk Import*.
 
 ---
 
@@ -11,8 +11,10 @@ Before starting, confirm that the required permission codes have been granted to
 | Task | Permission code required |
 |---|---|
 | View stock on-hand | `STOCK.VIEW` |
+| Item Inquiry | `PRODUCT.VIEW` **and** `STOCK.VIEW` (the cost column also needs `INVENTORY.VALUATION.VIEW`) |
 | Record adjustments / set reorder levels | `STOCK.ADJUST` |
-| Record opening balances | `STOCK.OPENING` |
+| Record opening balances | `STOCK.OPENING` (entering an opening unit cost also needs `INVENTORY.OPENING.SET`) |
+| Bulk stock import (set on hand from a spreadsheet) | `STOCK.IMPORT` |
 | View stock locations | `STOCK.LOCATION.VIEW` |
 | Manage stock locations | `STOCK.LOCATION.MANAGE` |
 | View stock transfers | `STOCK.TRANSFER.VIEW` |
@@ -26,7 +28,9 @@ Before starting, confirm that the required permission codes have been granted to
 | View stock batches (by-location / detail) | `STOCK.VIEW` |
 | View stock serials (by-location / by-product / lookup) | `STOCK.VIEW` |
 | View expiring batches | `INVENTORY.EXPIRY.VIEW` |
-| View inventory valuation report | `INVENTORY.VALUATION.VIEW` |
+| View the Stock Valuation report, both Stock Reports, Product List, Stock Value and Stock Ageing | `INVENTORY.VALUATION.VIEW` |
+| Reorder Report | `STOCK.VIEW` |
+| Export or print a report or a transfer note | `REPORT.EXPORT` (in addition to the screen's own permission) |
 | Set opening valuation | `INVENTORY.OPENING.SET` |
 | View / manage Bills of Materials | `BOM.VIEW` / `BOM.MANAGE` |
 | View Work Orders / cost report / WIP | `MANUFACTURING.VIEW` |
@@ -52,18 +56,22 @@ Navigate to **Inventory > Stock On-Hand** (`/admin/stock`).
 
 ![Stock on hand](images/05-inventory-manufacturing/stock.png)
 
-The table shows every stockable product that has had at least one movement at the active branch. The columns are **Product** (code and name shown together), **Quantity** (on-hand, to three decimal places), **Reorder Level**, **Flags**, and an actions column. There is no separate unit-of-measure column. Two derived flags can appear in the **Flags** column:
+The table shows every stockable product that has had at least one movement at the active branch. The columns are **Product** (code and name shown together), **Quantity** (on-hand, in the base unit), **Reorder Level**, **Flags**, and an actions column (**Ledger**, and **Adjust** for users with `STOCK.ADJUST`). There is no separate unit-of-measure column. Two derived flags can appear in the **Flags** column:
 
-- **Negative** — the quantity has gone below zero (an overselling indicator; the system does not hard-block it).
-- **Low** — the quantity is at or below the reorder level. This flag is blank when no reorder level has been set.
+- **Negative** — the quantity has gone below zero (possible only at a location set to allow negative stock).
+- **Low** — the quantity is at or below the reorder level. This flag is blank when no reorder level applies.
 
-**Filtering and pagination.** Use the search box to filter by product name or code (the list refreshes after a short pause). Use the paginator controls (First, Previous, page numbers, Next, Last) to move between pages. The paginator hides itself when there is only one page.
+**Filtering and pagination.** Type in the **Search** box (product name or code) — the list refreshes after a short pause, or click **Search**. Use the paginator controls (First, Previous, page numbers, Next, Last) to move between pages. The paginator hides itself when there is only one page.
 
-**Switching views.** The list offers three view modes via the tabs at the top:
+**Toolbar buttons.** **Adjust Stock** opens the adjustment form for any product (section 2.2) and **Opening Balance** opens the opening-balance form (section 2.3). The sidebar entry **Inventory › Adjust Stock** (`/admin/stock/adjust`) opens this same screen with the adjustment form already open.
+
+**Switching views.** The list offers three view modes via the buttons at the top:
 
 - **On-Hand** (default) — one row per product, summed across all locations.
-- **By Location** — one row per product-location combination. A branch must be selected.
-- **By Product** — pick a product from the search picker to see its quantity broken down by every location holding it.
+- **By Location** — choose a **Branch** first; one row per location and product with **Qty**, **Avg Cost**, **On-Hand Value** and **Ccy**.
+- **By Product** — search a product by code or name to see its **Qty**, **Avg Cost**, **On-Hand Value** and **Ccy** at every location holding it.
+
+In the By Location and By Product views a **Company** selector appears if you work for more than one company.
 
 ### 2.2 Recording a manual adjustment
 
@@ -73,10 +81,16 @@ A stock adjustment is a direct correction to the on-hand quantity of a specific 
 **Why adjustments exist separately from stock counts.**
 An adjustment is a single-product, immediate correction — useful for fixing a known discrepancy right away without pausing all other operations. A stock count (section 5) is a systematic, multi-product reconciliation exercise at a location that freezes a snapshot and allows bulk entry across multiple sessions before committing. Use adjustments for one-off corrections; use stock counts for periodic reconciliation.
 
-Use an adjustment to correct a stock quantity that is wrong for any reason other than a physical count (which has its own workflow — see section 5).
+Use an adjustment to correct a stock quantity that is wrong for any reason other than a planned physical count (which has its own workflow — see section 5).
 
-1. On the on-hand list, find the product row and click **Adjust**.
-2. The product is pre-selected. Choose the **Reason** from the dropdown:
+1. Open the adjustment form in one of three ways: the sidebar entry **Inventory › Adjust Stock**, the **Adjust Stock** button above the on-hand list, or **Adjust** on a product row (which pre-selects that product).
+2. Choose how to enter the change:
+   - **Adjust by (±)** — type the difference in **Qty (±)**: positive to add, negative to remove.
+   - **Set to counted quantity** — the form shows the **Current qty** (with a pack breakdown, for example "3 cartons + 4 pieces", where the item has pack sizes); type the **New counted qty** and the system works out the difference for you.
+3. If you opened the form from the toolbar or the sidebar, search the **Product** by name or code.
+4. If the item has pack sizes, choose the **Unit** you are counting in (for example a carton of 24); the equivalent in base units is shown beneath.
+5. If the item is held at more than one location in the branch, choose the **Location** (each option shows the quantity there).
+6. Choose the **Reason** from the dropdown:
 
 | Reason code | When to use |
 |---|---|
@@ -87,13 +101,12 @@ Use an adjustment to correct a stock quantity that is wrong for any reason other
 | `RECEIPT_CORRECTION` | Correcting a goods-receipt error |
 | `OTHER` | Any other reason — add a note |
 
-3. Enter the **Quantity** — positive to increase, negative to decrease.
-4. Optionally add a free-text note.
-5. Click **Save**.
+7. Optionally add a **Note**.
+8. Click **Save**.
 
-The system creates a new stock movement (`ADJUSTMENT`) and reloads the on-hand list. Adjustments are permanent records; they cannot be deleted or edited after posting.
+The system creates a new stock movement (`ADJUSTMENT`) valued at the item's current average cost, posts the value difference to the ledger (Stock Adjustment against Inventory), and reloads the on-hand list. Adjustments are permanent records; they cannot be deleted or edited after posting.
 
-**Validation.** Quantity must be non-zero. Reason is required. A role with only `STOCK.VIEW` cannot see the Adjust button; a direct API call returns 403.
+**Validation.** The change must be non-zero and a reason is required. A decrease that would take the location below zero is refused — "Not enough stock to remove … only … on hand at this location, which does not allow negative stock." — unless the location is set to allow negative stock. A role with only `STOCK.VIEW` cannot see the Adjust buttons; a direct API call returns 403.
 
 ### 2.3 Recording an opening balance
 
@@ -106,12 +119,13 @@ Opening balances are entered at go-live (when migrating from a previous system o
 An opening balance sets the initial quantity for a product that has never had any movement at this branch. Use this task at go-live or when adding a new branch or product.
 
 1. On the on-hand list, click **Opening Balance**.
-2. Pick the product from the picker (search by name or code).
-3. Enter the quantity. Must be greater than zero.
-4. Optionally add a note such as `go-live`.
-5. Click **Record**.
+2. Search the **Product** by name or code and pick it.
+3. Enter the **Quantity** (greater than zero). If the item has pack sizes, choose the **Unit** you counted in; the base-unit equivalent is shown.
+4. Users who also hold `INVENTORY.OPENING.SET` see a **Unit cost** field — the cost per unit chosen. Leave it blank to use the product's cost price. (Without that permission the stock is recorded at the product's cost if one exists, or left unvalued for the accountant to value later — section 9.2.)
+5. Optionally add a **Note** such as `go-live`.
+6. Click **Record**.
 
-**Important.** The system rejects an opening balance if the product already has any prior movement at the active branch. A second opening balance on the same product at the same branch is not permitted. To adjust existing stock, use the Adjust flow (section 2.2).
+**Important.** An opening balance is only for an item with no stock activity yet at the active branch. If the item has already had a sale, receipt, transfer or adjustment there, the system refuses with "This product already has stock activity at this branch …, so an opening balance can no longer be entered. Use Adjust Stock to correct the quantity." (A reservation from a sales order does not count as activity.)
 
 ### 2.4 Setting a reorder level
 
@@ -121,24 +135,40 @@ A reorder level (also called a reorder point or minimum stock level) is the quan
 A reorder level triggers the Low Stock flag when the on-hand quantity reaches or falls below it.
 
 1. On the on-hand list, click the inline edit icon in the **Reorder Level** column.
-2. Enter a positive number and save. To remove the reorder level, clear the field and save.
+2. Enter a number (zero or more) and click the tick to save. To remove the location's own level, clear the field and save.
 
-The Low Stock flag recalculates immediately after saving.
+The Low flag recalculates immediately after saving.
+
+**Product-level reorder levels.** A reorder level can also be set on the product itself (Product Master, chapter 02). When the stock line has no level of its own, the product's level applies — the column shows it with an asterisk (for example `20*`, "From the product (no level set for this location)"), and it drives the **Low** flag, the Reorder Report and the low-stock notification in exactly the same way.
 
 ### 2.5 Viewing movement history
 
 **What the movement ledger is.**
 The movement ledger is the append-only record of every quantity change for a product at a branch — every goods receipt, every sale issue, every adjustment, every transfer in or out, every opening balance, every production issue and receipt. It is the audit trail for on-hand. Because movements are append-only (never edited or deleted), the ledger is tamper-evident: the on-hand balance can always be recomputed by summing all movements.
 
-Click **Ledger** on a product row to open the movement ledger drawer (its header reads **Ledger — <product>**). Movements are displayed in chronological order with:
+Click **Ledger** on a product row to open the movement ledger panel (its header reads **Ledger — <product>**). Movements are displayed with the columns **Date**, **Type** (Goods Receipt, Sale Issue, Adjustment, Opening Balance, Transfer In/Out, etc.), **Dir** (IN or OUT), **Qty**, **Reason**, **Note** and **Source Doc** (the kind of document that caused it).
 
-- Movement type (Goods Receipt, Sale Issue, Adjustment, Opening Balance, Transfer In/Out, etc.)
-- Direction (IN or OUT)
-- Signed quantity
-- Date and time
-- Reason code or note where applicable
+The panel has its own paginator. Movements are append-only records; there is no edit or delete. For a printable movement history over a date range, use **Stock Report (Opening & Closing)** in *Detail* mode (section 9.6).
 
-The drawer has its own paginator. Movements are append-only records; there is no edit or delete.
+### 2.6 Item Inquiry — look up one item
+
+Navigate to **Inventory > Item Inquiry** (`/admin/stock/item-inquiry`). Requires `PRODUCT.VIEW` **and** `STOCK.VIEW`.
+
+**What it is.** A quick counter lookup: what an item is, what it costs, what you sell it for and how many are left — without opening the product catalogue. It is built for the person serving a customer, so it is a search with a short answer, not a full listing.
+
+**How to use it.**
+
+1. Type in **Item** — an item code, part of the description, or scan a barcode. Results appear as you type (a scanned barcode must be complete to match). Alternatively, choose one item in **Or select an item**.
+2. Optionally choose a **Branch**; leave it at **All branches** to see the total across the branches you may see.
+3. The results table lists the matching items with **Code**, **Description**, **Department**, **Supplier**, **Unit**, **Available** (quantity on hand in the item's own unit, or "Not stocked" for a service or non-stock item), **Cost**, and **Selling price** (labelled *VAT incl.* or *excl. VAT* according to your default price list). A line above the table states the branch, currency and price list used.
+4. Choosing a single item shows a card for it with the same facts; click **Close** to return to the list.
+
+**Things to know.**
+
+- **Cost** is shown only to users who may see cost (`INVENTORY.VALUATION.VIEW`); everyone else sees **Hidden** — never a misleading zero.
+- A dash means the figure is not known (the item was never costed or never priced) — it does not mean zero.
+- Selling prices come from the company's **default price list**. If none is set, the screen says so and the price column stays blank.
+- Only the first screenful of matches is shown; when the list is clipped, the screen asks you to type more of the code or description.
 
 ---
 
@@ -169,10 +199,10 @@ Without locations, the business knows only how much stock is at a branch in aggr
 ### 3.1 Creating a location
 
 1. Click **New Location** (the button toggles to **Cancel** while the form is open).
-2. Enter a short **Code** (up to 30 characters, unique within the branch) and a **Name** (up to 120 characters).
+2. Enter a short **Code** (up to 30 characters, unique in the company; codes starting with `TRANSIT-` are reserved for the system) and a **Name** (up to 120 characters).
 3. Choose the **Type**.
 4. Pick the **Branch** from the picker.
-5. If you chose the **VAN** type, an **Agent** picker appears. Optionally select the route agent who runs this van — the hint reads *"Assigns this van to the route agent who runs it."* The assignment is company-scoped and carries onto that van's day-end reconciliation worksheets (section 6). The Agent field is shown only for VAN locations; switching the type away from VAN clears it.
+5. If you chose the **VAN** type, an **Agent** picker appears. Optionally select the route agent who runs this van — the hint reads *"Assigns this van to the route agent who runs it."* The assignment is company-scoped and carries onto that van's day-end reconciliation worksheets (section 6). The Agent field is shown only for VAN locations; switching the type away from VAN clears it. An agent can run only one active van at a time.
 6. Tick **Set as default** if this should be the primary location for the branch. There can be only one default location per branch — making a new location the default automatically clears the prior one.
 7. Click **Create Location**.
 
@@ -190,7 +220,13 @@ In the row's Actions column, click the star icon button (its accessible label is
 
 In the row's Actions column, click the pause-circle icon button (accessible label "Deactivate <code>") to set the location to **Inactive**. It no longer appears in pickers used by transfers and counts. Click the play-circle icon button (accessible label "Reactivate <code>") to restore it to Active.
 
+A location that **still holds stock** cannot be deactivated — transfer or adjust it to zero first. The branch **default** location cannot be deactivated either; make another location the default first.
+
 Locations are never hard-deleted. The list always shows every location, both Active and Inactive — there is no status filter, so an Inactive location and its history simply remain visible in the list.
+
+### 3.5 The in-transit location (system)
+
+Every branch has one system location whose code starts with `TRANSIT-` (for example `TRANSIT-DSM`), marked **In transit (system)** in the list. It holds goods that have been dispatched to this branch on an in-transit transfer but not yet received (section 4). You may rename it, but you cannot change its type, make it the default, deactivate it, or pick it as the source or destination of a transfer. Stock sitting in it is not sellable.
 
 ---
 
@@ -204,18 +240,19 @@ Navigate to **Inventory > Stock Transfers** (`/admin/stock-transfers`).
 A stock transfer is a document that moves stock from one physical location to another — either between two locations within the same branch (for example, from the Warehouse to the Store) or between two different branches (for example, from the Arusha branch to the Dar es Salaam branch). A transfer records a physical movement of goods without buying or selling them; it re-attributes stock from one place to another.
 
 **Why transfers do not affect the income statement.**
-A transfer does not create a sale (no revenue, no COGS) and is not a purchase (no supplier, no invoice). It is a value-preserving internal movement: the cost of the goods is the same before and after the transfer — it has simply moved to a different location. Because the moving-average cost is maintained per product at the company level (not per location), the transfer does not change the financial value of inventory — it only re-attributes it between locations. No GL journal entry is posted for a standard same-cost-grain transfer.
+A transfer does not create a sale (no revenue, no COGS) and is not a purchase (no supplier, no invoice). It is a value-preserving internal movement: the cost of the goods is the same before and after the transfer — it has simply moved to a different location. The goods move at the system average cost, so the total value of inventory does not change; it is only re-attributed between locations and branches.
 
 **When transfers are used.**
-Transfers are used when stock needs to be redistributed — to replenish a retail store from a warehouse, to move goods to a van for a field sales team, or to consolidate slow-moving inventory at one location. The `STOCK.TRANSFER.CREATE` permission is required to initiate and dispatch; `STOCK.TRANSFER.RECEIVE` is required to receive.
+Transfers are used when stock needs to be redistributed — to replenish a retail store from a warehouse, to send stock to another branch, to move goods to a van for a field sales team, or to consolidate slow-moving inventory at one location. The `STOCK.TRANSFER.CREATE` permission is required to create, dispatch, complete and cancel; `STOCK.TRANSFER.RECEIVE` is required to receive.
 
-**How transfers flow — two modes.**
-An **Instant** transfer is for moves between two locations within the same branch; it completes in a single step with no in-transit period. An **In-transit** transfer is for cross-branch moves: when dispatched, the source location's stock decreases immediately (goods are "in the truck") and the destination location's stock only increases when the destination operator confirms receipt. Between dispatch and receipt, the goods are "in transit" — not counted at either location. This two-step model prevents double-counting and gives each branch an accurate view of what it physically holds.
+**How transfers flow — two modes.** Both modes work within a branch and between branches; the choice is whether anybody at the destination has to confirm the goods.
 
-A stock transfer moves stock from one location to another. Two modes are available:
+- **Instant** — "stock moves straight away, nobody has to confirm". The stock leaves the source and arrives at the destination the moment you complete the transfer. Steps: DRAFT → COMPLETED.
+- **In-transit** — "the destination must receive it before the stock lands". You dispatch the stock and someone at the destination receives it before it counts as theirs. Between dispatch and receipt the goods sit in the destination branch's **in-transit location** (section 3.5): they are not sellable at either end, and the Stock Report shows them as "in transit". Steps: DRAFT → DISPATCHED → RECEIVED.
 
-- **Instant** — for transfers between two locations within the same branch. Stock moves in a single step.
-- **In-transit** — for transfers that cross branches. The transfer follows a Dispatch → Receive workflow; stock is in transit between the two events.
+**Who acts where.** Only the source branch can dispatch or complete a transfer, and only the destination branch can receive it — a sender who could also "receive" would make the confirmation prove nothing. If you open a transfer while switched into the wrong branch, the detail page tells you which branch to switch to (for example "Switch to DSM Branch to dispatch this transfer.").
+
+> **Note.** Sending stock somewhere that does not use the system — a roadside kiosk, a van, a customer site? Register it as a branch that nobody logs into, give it one location, and transfer to it in **Instant** mode. The stock moves out of your warehouse and sits under that branch; no one there needs an account, and nothing waits to be confirmed.
 
 ### Transfer status lifecycle
 
@@ -228,35 +265,35 @@ DRAFT
 
 ### 4.1 Creating a transfer
 
-1. Navigate to **Stock Transfers > Create** (`/admin/stock-transfers/create`).
-2. Pick the **Source Branch** and **Source Location**.
-3. Pick the **Destination Branch** and **Destination Location**. Source and destination must be different locations.
-4. Set the **Transfer Date**.
-5. Choose the **Transfer Mode**: Instant (same-branch) or In-transit (cross-branch).
-6. Click **Add line** for each product to transfer. Pick the product by name and enter the quantity.
-7. Click **Create Transfer**.
+1. On the Stock Transfers list click **New transfer** (`/admin/stock-transfers/create`). The **New Stock Transfer** form opens.
+2. Under **Transfer Details**, choose the **Transfer Mode** (**In-transit** or **Instant** — the form explains each) and set the **Transfer Date**.
+3. Under **Source**, pick the **Source Branch** and **Source Location**.
+4. Under **Destination**, pick the **Destination Branch** and **Destination Location**. Source and destination must be different locations.
+5. Under **Line Items**, for each product pick the **Product**, choose the **Unit** you are moving it in (for example cartons — the list shows the item's pack sizes, or "Item's own unit"), and enter the **Qty**. Click **Add line** for another product; **Remove** drops a line.
+6. Optionally enter a **Unit cost** per line. It is for reference only: it is shown on the transfer and its printout, but the stock is still valued at the system average cost. It is pre-filled with the average cost when you may see costs — change it freely.
+7. Optionally add **Notes**, then click **Create Transfer**.
 
 The transfer is created with status **Draft** and a system-generated transfer number. The screen navigates to the transfer detail.
 
-**Validation.** Source and destination locations must differ. At least one line is required. Quantity per line must be positive. Transfer date is required.
+**Validation.** Source and destination locations must differ, and the in-transit location cannot be chosen. At least one line is required; each quantity must be positive. Service (non-stock) items cannot be transferred, and the same product may not appear on two lines — combine them into one. Transfer date is required.
 
 ### 4.2 Dispatching an in-transit transfer
 
-On a Draft, In-transit transfer, click **Dispatch**. The status changes to **Dispatched** and the source location's stock decreases immediately.
+On a Draft, In-transit transfer, click **Dispatch** (while switched into the source branch). The status changes to **Dispatched**, the source location's stock decreases immediately and the goods move into the destination branch's in-transit location.
 
-The Dispatch button is only available when the transfer is in Draft status and the mode is In-transit. Dispatching requires the `STOCK.TRANSFER.CREATE` permission.
+The Dispatch button is only available when the transfer is in Draft status, the mode is In-transit and you are working in the source branch. Dispatching requires the `STOCK.TRANSFER.CREATE` permission.
 
 **Insufficient source stock.** If the source location does not allow negative stock, dispatch is rejected (409 Conflict) when the available quantity at the source is less than the quantity being transferred — the message reports the available and requested quantities and states that the source location does not allow negative stock (it does not name the product, so check the transfer's lines to see which one is short). The transfer stays in Draft so you can correct the lines or top up the source. (A source location whose `allowNegative` flag is set will let the dispatch proceed and the source on-hand can go negative.)
 
 ### 4.3 Receiving an in-transit transfer
 
-On a Dispatched transfer, the destination operator clicks **Receive**. The status changes to **Received** and the destination location's stock increases.
+On a Dispatched transfer, the destination operator — switched into the destination branch — clicks **Receive**. The status changes to **Received**, and the goods leave the in-transit location and land in the destination location.
 
 Receiving requires the `STOCK.TRANSFER.RECEIVE` permission. This allows organisations to separate the dispatcher and receiver roles.
 
 ### 4.4 Completing an instant transfer
 
-On a Draft, Instant transfer, click **Complete (Instant)**. The transfer completes in a single step; both locations update simultaneously. As with dispatch, completion is rejected (409 Conflict) if the source location does not allow negative stock and the available quantity is less than the quantity being transferred.
+On a Draft, Instant transfer, click **Complete (Instant)** (while switched into the source branch). The transfer completes in a single step; both locations update simultaneously. As with dispatch, completion is rejected (409 Conflict) if the source location does not allow negative stock and the available quantity is less than the quantity being transferred.
 
 ### 4.5 Cancelling a transfer
 
@@ -264,7 +301,18 @@ On a Draft transfer, click **Cancel**. The status changes to **Cancelled** and n
 
 ### 4.6 Viewing the transfer list and detail
 
-The list shows transfer number, transfer date, mode, status, source location, and destination location. To open the detail view, click the **View** action (eye icon) in the row's Actions column — there is no row-click. The transfer is referenced by its human transfer number throughout the UI; the internal identifier appears only in the browser address bar.
+The list shows **Transfer #**, **Date**, **Mode**, **Status** and **Route** (source branch and location → destination branch and location). Narrow it with the filters above the table:
+
+- **Branch** — **This branch (in or out)** (the default), **Incoming to this branch**, **Outgoing from this branch**, or **All branches**.
+- **Status** — Any, or one status.
+- **From** / **To** — transfer date range.
+- **Transfer #** — search by number. **Clear** resets the filters.
+
+To open the detail view, click the **View** action (eye icon) in the row's Actions column — there is no row-click. The detail shows the route, mode, date, dispatched/received times and notes, and the **Line Items**: **Code**, **Product**, **Unit**, **Qty**, and the value of each line at the **Price** the system holds (its average cost) with the line **Value** and **Currency**. When unit costs were typed on the transfer, the table shows both **System price / System value** and **Entered price / Entered value** — the entered figures are for reference only; stock is valued at the system price. Lines with no cost on record show a dash and are left out of the total, and the screen says how many.
+
+### 4.7 Printing a transfer note
+
+Users with `REPORT.EXPORT` see **Print / PDF** and **Excel** at the top of the transfer detail. The transfer note carries your logo, the route, each line with its unit price and value, and who printed it — hand it to the driver and have the receiving branch sign it.
 
 ---
 
@@ -272,16 +320,16 @@ The list shows transfer number, transfer date, mode, status, source location, an
 
 Storekeeper Grace Mwenda at Arusha branch needs to send 200 bags of Pembe Flour and 50 cartons of Cooking Oil to the Dar es Salaam main store.
 
-1. Navigate to **Inventory › Stock Transfers › Create** (`/admin/stock-transfers/create`).
-2. Source Branch: `Arusha Branch`; Source Location: `Arusha Warehouse`.
-3. Destination Branch: `DSM Branch`; Destination Location: `DSM Main Store`.
-4. Transfer Date: `2026-06-10`; Transfer Mode: **In-transit**.
+1. Navigate to **Inventory › Stock Transfers** and click **New transfer** (`/admin/stock-transfers/create`).
+2. Transfer Mode: **In-transit**; Transfer Date: `2026-06-10`.
+3. Source Branch: `Arusha Branch`; Source Location: `Arusha Warehouse`.
+4. Destination Branch: `DSM Branch`; Destination Location: `DSM Main Store`.
 5. Add lines:
-   - Product: `Pembe Flour 2kg (FLR-002)`, Qty: `200`.
-   - Product: `Cooking Oil 3L (OIL-003)`, Qty: `50`.
+   - Product: `Pembe Flour 2kg (FLR-002)`, Unit: `Bag`, Qty: `200`.
+   - Product: `Cooking Oil 3L (OIL-003)`, Unit: `Carton`, Qty: `50`.
 6. Click **Create Transfer**. Transfer `TRF-0042` is created with status **Draft**.
-7. Grace reviews the lines and clicks **Dispatch**. Status becomes **Dispatched**. The Arusha Warehouse stock for both items decreases immediately (200 bags and 50 cartons deducted).
-8. The following day, DSM storekeeper Omari Njau opens **Inventory › Stock Transfers** (`/admin/stock-transfers`), finds `TRF-0042` with status Dispatched, and clicks the **View** action (eye icon) in its Actions column to open the detail.
+7. Grace reviews the lines, clicks **Print / PDF** to give the driver a transfer note, and clicks **Dispatch**. Status becomes **Dispatched**. The Arusha Warehouse stock for both items decreases immediately (200 bags and 50 cartons deducted); the goods now sit in DSM Branch's in-transit location.
+8. The following day, DSM storekeeper Omari Njau, switched into DSM Branch, opens **Inventory › Stock Transfers** (`/admin/stock-transfers`), sets the **Branch** filter to **Incoming to this branch**, finds `TRF-0042` with status Dispatched, and clicks the **View** action (eye icon) to open the detail.
 9. Omari counts the physical delivery — both lines match — and clicks **Receive**. Status becomes **Received**. DSM Main Store stock increases by 200 bags and 50 cartons.
 10. Both storekeepers can now see `TRF-0042` with status **Received** in the transfer list. No cancellation is possible at this stage.
 
@@ -303,7 +351,7 @@ Even in a well-run warehouse, small discrepancies accumulate over time: items ge
 When a count is posted, each line with a variance is converted into a stock adjustment movement at the current moving-average cost. The value difference is posted to the `STOCK_ADJUSTMENT` expense account (5160) against the `INVENTORY` account (1300). A negative variance (less found than expected) is an expense; a positive variance is a credit to the adjustment account. This ensures the inventory balance on the balance sheet and the GL always stay in sync.
 
 **When it is used.**
-Stock counts are run periodically — monthly, quarterly, or annually depending on the business's risk appetite and the volatility of the products. **Full** counts cover all products at a location. **Cycle** counts cover a rotating subset of products (for example, high-value or fast-moving lines), allowing more frequent reconciliation without counting everything at once. The `STOCK.COUNT.CREATE` permission is needed to create and enter counts; `STOCK.COUNT.POST` (typically held by an accountant or supervisor) is needed to post the variances.
+Stock counts are run periodically — monthly, quarterly, or annually depending on the business's risk appetite and the volatility of the products. **Full** counts cover all products at a location. **Cycle** counts cover only the products you pick (for example, high-value or fast-moving lines), allowing more frequent reconciliation without counting everything at once. The `STOCK.COUNT.CREATE` permission is needed to create and enter counts; `STOCK.COUNT.POST` (typically held by an accountant or supervisor) is needed to post the variances.
 
 A stock count records what is physically present at a location and reconciles it against the system quantity. Any variance is posted as a stock adjustment and a GL entry.
 
@@ -318,41 +366,40 @@ When a count is created the system immediately freezes the on-hand quantities (t
 
 ### 5.1 Creating a stock count
 
-1. Navigate to **Stock Counts > Create** (`/admin/stock-counts/create`).
+1. On the Stock Counts list click **New Stock Count** (`/admin/stock-counts/create`).
 2. Select the **Company** and **Branch**. (The Company selector appears only when you have access to more than one company, and the Branch selector only when the chosen company has more than one branch; otherwise the single company/branch is used automatically and no selector is shown.)
 3. Pick the **Stock Location** from the picker.
 4. Set the **Count Date** (defaults to today).
-5. Choose the **Count Type**:
-   - **Full** — all products held at the location are included.
-   - **Cycle** — recorded as a cycle count for reporting/classification. The on-screen hint reads *"FULL = entire location. CYCLE = selected products."*
+5. Choose the **Count Type** — the on-screen hint reads *"FULL = entire location. CYCLE = selected products."*:
+   - **FULL** — all products held at the location are included.
+   - **CYCLE** — a **Products to count** box appears. Search by name, code or barcode and pick each product; the picked items are listed (remove one with its ✕) with a count such as "3 selected. Only items held at this location are counted." A cycle count with no products picked is refused — choose products, or use a FULL count.
+6. Optionally add **Notes**, then click **Create Count**.
 
-   > **Current limitation — cycle scoping.** The create screen has **no product picker**. It collects only Location, Count Date, Count Type, and Notes. Whether you choose **Full** or **Cycle**, the count is currently snapshotted over **all** products held at the location — there is no UI control to restrict a cycle count to a chosen subset of products. The **Count Type** value is stored and shown on the document, but it does not change which lines are created. To count only a few products, either run a full count and enter quantities for just those lines, or use a single-product Adjustment (section 2.2) instead.
-6. Click **Create Count**.
-
-The count is created with status **Counting** and a system-generated count number. The system records the current on-hand quantity for each product as the **System Qty** snapshot. This snapshot is frozen and cannot change.
+The count is created with status **Counting** and a system-generated count number. The system records the current on-hand quantity for each product as the **System Qty** snapshot.
 
 ### 5.2 Entering counted quantities
 
-Open the count detail. For each product line:
+Open the count detail. The **Count Lines** table shows each product with its **Unit**, **System Qty** (with a pack breakdown where the item has pack sizes) and **Counted Qty**. For each product line:
 
-1. Enter the physically counted quantity in the **Counted Qty** column.
-2. Optionally type a free-text reason in the **Reason** box on lines that have a variance.
-3. Click **Save Counted Qtys**.
+1. If the item has pack sizes, you may choose the unit you counted in from the **Unit** dropdown (for example cartons); the equivalent in base units is shown under the quantity.
+2. Enter the physically counted quantity in the **Counted Qty** column.
+3. Optionally type a reason in the **Reason** box on lines that have a variance (for example `SHRINKAGE`); a line without one posts as `COUNT_CORRECTION`.
+4. Click **Save Counted Qtys**.
 
-After posting, the **Variance Qty** column shows `Counted Qty − System Qty`. A positive variance means more stock was found than expected; a negative variance means less was found.
+The document stays in Counting status after saving. You can enter counts in multiple sessions; a line's figure can be corrected by entering it again.
 
-The document stays in Counting status after saving. You can enter counts in multiple sessions.
+**Selling while you count.** The variance is measured as at the moment each line was counted, not at the moment of posting. If items are sold, received or transferred at the location between counting a line and posting the count, those movements are allowed for — they do not turn into false gains or losses.
 
 ### 5.3 Posting a count
 
 Posting creates stock adjustment movements for every line with a variance and generates a single GL variance journal.
 
 1. Open a count in Counting status.
-2. Click **Post Count** to reveal the posting form.
+2. Click **Post Count** to reveal the **Post Count & Record Variance** form — "This action is irreversible."
 3. Enter the **Posting Date**.
 4. Click **Confirm Post**.
 
-Posting requires the `STOCK.COUNT.POST` permission (typically held by an accountant or supervisor). After posting, the document is read-only.
+Posting requires the `STOCK.COUNT.POST` permission (typically held by an accountant or supervisor). After posting, the document is read-only: the table gains **Variance Qty** (`Counted − System`; positive means more was found than expected), **Unit Cost** and **Variance Value** columns, the header shows **Posted At**, and a **View Variance Journal** link opens the GL entry. The variance is posted to the ledger once.
 
 ### 5.4 Cancelling a count
 
@@ -362,18 +409,18 @@ Open a Counting count and click **Cancel Count**. No stock movements or GL entri
 
 **Example — Cycle count of sugar and rice with a variance posted:**
 
-Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products at the DSM Main Store. Because the create screen has no product picker (see the limitation note in section 5.1), the count snapshots every product at the location; Boniface simply leaves the other lines un-entered and enters counts only for the two products he is interested in.
+Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products at the DSM Main Store.
 
-1. Navigate to **Inventory › Stock Counts › Create** (`/admin/stock-counts/create`).
-2. Company: `Kijenge Trading Ltd`; Branch: `DSM Branch`; Location: `DSM Main Store`; Count Date: `2026-06-12`; Count Type: **Cycle**.
+1. Navigate to **Inventory › Stock Counts** and click **New Stock Count** (`/admin/stock-counts/create`).
+2. Company: `Kijenge Trading Ltd`; Branch: `DSM Branch`; Location: `DSM Main Store`; Count Date: `2026-06-12`; Count Type: **CYCLE**. In **Products to count** he picks Sugar and Rice.
 3. Click **Create Count**.
-4. Count `CNT-0009` is created with status **Counting**. The system records snapshot quantities for **every** product at DSM Main Store, including Sugar = 850 bags and Rice = 240 bags.
-5. Storekeeper Omari Njau physically counts the two shelves he is responsible for. He opens `CNT-0009` and, leaving every other line blank, enters:
+4. Count `CNT-0009` is created with status **Counting** and two lines: Sugar (System Qty 850 bags) and Rice (System Qty 240 bags).
+5. Storekeeper Omari Njau physically counts the two shelves. He opens `CNT-0009` and enters:
    - Sugar counted: `843` (variance: −7 bags).
    - Rice counted: `245` (variance: +5 bags).
    - In the **Reason** box on the Sugar line he types `SHRINKAGE`. For Rice no reason is needed (positive variance — unrecorded receipt correction).
    Click **Save Counted Qtys**.
-6. Boniface reviews the variances and clicks **Post Count**. Posting Date: `2026-06-12`. Confirms. Lines with no counted quantity entered are treated as no-variance and post nothing.
+6. Boniface reviews the figures and clicks **Post Count**. Posting Date: `2026-06-12`. Confirms. (On a FULL count, lines with no counted quantity entered are treated as no-variance and post nothing.)
 7. The system posts two stock adjustment movements:
    - Sugar: −7 bags (ADJUSTMENT, reason SHRINKAGE).
    - Rice: +5 bags (ADJUSTMENT).
@@ -384,7 +431,7 @@ Accountant supervisor Boniface Kessy wants to reconcile two fast-moving products
 
 ## 6. Van-stock reconciliation
 
-Navigate to **Inventory > Van-Stock Reconciliations** (`/admin/van-reconciliations`).
+Navigate to **Inventory > Van Reconciliations** (`/admin/van-reconciliations`). The screen is headed **Van-Stock Reconciliations**.
 
 ![Van-stock reconciliation (route sales day-end)](images/05-inventory-manufacturing/van-reconciliations.png)
 
@@ -497,7 +544,7 @@ Batches (lots) are created automatically when lot-tracked products are received,
 
 ### 7.2 Expiring batches report
 
-Click the **Expiring Soon** tab. Set a horizon date (default: 30 days from today). The report lists all batches whose expiry date falls on or before the horizon and whose quantity is greater than zero.
+Click the **Expiring Soon** tab. Set the **Expiring on or before** date (default: 30 days from today). The report lists all batches whose expiry date falls on or before the horizon and whose quantity is greater than zero.
 
 - Batches already past their expiry date are flagged in red.
 - Batches expiring before the horizon are flagged as a warning.
@@ -508,7 +555,7 @@ The expiring batches tab requires the `INVENTORY.EXPIRY.VIEW` permission.
 
 ## 8. Serial number tracking
 
-Navigate to **Inventory > Stock Serials** (`/admin/stock/serials`). Requires the `STOCK.VIEW` permission.
+Navigate to **Inventory > Serial Numbers** (`/admin/stock/serials`). Requires the `STOCK.VIEW` permission.
 
 **What serial number tracking is.**
 Serial number tracking assigns a unique identifier to each individual unit of a product — for example, every laptop, refrigerator, or generator has its own serial number. Unlike batches (which group many units of the same type), a serial identifies one specific physical item. The system records where each serial is, whether it is in stock, has been issued to a customer, or has been returned, giving full unit-level traceability.
@@ -543,7 +590,7 @@ There is no separate lookup tab. In the **By Location** tab, once a product is s
 
 ---
 
-## 9. Inventory valuation
+## 9. Inventory valuation and stock reports
 
 **What inventory valuation is.**
 Inventory valuation is the process of assigning a monetary value to the goods held in stock. The business needs to know not just how many units it has but what those units are worth — for the balance sheet (Inventory is an asset), for the cost of goods sold when items are sold (COGS reduces profit), and for management decisions (is this product profitable to sell?). The system uses the **moving-average cost method**: the average unit cost is recalculated each time stock is received, blending the new purchase cost with the existing average. This means all units of a product at a branch carry the same average cost, regardless of when they were purchased.
@@ -557,10 +604,12 @@ Navigate to **Inventory > Stock Valuation** (`/admin/stock/valuation`). Requires
 
 ![Inventory valuation](images/05-inventory-manufacturing/stock-valuation.png)
 
-The report is not loaded automatically — the initial screen shows an empty state ("Click Refresh to load the current valuation"). Click **Refresh** to build the report. It then shows every stockable product with its average cost, quantity, and calculated inventory value. A reconciliation bar at the top compares the sum of on-hand values (the stock ledger) against the GL inventory account balance:
+The screen is headed **Stock Valuation Report**. It is not loaded automatically — the initial screen shows an empty state ("Click Refresh to load the current valuation"). Click **Refresh** to build the report. It then shows every stocked product with **Code**, **Product**, **On-Hand Qty**, **Avg Cost** (or **Not valued** when no cost has been established), **Inventory Value** and **Currency**, with the **Total Inventory Value** at the foot. A reconciliation bar at the top compares the sum of on-hand values (the stock ledger) against the GL inventory account balance:
 
 - **Reconciled to GL** (green) — the stock ledger and GL agree.
-- A red **Finance-grade alarm — Stock ledger and GL are out of sync** banner — there is a discrepancy. The stock total, the GL 1300 balance, and the difference amount are shown, and the GL Reconciliation card's status tag reads **Out of balance**. Finance review is required.
+- A red **Finance-grade alarm — Stock ledger and GL are out of sync** banner — there is a discrepancy. The stock total, the GL 1300 balance, and the difference amount are shown, and the **GL Reconciliation** card's status tag reads **Out of balance**. Finance review is required.
+
+Users with `REPORT.EXPORT` can **Export PDF**, **Export Excel** or **Export CSV**; users with `INVENTORY.OPENING.SET` see a **Set Opening Valuation** link to the next screen.
 
 ### 9.2 Setting an opening valuation
 
@@ -575,7 +624,7 @@ Use this screen to assign an initial cost to products that have a quantity on-ha
 2. Enter the **Opening Unit Cost** for that product.
 3. Click **Set Opening Valuation**.
 
-The system posts a GL entry (DR Inventory / CR Opening Balance Equity) and the product's average cost is established. Opening valuation is a one-time operation per on-hand row. Once a row has been valued it no longer appears on this screen.
+The system posts a GL entry (DR Inventory 1300 / CR Opening Balance Equity 3100), shows the value posted (cost × quantity), and the product's average cost is established. Opening valuation is a one-time operation per on-hand row. Once a row has been valued it no longer appears on this screen; when every row is valued the screen says "All products with on-hand stock have been valued."
 
 ### 9.3 Reorder Report
 
@@ -585,7 +634,7 @@ Lists every stock line at or below its reorder level (set per item and location 
 
 - The suggested quantity fills the line back up to its maximum level when one is set; otherwise it uses the product's standard reorder quantity; otherwise it is just the shortfall. It is never less than the shortfall.
 - Users who also hold `INVENTORY.VALUATION.VIEW` see two more columns — **Last cost** (the unit cost of the latest goods receipt of the item) and **Order value** — plus an estimated order total. Without that permission the cost columns are not shown at all.
-- Only active products are listed. The reorder level on the product master is not used; the level on the stock line is (the same one the low-stock flag and notification use).
+- Only active products are listed. The level used is the stock line's own reorder level; where the line has none, the product's reorder level applies (the same rule the **Low** flag and the low-stock notification use — section 2.4).
 - Exports additionally require `REPORT.EXPORT`.
 
 ### 9.4 Stock Ageing
@@ -600,6 +649,59 @@ Shows, per item, the quantity on hand split into five age bands — **0–30**, 
 - Items with no cost show a dash for value and are left out of the value totals; items with negative stock have no age and are left out of the list. A banner counts both.
 - For a past **As of** date, quantities are rebuilt as of that date but valued at today's average cost.
 - Exports additionally require `REPORT.EXPORT`; the PDF prints the first-in, first-out note in its header.
+
+### 9.5 Stock Report (Current Balances)
+
+Navigate to **Inventory > Stock Report (Current Balances)** (`/admin/reports/stock`). Requires `INVENTORY.VALUATION.VIEW`.
+
+**What it is.** A printable snapshot of what you hold right now: one line per product with **Code**, **Description**, **Qty On Hand** (in the base unit), **Buying Price** (the average cost), **Selling Price** (from the default price list) and **Value** (quantity × buying price), with the **Total Value** at the foot. It answers "what is on the shelf today and what is it worth?" in a form you can hand to the owner or the auditor.
+
+**How to use it.** Click **Refresh** to build it (it is not loaded automatically). The heading carries your company letterhead, the branch scope ("All branches", or your own branches if you are limited to some), the currency, and when it was generated. Users with `REPORT.EXPORT` can **Export PDF**, **Export Excel** or **Export CSV**.
+
+- Goods dispatched to a branch on an in-transit transfer but not yet received are included in that branch's quantity and marked beneath it, for example "incl. 50 in transit".
+- Need a date range instead of today? The link at the top opens the Stock Report (Opening & Closing).
+
+### 9.6 Stock Report (Opening & Closing)
+
+Navigate to **Inventory > Stock Report (Opening & Closing)** (`/admin/reports/stock-movement`). Requires `INVENTORY.VALUATION.VIEW`. The screen is headed **Stock Movement Report**.
+
+**What it is.** How stock moved over a period: what each item started with, what came in, what went out, and what is left. It is the report to use when the question is "how did we get from last month's stock to this month's?".
+
+**How to use it.**
+
+1. Enter the **From date** and **To date** (both required; the end date may not be before the start).
+2. Choose the **Level of detail**:
+   - **Summary — one row per product**: **Code**, **Description**, **Unit**, **Opening**, **Purchases**, **Sales**, **Adj / Other** and **Closing**, with totals over all pages. *Closing = Opening + Purchases − Sales + Adjustments / Other* (Adjustments / Other covers transfers, counts, imports, production and project issues).
+   - **Detail — every movement**: each receipt, sale, adjustment and transfer with **Date**, **Code**, **Description**, **Unit**, **Type**, **In / Out**, **Qty**, running **Balance**, **Reason** and **Source**, and the closing balance at the foot.
+3. Optionally narrow to one **Branch** and/or one **Product**.
+4. Click **Run report**. Users with `REPORT.EXPORT` can then **Export PDF**, **Export Excel** or **Export CSV**.
+
+Quantities are in each product's base unit. A goods receipt voided later stays on the day it was received and appears again, as a negative line, on the day it was voided — so a closed month never changes.
+
+### 9.7 Product List
+
+Navigate to **Inventory > Product List** (`/admin/reports/product-list`). Requires `INVENTORY.VALUATION.VIEW`.
+
+**What it is.** A catalogue listing of every product you stock: **Code**, **Description**, **Supplier**, **Qty On Hand**, **Buying Price** and **Selling price** (labelled VAT incl. or excl. VAT according to the default price list). There are no totals — it is a price-and-supplier list, not a valuation.
+
+**How to use it.** Optionally choose a **Branch** and — if you may see suppliers (`SUPPLIER.VIEW`) — a **Supplier**, then click **Run report**. The heading states the branch, supplier, price list and currency used. Users with `REPORT.EXPORT` can **Export PDF**, **Export Excel** or **Export CSV**.
+
+- Selling prices come from the company's **default price list**. If none is set, the screen says so; users who manage price lists get a link to **Price Lists** to choose **Set default**.
+- A dash means the figure is unknown (never costed, or not on the default price list) — it does not mean zero.
+- Items you no longer sell are not listed here, even if they still hold stock; the Stock Value report shows them.
+
+### 9.8 Stock Value
+
+Navigate to **Inventory > Stock Value** (`/admin/reports/stock-value`). Requires `INVENTORY.VALUATION.VIEW`.
+
+**What it is.** What your stock cost and what it is worth at selling price, item by item, with grand totals: **Code**, **Description**, **Supplier**, **Qty On Hand**, **Buying Price**, **Cost Value**, **Selling price**, **Sale Value**, then a **TOTAL** row (quantity, cost value, sale value) and the **Potential margin on the shelf** (sale value − cost value).
+
+**How to use it.** Optionally choose a **Branch** and a **Supplier** — picking one supplier gives a supplier-wise stock value — then click **Run report**. Users with `REPORT.EXPORT` can **Export PDF**, **Export Excel** or **Export CSV**.
+
+- Items with stock but no buying price, or no selling price, add nothing to the totals; a banner counts them and warns that the totals are lower than the real value.
+- Items you no longer sell that still hold stock are included (so the valuation matches your books) and marked **Discontinued**.
+- Total quantity adds up base units across different products — read it as a count of pieces, not a single measure.
+- If no default price list is set, selling prices and sale values cannot be shown and the screen says so.
 
 ---
 
@@ -619,7 +721,7 @@ Products change: a recipe might be reformulated, a component supplier might chan
 A BOM is created and maintained by the production or engineering team. It becomes active when activated (with an effective-from date), at which point it can be referenced by Work Orders. Only one BOM can be active at a time per finished product — activating a new version automatically archives the previous one. A BOM must be set up before any Work Order for that finished product can be released.
 
 **How it connects to manufacturing.**
-When a Work Order is released, the system looks up the active BOM for the finished product, explodes it to its leaf components (recursively resolving any sub-assemblies), and materialises the planned component lines on the work order. The BOM is then pinned to that work order — subsequent changes to the BOM do not affect work orders that are already in progress.
+When a Work Order is released, the system pins the BOM version it will use (the active BOM, or the version you name). When components are first issued, that pinned BOM is exploded to its leaf components (recursively resolving any sub-assemblies) and the component lines are created on the work order. Because the version is pinned at release, activating a new BOM version later does not change work orders that are already released or in progress.
 
 A Bill of Materials (BOM) defines what components and quantities are needed to produce a given quantity of a finished product. One BOM can be active at a time for each finished product; creating and activating a new BOM version automatically archives the previous one.
 
@@ -704,7 +806,9 @@ During production, costs accumulate in a temporary balance sheet account called 
 When a manufactured finished good is later sold, the Cost of Goods Sold (COGS) posted by the sale is the moving-average cost of the finished good — which was set when the work order was completed (WIP divided by the good quantity produced). The COGS therefore reflects the actual cost of production, not just the purchase price of raw materials.
 
 **When it is used.**
-A Work Order is created by the production planner or manufacturing supervisor when a production run is scheduled. It is released (which locks the BOM and generates the component plan), components are issued from stock, labour and overhead are applied, the finished goods are completed and received into stock, and the order is closed. The lifecycle covers five states: PLANNED → RELEASED → IN_PROGRESS → COMPLETED → CLOSED.
+A Work Order is created by the production planner or manufacturing supervisor when a production run is scheduled. It is released (which pins the BOM), components are issued from stock (which creates the component lines), labour and overhead are applied, the finished goods are completed and received into stock, and the order is closed. The lifecycle covers five states: PLANNED → RELEASED → IN_PROGRESS → COMPLETED → CLOSED.
+
+The Work Orders list shows **WO #**, **Branch**, **Finished Product**, **Planned Qty**, **Good Qty**, **Status**, **WIP Debit**, **WIP Credit** and **Unit Cost**, with a **Status** filter. The detail page opens with a **Summary** (finished product, branch, planned / good / scrap quantities, planned date, WIP debit and credit, labour and overhead applied, computed unit cost, variance), followed by the **Lifecycle Actions** that apply to the order's current status, the **Component Lines** and the **Operations**. An **Incomplete Cost** tag appears next to the status when a component was issued without a known cost.
 
 A Work Order authorises the production of a specified quantity of a finished product and tracks the cost of materials, labour, and overhead consumed.
 
@@ -749,9 +853,9 @@ Operations represent discrete production steps (e.g. Cutting, Assembly) with ass
 ### 11.4 Releasing a Work Order
 
 **What releasing means.**
-Releasing a Work Order is the act of committing to produce. At this point the system resolves and locks the BOM (so the recipe is frozen for this production run), explodes it to all leaf-level raw material components, and generates the planned component lines on the work order — the list of what will need to be issued from stock. No stock movement or GL posting happens at release; it is a planning step. Once released, the work order is ready for component issue.
+Releasing a Work Order is the act of committing to produce. At this point the system resolves and pins the BOM version the order will use, so the recipe is frozen for this production run. No stock movement or GL posting happens at release, and no component lines are created yet — they appear when you first issue components. Once released, the work order is ready for component issue. To check what the order will need before you issue, open its bill of materials from the link in the **Component Lines** section.
 
-Releasing a Work Order locks the BOM and generates the component plan.
+Releasing a Work Order pins the BOM and sets the status to RELEASED.
 
 1. Open a Planned Work Order.
 2. In the **Release Work Order** section, optionally override the BOM by typing its UID into the **BOM UID (optional override)** field — this is a plain text input (placeholder "leave blank for active BOM"), not a picker.
@@ -766,15 +870,16 @@ Status changes to **Released**. The system emits a production event. No stock mo
 **What component issue means.**
 Issuing components is the physical act of taking raw materials from the stock location and bringing them to the production area. In the system, this deducts the components from inventory and charges them to the Work-in-Progress account. The GL posting is: **DR WIP / CR Inventory** for each component at its current moving-average cost. If any component has no established average cost (it has never been received or opened), the quantity deduction still posts but the WIP cost leg is skipped and the incomplete-cost flag is set on the work order — the production team should investigate and correct the missing cost.
 
-Issuing deducts the component materials from stock and accumulates costs in the Work-in-Progress (WIP) account.
+Issuing deducts the component materials from stock (at the branch's default location) and accumulates costs in the Work-in-Progress (WIP) account.
 
 1. Open a Released or In-Progress Work Order.
-2. Enter the **Posting Date**.
-3. Click **Issue All Components**.
+2. In the **Issue Components** section, enter the **Posting Date**.
+3. Click **Issue All Components** to issue the full planned recipe quantity of every component not yet issued.
+4. Where component lines are already listed and not yet fully issued, you can instead type an **Actual Qty** per line (it defaults to the remaining planned quantity) and click **Issue Entered Quantities** to post exactly those amounts.
 
-The system issues all un-issued component lines simultaneously (full issue). Status moves to **In-Progress** on the first issue.
+On the first issue the component lines are created from the pinned BOM and the status moves to **In-Progress**. The **Component Lines** table then shows each component's **Planned Qty**, **Issued Qty**, **Issued Value**, **Unit Cost@Issue** ("no cost" where the cost was skipped) and **Status**.
 
-Stock movements of type `PRODUCTION_ISSUE` are posted for each component. GL entries: DR WIP / CR Inventory.
+Stock movements of type `PRODUCTION_ISSUE` are posted for each component. GL entries: DR WIP (1320) / CR Inventory (1300).
 
 **Validation.** Posting date is required. If a component's average cost is not yet established, that component is cost-skipped (the quantity still moves but no GL leg is posted). An incomplete-cost indicator appears on the Work Order header when any component was cost-skipped.
 
@@ -824,8 +929,8 @@ Status changes to **Closed**. Any residual WIP is posted to the Manufacturing Va
 A Work Order can be cancelled from Planned, Released, or In-Progress status.
 
 1. Open the Work Order.
-2. Click **Cancel** and enter an optional reason.
-3. Confirm.
+2. In the **Cancel Work Order** section, enter an optional **Reason (optional)**.
+3. Click **Cancel**.
 
 If components have already been issued, the system reverses all issue movements and GL entries automatically (`PRODUCTION_ISSUE_REVERSAL`). Applied labour and overhead costs are also reversed. No reversal is needed for Planned Work Orders (nothing has moved).
 
@@ -869,10 +974,13 @@ When the two totals agree, a green **WIP balances reconcile — computed equals 
 ## 13. Frequently asked questions
 
 **Can I adjust stock below zero?**
-Yes. The system records negative on-hand and flags the row with the Negative indicator, but it does not block the transaction. The overselling indicator is a monitoring tool; you should investigate and correct the root cause.
+Only at a location set to allow negative stock. Elsewhere, an adjustment, transfer or count that would take a location below zero is refused, with a message saying how much is on hand. Where negative stock is allowed, the row is flagged **Negative** — investigate and correct the root cause.
 
 **What is the difference between an adjustment and a stock count?**
-An adjustment corrects a single product's quantity immediately. A stock count covers all products at a location, freezes the system quantities as a snapshot, lets you enter physical counts across multiple sessions, and only posts variances when you explicitly post the count.
+An adjustment corrects a single product's quantity immediately. A stock count covers a whole location (FULL) or a chosen list of products (CYCLE), records the system quantities as a snapshot, lets you enter physical counts across multiple sessions, and only posts variances when you explicitly post the count.
+
+**How do I set many stock levels at once?**
+Use **Data Tools › Bulk Import** with the entity type **Stock on-hand levels** (`STOCK.IMPORT`): download the sheet, type the level you want on hand in **New On-Hand Qty**, and upload it. The system posts the difference from the current level as an adjustment at your active branch. See chapter 02, *Bulk Import*.
 
 **Does reconciling a van change my stock or accounts?**
 No. A van-stock reconciliation (section 6) is record-only: neither creating, saving, nor reconciling it posts any stock movement or GL entry. It is a control worksheet that documents Loaded − Sold − Returned = Expected versus the physical count on the van, and flags variances for follow-up. If a variance must correct the books, do that separately with a stock adjustment (section 2.2) or a stock count (section 5).

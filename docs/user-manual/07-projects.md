@@ -50,7 +50,7 @@ DRAFT
 
 ## 3. Creating a project
 
-Navigate to **Projects > Projects** (`/admin/projects`) and click **New Project**. An inline create form opens.
+Navigate to **Projects > Projects** (`/admin/projects`). The list shows each project's **Project #**, **Name**, **Status** (lifecycle), **Start**, **End** and **Budget**, with an **Open** link. If you work for more than one company, pick the **Company** first. Click **New Project** — an inline **New Project** form opens.
 
 ![Projects](images/07-projects/projects.png)
 
@@ -163,7 +163,7 @@ Timesheets record hours worked against a project (and optionally a specific task
 
 ### 6.1 Recording a timesheet entry
 
-1. In the Timesheets panel, click **Record Time**.
+1. In the Timesheets panel, click **Record Time**. The **Record Timesheet** form opens.
 2. Enter the **User ID** (the numeric user identifier — ask your administrator if you do not know it).
 3. Enter the **Work Date** (yyyy-MM-dd).
 4. Enter the **Hours** (decimal; minimum 0.01).

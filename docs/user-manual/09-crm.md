@@ -119,7 +119,7 @@ Open the lead detail page and change any editable fields (Name, Source, Company 
 
 ### Browsing the leads list
 
-The Leads list has a company selector, a **New Lead** button, and the table of leads. There is no name-search box on this screen. Each row ends with an **Open** button (eye icon) that navigates to the lead detail page; there is no row-click. Pagination controls appear when the list exceeds 20 rows; use the First / Previous / page-number / Next / Last controls to move between pages.
+The Leads list has a company selector, a **New Lead** button, and the table of leads with the columns **Lead #**, **Name**, **Company**, **Source**, **Status**, **Phone** and **Email**. There is no name-search box on this screen. Each row ends with an **Open** button (eye icon) that navigates to the lead detail page; there is no row-click. Pagination controls appear when the list exceeds 20 rows; use the First / Previous / page-number / Next / Last controls to move between pages.
 
 **A note on how Source is displayed.** When you create or edit a lead you pick the Source from a dropdown with friendly labels (Referral, Walk-in, Cold Call, and so on). In the leads list and on the lead detail page, however, the Source is shown as the stored code — for example `REFERRAL`, `WALK_IN`, or `COLD_CALL` — rather than the friendly label.
 
@@ -166,8 +166,8 @@ Once an opportunity is Won or Lost it is closed. Closed opportunities cannot be 
 
 ### How to create an opportunity
 
-1. Navigate to **CRM › Opportunities** (`/admin/crm/opportunities`).
-2. Click **New Opportunity** (or navigate to **CRM › Opportunities › Create** at `/admin/crm/opportunities/create`).
+1. Navigate to **CRM › Opportunities** (`/admin/crm/opportunities`). The list shows **Opp #**, **Title**, **Status**, **Stage**, **Probability**, **Est. Value** and **Close Date**, with an **Open** link per row.
+2. Click **New Opportunity** (or navigate to `/admin/crm/opportunities/create`).
 3. Select the **Customer** using the picker. Type part of the customer name to search; select from the results.
 4. Select the **Pipeline Stage** from the dropdown. Only active stages are offered, each listed by its stored name (for a default-seeded company these read `QUALIFICATION`, `NEEDS_ANALYSIS`, and so on). The stage's default win probability is applied automatically unless you override it.
 5. Enter the **Title** (required).
@@ -281,7 +281,7 @@ The **pipeline dashboard** is a management view that shows the current health of
 
 **Why the pipeline dashboard exists.** A sales manager without visibility of the pipeline is flying blind: they cannot see which stages are bottlenecks, whether the team has enough deals to meet the quarter's target, or whether the win rate has deteriorated. The dashboard distils the raw opportunity data into actionable numbers so management can intervene early, redirect effort, or adjust the forecast before it is too late.
 
-The pipeline dashboard shows the current state of all open opportunities across your sales pipeline. It is scoped to a company and branch — select both to load the data.
+The pipeline dashboard shows the current state of all open opportunities across your sales pipeline. It is scoped to a company and branch — select the **Company** and the **Branch** (listed as `code — name`) to load the data.
 
 ### Board summary
 
